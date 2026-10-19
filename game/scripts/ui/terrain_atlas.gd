@@ -9,6 +9,7 @@ var _planet: Planet
 var _panel: PanelContainer
 var _mini: PanelContainer
 var _information: Label
+var _mini_title: Label
 var _local_information: Label
 var _global_task: int = -1
 var _local_task: int = -1
@@ -47,11 +48,11 @@ func _style() -> StyleBoxFlat:
 
 func _build() -> void:
 	_mini = PanelContainer.new()
-	_mini.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_mini.offset_left = 24
-	_mini.offset_right = 284
-	_mini.offset_top = -320
-	_mini.offset_bottom = -24
+	_mini.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_mini.offset_left = -284
+	_mini.offset_right = -24
+	_mini.offset_top = 24
+	_mini.offset_bottom = 320
 	_mini.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_mini.add_theme_stylebox_override("panel", _style())
 	add_child(_mini)
@@ -59,6 +60,7 @@ func _build() -> void:
 	mini_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_mini.add_child(mini_column)
 	var mini_title: Label = Label.new()
+	_mini_title = mini_title
 	mini_title.text = "晨　地形　　N ↑　 M 展开"
 	mini_title.add_theme_font_size_override("font_size", 13)
 	mini_column.add_child(mini_title)
@@ -170,6 +172,8 @@ func _process(delta: float) -> void:
 	var relative: Vector3 = _player.global_position - _planet.global_position
 	var up: Vector3 = relative.normalized()
 	var on_dawn: bool = _player.current_planet() == _planet
+	if on_dawn:
+		_mini_title.text = "晨 · %s　 N ↑　 M" % _planet.noise.biome(up)
 	for view: TerrainMapView in [global_view, local_view]:
 		view.player_direction = up if on_dawn else Vector3.ZERO
 		view.player_forward = -_player.camera.global_basis.z
@@ -199,7 +203,7 @@ func _collect() -> void:
 
 func _select(direction: Vector3) -> void:
 	var uv: Vector2 = TerrainMapData.coordinates(direction)
-	_information.text = "海拔 %.0f m　　纬度 %.1f°　经度 %.1f°　　%s" % [_planet.noise.height(direction), (0.5 - uv.y) * 180.0, (uv.x - 0.5) * 360.0, _planet.noise.landform(direction)]
+	_information.text = "海拔 %.0f m　　纬度 %.1f°　经度 %.1f°　　%s · %s" % [_planet.noise.height(direction), (0.5 - uv.y) * 180.0, (uv.x - 0.5) * 360.0, _planet.noise.landform(direction), _planet.noise.biome(direction)]
 
 
 func _exit_tree() -> void:

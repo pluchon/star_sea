@@ -36,10 +36,11 @@ func _ready() -> void:
 	layout.add_child(_status)
 	_performance = Label.new()
 	_performance.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_performance.offset_left = -180.0
 	_performance.offset_top = 24.0
-	_performance.offset_right = -28.0
 	_performance.offset_bottom = 140.0
+	# 小地图固定在右上角，性能面板在其左侧显示。
+	_performance.offset_left = -470.0
+	_performance.offset_right = -310.0
 	_performance.visible = false
 	layout.add_child(_performance)
 	_help = PanelContainer.new()

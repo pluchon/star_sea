@@ -10,6 +10,7 @@ const KEYS: Dictionary[String, Key] = {
 	"descend": KEY_CTRL,
 	"run": KEY_SHIFT,
 	"toggle_fly": KEY_F,
+	"toggle_perspective": KEY_V,
 	"toggle_help": KEY_H,
 	"toggle_perf": KEY_F3,
 	"screenshot": KEY_F12,

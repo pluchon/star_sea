@@ -7,13 +7,21 @@ var mode: Mode = Mode.WALK
 var controls_enabled: bool = true
 var simulated_forward: bool = false
 var altitude: float = 0.0
+var third_person: bool = false
 var _waiting_for_ground: bool = true
 var _planet: Planet
 @onready var _head: Node3D = $Head
-@onready var camera: Camera3D = $Head/Camera
+@onready var camera: Camera3D = $Head/CameraBoom/Camera
+@onready var camera_boom: SpringArm3D = $Head/CameraBoom
+var explorer: ExplorerAvatar
 
 
 func _ready() -> void:
+	camera_boom.add_excluded_object(get_rid())
+	explorer = ExplorerAvatar.new()
+	explorer.name = "Explorer"
+	add_child(explorer)
+	set_third_person(false)
 	_planet = get_tree().get_first_node_in_group("planets") as Planet
 	var up: Vector3 = _planet.site["direction"]
 	var forward: Vector3 = _planet.site["forward"]
@@ -54,6 +62,38 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif altitude <= 2.0 and _planet.noise.height((global_position - _planet.global_position).normalized()) > 0.0:
 			_start_walking()
 		velocity = Vector3.ZERO
+	elif event.is_action_pressed("toggle_perspective"):
+		set_third_person(not third_person)
+
+
+func set_third_person(enabled: bool) -> void:
+	third_person = enabled
+	camera_boom.spring_length = 4.5 if enabled else 0.0
+	camera.position = Vector3(0, 0, 4.5 if enabled else 0.0)
+	explorer.visible = enabled
+
+
+func _process(delta: float) -> void:
+	if third_person and _planet != null:
+		var offset: Vector3 = camera.global_position - _planet.global_position
+		if offset.length() < _planet.surface_radius(offset.normalized()) + 0.3:
+			# 快速降落时物理地形可能尚未就绪，仍按共享高度函数缩短相机距离。
+			var start: Vector3 = _head.global_position
+			var movement: Vector3 = camera.global_position - start
+			var low: float = 0.0
+			var high: float = 1.0
+			for iteration: int in 10:
+				var middle: float = (low + high) * 0.5
+				var point: Vector3 = start + movement * middle - _planet.global_position
+				if point.length() < _planet.surface_radius(point.normalized()) + 0.3:
+					high = middle
+				else:
+					low = middle
+			camera.global_position = start + movement * low
+	# 相机受阻收回到头部附近时隐藏身体，避免头盔遮住整个视野。
+	explorer.visible = third_person and camera.global_position.distance_to(_head.global_position) > 0.75
+	if explorer.visible:
+		explorer.animate(delta, global_basis.inverse() * velocity, mode == Mode.FLY, is_on_floor())
 
 
 func _physics_process(delta: float) -> void:
@@ -62,6 +102,9 @@ func _physics_process(delta: float) -> void:
 	var distance: float = offset.length()
 	var up: Vector3 = offset / maxf(distance, 0.001)
 	altitude = distance - _planet.surface_radius(up)
+	# 近地缩短裁剪范围，使近物可见；太空保留足够的近裁剪距离，避免超大远近比使视锥退化。
+	camera.near = 0.15 if altitude < 5000.0 else 0.5
+	camera.far = 200000.0 if altitude < 5000.0 else 3000000.0
 	if mode == Mode.WALK:
 		up_direction = up
 		_align_to_up(up, delta)

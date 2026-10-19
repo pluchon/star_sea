@@ -17,6 +17,7 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	config.set_value("journey", "up", player.global_basis.y)
 	config.set_value("journey", "pitch", player.head_pitch())
 	config.set_value("journey", "mode", int(player.mode))
+	config.set_value("journey", "third_person", player.third_person)
 	config.set_value("journey", "sun", director.sun_direction)
 	var error: Error = config.save(path + ".tmp")
 	if error != OK:
@@ -34,6 +35,9 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	var seed_data: Variant = config.get_value("journey", "planet_seed", null)
 	var mode_data: Variant = config.get_value("journey", "mode", null)
 	var pitch_data: Variant = config.get_value("journey", "pitch", null)
+	var perspective: Variant = config.get_value("journey", "third_person", false)
+	if not perspective is bool:
+		return ERR_INVALID_DATA
 	if not seed_data is int or not mode_data is int or (not pitch_data is float and not pitch_data is int):
 		return ERR_INVALID_DATA
 	var seed_value: int = seed_data
@@ -69,5 +73,6 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	player.place_at(planet.global_position + location, forward.normalized(), up.normalized())
 	player.mode = mode as StarSeaPlayer.Mode
 	player.set_head_pitch(pitch)
+	player.set_third_person(perspective)
 	(scene.get_node("SkyDirector") as SkyDirector).sun_direction = sun.normalized()
 	return OK

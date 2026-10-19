@@ -33,6 +33,15 @@ func _begin() -> void:
 	var spawn_clear: bool = scene.get_world_3d().direct_space_state.intersect_shape(spawn_probe).is_empty()
 	if not spawn_clear:
 		_failures.append("出生点与植物或石块碰撞重叠。")
+	var ruin: Node3D = details.get_node("SilentArch") as Node3D
+	var ruin_probes: Dictionary = {}
+	for probe: Array in [["通道", Vector3(0, 1.5, 0), false], ["柱体", Vector3(2.025, 1.5, 0), true], ["拱顶", Vector3(0, 5.125, 0), true]]:
+		var center: Vector3 = probe[1]
+		var ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(ruin.to_global(center + Vector3.BACK * 3.0), ruin.to_global(center + Vector3.FORWARD * 3.0), 2)
+		var hit: bool = not scene.get_world_3d().direct_space_state.intersect_ray(ray).is_empty()
+		ruin_probes[probe[0]] = hit == probe[2]
+		if hit != probe[2]:
+			_failures.append("遗迹" + str(probe[0]) + "的实际碰撞与网格不一致。")
 	var initial: Dictionary = _fingerprint(details)
 	var original_local: Vector3 = player.global_position - planet.global_position
 	var up: Vector3 = original_local.normalized()
@@ -85,7 +94,7 @@ func _begin() -> void:
 			player.collision_mask = 3
 	if collision_counts["tree"] == 0 or collision_counts["stone"] == 0 or not tree_motion_blocked:
 		_failures.append("树木、石块或角色阻挡检查不完整。")
-	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "tiles_checked": initial.size(), "spawn_clear": spawn_clear, "collision_ray_hits": collision_counts, "character_blocked_by_trunk": tree_motion_blocked, "floating_origin_preserved_instances": initial == _fingerprint(details)}
+	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "ruin_collision_probes": ruin_probes, "ruin_stone_blocks": ruin.get_child_count(), "tiles_checked": initial.size(), "spawn_clear": spawn_clear, "collision_ray_hits": collision_counts, "character_blocked_by_trunk": tree_motion_blocked, "floating_origin_preserved_instances": initial == _fingerprint(details)}
 	VerificationMetrics.write_json("res://../test-output/p4/ecology_runtime_checks.json", report)
 	print(JSON.stringify(report))
 	scene.queue_free()

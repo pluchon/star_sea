@@ -14,6 +14,12 @@ static func offset_direction(up: Vector3, tangent: Vector3, distance: float, rad
 	return (up * cos(angle) + tangent * sin(angle)).normalized()
 
 
+static func ruin_direction(site: Dictionary, radius: float) -> Vector3:
+	var up: Vector3 = site["direction"]
+	var forward: Vector3 = site["forward"]
+	return offset_direction(up, (forward * 0.7 - forward.cross(up) * 0.7).normalized(), 62.0, radius)
+
+
 static func find(noise: TerrainNoise) -> Dictionary:
 	var random: RandomNumberGenerator = RandomNumberGenerator.new()
 	random.seed = 20261019

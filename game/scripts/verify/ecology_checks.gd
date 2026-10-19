@@ -10,6 +10,8 @@ func _initialize() -> void:
 func _begin() -> void:
 	var noise: TerrainNoise = TerrainNoise.new(20261019, 40000.0)
 	var plant_triangles: int = 0
+	var models: Dictionary = ModelChecks.run()
+	_failures.append_array(models["failures"])
 	for kind: String in ["broadleaf", "pine", "shrub", "stone"]:
 		var mesh: ArrayMesh = VegetationMeshes.create(kind)
 		var arrays: Array = mesh.surface_get_arrays(0)
@@ -48,13 +50,14 @@ func _begin() -> void:
 	for kind: String in SurfaceDetails.KINDS:
 		total_instances[kind] = 0
 	var site: Dictionary = SurfaceSites.find(noise)
+	var ruin_direction: Vector3 = SurfaceSites.ruin_direction(site, noise.radius)
 	for divisions: int in [SurfaceDetails.NEAR_DIVISIONS, SurfaceDetails.FOREST_DIVISIONS]:
 		var keys: Array[Vector3i] = SurfaceGrid.nearby(site["direction"], noise.radius, 450.0, divisions)
 		for cell: Vector3i in keys:
 			var key: Vector4i = Vector4i(divisions, cell.x, cell.y, cell.z)
-			var first: Dictionary = SurfaceDetails.generate(noise, key, 20261019, site["direction"])
+			var first: Dictionary = SurfaceDetails.generate(noise, key, 20261019, site["direction"], ruin_direction)
 			# 模拟卸载后重新创建；不依赖摄像机或切平面的历史状态。
-			var second: Dictionary = SurfaceDetails.generate(TerrainNoise.new(20261019, 40000.0), key, 20261019, site["direction"])
+			var second: Dictionary = SurfaceDetails.generate(TerrainNoise.new(20261019, 40000.0), key, 20261019, site["direction"], ruin_direction)
 			for kind: String in SurfaceDetails.KINDS:
 				if first[kind] != second[kind] or first[kind + "_colors"] != second[kind + "_colors"]:
 					_failures.append("卸载后重新生成改变了植物分布。")
@@ -66,6 +69,8 @@ func _begin() -> void:
 					if elevation < 2.9 or absf(position.length() - noise.radius - elevation + 0.08) > 0.03:
 						_failures.append("植物贴地异常：高度 %.5f，贴地误差 %.5f" % [elevation, absf(position.length() - noise.radius - elevation + 0.08)])
 					if kind == "broadleaf" or kind == "pine":
+						if direction.distance_to(ruin_direction) * noise.radius < 9.99:
+							_failures.append("树木侵入遗迹空地。")
 						if noise.slope(direction, elevation) > 0.66:
 							_failures.append("树木出现在过陡坡面。")
 	if total_instances["broadleaf"] + total_instances["pine"] == 0 or total_instances["shrub"] == 0 or total_instances["flowers"] == 0:
@@ -81,7 +86,7 @@ func _begin() -> void:
 			global_trees["pine"] += (generated["pine"] as Array).size()
 	if global_trees["broadleaf"] == 0 or global_trees["pine"] == 0:
 		_failures.append("全球采样缺少阔叶林或针叶林。")
-	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "plant_triangles_checked": plant_triangles, "global_tree_samples": global_trees, "terrain": stats, "geometry": geometry, "seam_coverage_samples": coverage_samples, "instances_within_450m_cells": total_instances}
+	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "models": models, "plant_triangles_checked": plant_triangles, "global_tree_samples": global_trees, "terrain": stats, "geometry": geometry, "seam_coverage_samples": coverage_samples, "instances_within_450m_cells": total_instances}
 	VerificationMetrics.write_json("res://../test-output/p4/ecology_checks.json", report)
 	print(JSON.stringify(report))
 	quit(0 if _failures.is_empty() else 1)

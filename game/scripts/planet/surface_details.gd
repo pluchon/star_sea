@@ -34,6 +34,9 @@ func _ready() -> void:
 		material.shader = shader
 		material.set_shader_parameter("wind_strength", 0.0 if kind == "stone" else 0.14)
 		material.set_shader_parameter("is_grass", kind == "grass" or kind == "flowers")
+		material.set_shader_parameter("bark_color", load("res://textures/painted/bark.svg"))
+		material.set_shader_parameter("rock_color", load("res://textures/painted/stone.svg"))
+		material.set_shader_parameter("leaf_color", load("res://textures/painted/leaves.svg"))
 		_materials[kind] = material
 	_stone_shape = _meshes["stone"].create_convex_shape()
 	# 实际使用的树冠、草叶和投影材质均在首次进入地表前实例化。
@@ -141,8 +144,9 @@ func _request_tile(key: Vector4i) -> void:
 	var noise: TerrainNoise = _planet.noise
 	var planet_seed: int = _planet.planet_seed
 	var spawn_direction: Vector3 = _planet.site["direction"]
+	var ruin_direction: Vector3 = SurfaceSites.ruin_direction(_planet.site, _planet.radius) if _planet.profile == 0 else Vector3.ZERO
 	_task_id = WorkerThreadPool.add_task(func() -> void:
-		_result = generate(noise, key, planet_seed, spawn_direction))
+		_result = generate(noise, key, planet_seed, spawn_direction, ruin_direction))
 
 
 func _collect_tile() -> void:
@@ -166,7 +170,7 @@ func is_settled() -> bool:
 	return visible and _task_id == -1 and _needed.is_empty() and not _desired.is_empty()
 
 
-static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn_direction: Vector3 = Vector3.ZERO) -> Dictionary:
+static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn_direction: Vector3 = Vector3.ZERO, ruin_direction: Vector3 = Vector3.ZERO) -> Dictionary:
 	var divisions: int = key.x
 	var cell: Vector3i = Vector3i(key.y, key.z, key.w)
 	var center: Vector3 = SurfaceGrid.direction(cell, divisions) * noise.radius
@@ -224,6 +228,10 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		var clearance: float = 12.0 if kind == "broadleaf" or kind == "pine" else 6.0
 		if kind != "grass" and kind != "flowers" and direction.distance_to(spawn_direction) * noise.radius < clearance:
 			continue
+		# 拱门通道与倒塌石块周围保留空地，树冠也不能穿入拱券。
+		var ruin_clearance: float = 10.0 if kind == "broadleaf" or kind == "pine" else (7.0 if kind == "stone" or kind == "shrub" else 4.0)
+		if direction.distance_to(ruin_direction) * noise.radius < ruin_clearance:
+			continue
 		var surface_position: Vector3 = direction * (noise.radius + elevation - 0.08)
 		# 球面坐标以单精度保存；用最终位置重新采样，避免陡坡的方向舍入放大贴地误差。
 		for correction: int in 2:
@@ -239,6 +247,26 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 func _add_instances(parent: Node3D, kind: String, transforms: Array, colors: Array) -> void:
 	if transforms.is_empty():
 		return
+	if kind != "broadleaf" and kind != "pine":
+		_add_batch(parent, kind, transforms, colors)
+		return
+	# MultiMesh 整批共用细节层级；按切平面划小批次，避免一棵近树使整片树林使用高精度网格。
+	var up: Vector3 = parent.position.normalized() if parent.position.length_squared() > 1.0 else Vector3.UP
+	var forward: Vector3 = SurfaceSites.tangent_forward(up)
+	var right: Vector3 = forward.cross(up)
+	var groups: Dictionary = {}
+	for index: int in transforms.size():
+		var transform: Transform3D = transforms[index]
+		var key: Vector2i = Vector2i(floori(transform.origin.dot(forward) / 128.0), floori(transform.origin.dot(right) / 128.0))
+		if not groups.has(key):
+			groups[key] = {"transforms": [], "colors": []}
+		groups[key]["transforms"].append(transform)
+		groups[key]["colors"].append(colors[index])
+	for group: Dictionary in groups.values():
+		_add_batch(parent, kind, group["transforms"], group["colors"])
+
+
+func _add_batch(parent: Node3D, kind: String, transforms: Array, colors: Array) -> void:
 	var multi: MultiMesh = MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
 	multi.use_colors = true
@@ -324,10 +352,8 @@ func _make_ruin() -> void:
 	# 出生地附近仅保留一处无人遗迹，不设置任务标记。
 	if _planet.profile != 0:
 		return
-	var up: Vector3 = _planet.site["direction"]
 	var forward: Vector3 = _planet.site["forward"]
-	var right: Vector3 = forward.cross(up)
-	var direction: Vector3 = SurfaceSites.offset_direction(up, (forward * 0.7 - right * 0.7).normalized(), 62.0, _planet.radius)
+	var direction: Vector3 = SurfaceSites.ruin_direction(_planet.site, _planet.radius)
 	var height: float = _planet.noise.height(direction)
 	if height < 2.0:
 		return
@@ -336,32 +362,31 @@ func _make_ruin() -> void:
 	ruin.position = direction * (_planet.radius + height - 0.3)
 	ruin.basis = Basis.looking_at(forward, direction)
 	add_child(ruin)
-	var material: StandardMaterial3D = StandardMaterial3D.new()
-	material.albedo_color = Color(0.60, 0.62, 0.59)
-	material.roughness = 1.0
-	for index: int in 5:
-		var size: Vector3 = Vector3(0.9, 4.8, 1.0)
-		var location: Vector3 = Vector3(-2.0, 2.0, 0.0)
-		if index == 1:
-			location = Vector3(2.0, 1.5, 0.0)
-			size.y = 3.8
-		elif index == 2:
-			location = Vector3(-0.7, 4.4, 0.0)
-			size = Vector3(3.5, 0.7, 1.1)
-		elif index > 2:
-			location = Vector3(float(index - 3) * 1.8 + 1.0, 0.1, -2.0)
-			size = Vector3(1.8, 0.6, 1.0)
-		var body: StaticBody3D = StaticBody3D.new()
-		body.position = location
-		var box: BoxMesh = BoxMesh.new()
-		box.size = size
-		var visual: MeshInstance3D = MeshInstance3D.new()
-		visual.mesh = box
-		visual.material_override = material
-		body.add_child(visual)
-		var shape: BoxShape3D = BoxShape3D.new()
-		shape.size = size
-		var collision: CollisionShape3D = CollisionShape3D.new()
-		collision.shape = shape
-		body.add_child(collision)
-		ruin.add_child(body)
+	for side: float in [-1.0, 1.0]:
+		_ruin_piece(ruin, StoneworkMeshes.block(Vector3(1.4, 0.65, 1.65), int(side + 5)), Vector3(side * 2.025, 0.0, 0.0))
+		for course: int in 4:
+			var size: Vector3 = Vector3(0.78 + sin(course * 2.0) * 0.04, 0.67, 1.05)
+			_ruin_piece(ruin, StoneworkMeshes.block(size, course + int(side * 11)), Vector3(side * 2.025, 0.68 + course * 0.69, 0.0))
+		_ruin_piece(ruin, StoneworkMeshes.block(Vector3(1.02, 0.24, 1.25), int(side * 13)), Vector3(side * 2.025, 2.98, 0.0))
+	for index: int in 9:
+		var angle: float = -PI * 0.5 + (index + 0.5) * PI / 9.0
+		var mesh: ArrayMesh = StoneworkMeshes.block(Vector3(2.025 * PI / 9.0 - 0.025, 0.75, 1.10), index + 30, Vector2(angle, 2.025))
+		_ruin_piece(ruin, mesh, Vector3(0, 3.10, 0))
+	for index: int in 4:
+		var location: Vector3 = Vector3(3.4 + (index % 2) * 0.95, 0.15 + (index / 2) * 0.18, -1.1 - index * 0.7)
+		_ruin_piece(ruin, StoneworkMeshes.block(Vector3(0.9, 0.65, 1.1), index + 50), location, Vector3(0.08 * index, index * 0.61, 0.14 * (index - 1)))
+
+
+func _ruin_piece(parent: Node3D, mesh: ArrayMesh, location: Vector3, angles: Vector3 = Vector3.ZERO) -> void:
+	var body: StaticBody3D = StaticBody3D.new()
+	body.collision_layer = 2
+	body.position = location
+	body.rotation = angles
+	var visual: MeshInstance3D = MeshInstance3D.new()
+	visual.mesh = mesh
+	visual.material_override = _materials["stone"]
+	body.add_child(visual)
+	var collision: CollisionShape3D = CollisionShape3D.new()
+	collision.shape = mesh.create_convex_shape()
+	body.add_child(collision)
+	parent.add_child(body)

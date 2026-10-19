@@ -1,7 +1,7 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit"]
+const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail"]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -15,6 +15,32 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.simulated_forward = false
 	director.time_paused = true
 	match name:
+		"s12_ruin":
+			var ruin_up: Vector3 = SurfaceSites.ruin_direction(planet.site, planet.radius)
+			var ruin_position: Vector3 = planet.global_position + ruin_up * (planet.surface_radius(ruin_up) - 0.3)
+			var eye_up: Vector3 = SurfaceSites.offset_direction(ruin_up, forward, 9.0, planet.radius)
+			var eye: Vector3 = planet.global_position + eye_up * (planet.surface_radius(eye_up) + 1.0)
+			player.place_at(eye, -forward, eye_up)
+			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(ruin_position + ruin_up * 2.6), eye_up)
+			director.set_sun_altitude(ruin_up, (forward + forward.cross(ruin_up)).normalized(), 35.0)
+		"s13_tree_detail":
+			var cells: Array[Vector3i] = SurfaceGrid.nearby(up, planet.radius, 200.0, SurfaceDetails.FOREST_DIVISIONS)
+			var target: Vector3 = Vector3.ZERO
+			var closest: float = INF
+			var origin: Vector3 = up * planet.surface_radius(up)
+			for cell: Vector3i in cells:
+				var generated: Dictionary = SurfaceDetails.generate(planet.noise, Vector4i(SurfaceDetails.FOREST_DIVISIONS, cell.x, cell.y, cell.z), planet.planet_seed, up, SurfaceSites.ruin_direction(planet.site, planet.radius))
+				for transform: Transform3D in generated["broadleaf"]:
+					var position: Vector3 = (generated["center"] as Vector3) + transform.origin
+					if position.distance_to(origin) < closest:
+						closest = position.distance_to(origin)
+						target = position
+			assert(target != Vector3.ZERO, "树木近景机位缺少阔叶树。")
+			up = target.normalized()
+			var eye_up: Vector3 = SurfaceSites.offset_direction(up, forward, 11.0, planet.radius)
+			player.place_at(planet.global_position + eye_up * (planet.surface_radius(eye_up) + 1.0), -forward, eye_up)
+			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(planet.global_position + target + up * 4.5), eye_up)
+			director.set_sun_altitude(up, (forward + forward.cross(up)).normalized(), 38.0)
 		"s7_ember", "s8_frost":
 			player.place_at(planet.global_position + up * (height + 2.0), forward, up)
 			director.set_sun_altitude(up, -forward, 25.0)

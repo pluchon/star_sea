@@ -5,7 +5,7 @@ const NEAR_DIVISIONS: int = 1024
 const FOREST_DIVISIONS: int = 128
 const NEAR_DISTANCE: float = 160.0
 const FOREST_DISTANCE: float = 1400.0
-const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers"]
+const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers", "fern", "reeds"]
 
 var _planet: Planet
 var _tiles: Dictionary[Vector4i, Node3D] = {}
@@ -79,6 +79,9 @@ func _warm_draw_variants() -> void:
 			var instance: MultiMeshInstance3D = stage.get_child(stage.get_child_count() - 1) as MultiMeshInstance3D
 			instance.visibility_range_end = 45.0 if fading else 0.0
 			instance.visibility_range_end_margin = 30.0 if fading else 0.0
+	var explorer: ExplorerAvatar = ExplorerAvatar.new()
+	explorer.position = Vector3(0, 0, 4)
+	stage.add_child(explorer)
 	for frame: int in 8:
 		await get_tree().process_frame
 	viewport.queue_free()
@@ -203,6 +206,8 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 			kind = "pine" if temperature < 0.48 or elevation > 750.0 else "broadleaf"
 			tint = Color(0.77, 0.87, 0.72).lerp(Color(1.08, 1.02, 0.78), rng.randf())
 		elif index > 618:
+			if slope > 1.25:
+				continue
 			kind = "stone"
 			scale_value = rng.randf_range(0.15, 1.3)
 			if index > 644 and noise.profile == 0:
@@ -210,6 +215,12 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 			tint = Color(0.72, 0.76, 0.75).lerp(Color(1.1, 1.03, 0.91), rng.randf())
 		elif noise.profile != 0 or elevation < 9.0 or elevation > 1550.0 or slope > 0.9:
 			continue
+		elif noise.profile == 0 and index > 590 and elevation < 45.0 and moisture > 0.62 and slope < 0.3:
+			kind = "reeds"
+			scale_value = rng.randf_range(0.65, 1.05)
+		elif noise.profile == 0 and index > 600 and grove > 0.65 and moisture > 0.58:
+			kind = "fern"
+			scale_value = rng.randf_range(0.65, 1.4)
 		elif index > 600 and grove > 0.38 and moisture > 0.35:
 			kind = "shrub"
 			scale_value = rng.randf_range(0.6, 1.6)
@@ -224,6 +235,8 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 				tint *= 0.84
 		var tangent: Vector3 = SurfaceSites.tangent_forward(direction).rotated(direction, rng.randf() * TAU)
 		var basis: Basis = Basis.looking_at(tangent, direction).scaled(Vector3.ONE * scale_value)
+		if noise.profile == 0 and (kind == "broadleaf" or kind == "pine" or kind == "stone"):
+			basis = basis.scaled_local(Vector3(rng.randf_range(0.85, 1.18), rng.randf_range(0.82, 1.20), rng.randf_range(0.85, 1.18)))
 		# 出生点保留固定空地，避免开始旅程时落在树干或巨石内部。
 		var clearance: float = 12.0 if kind == "broadleaf" or kind == "pine" else 6.0
 		if kind != "grass" and kind != "flowers" and direction.distance_to(spawn_direction) * noise.radius < clearance:
@@ -317,13 +330,14 @@ func _refresh_colliders(camera_position: Vector3) -> void:
 			body.position = position_local
 			body.basis = transform.basis.orthonormalized()
 			var scale_value: float = transform.basis.get_scale().x
+			var vertical_scale: float = transform.basis.get_scale().y
 			var shape: CapsuleShape3D = CapsuleShape3D.new()
 			shape.radius = 0.38 * scale_value
-			shape.height = 6.0 * scale_value
+			shape.height = 6.0 * vertical_scale
 			var collider: CollisionShape3D = CollisionShape3D.new()
 			if index < trunks.size():
 				collider.shape = shape
-				collider.position.y = 3.0 * scale_value
+				collider.position.y = 3.0 * vertical_scale
 			else:
 				collider.shape = _stone_shape
 				body.basis = transform.basis

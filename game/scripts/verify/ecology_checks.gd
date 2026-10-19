@@ -12,7 +12,7 @@ func _begin() -> void:
 	var plant_triangles: int = 0
 	var models: Dictionary = ModelChecks.run()
 	_failures.append_array(models["failures"])
-	for kind: String in ["broadleaf", "pine", "shrub", "stone"]:
+	for kind: String in ["broadleaf", "pine", "shrub", "stone", "fern", "reeds"]:
 		var mesh: ArrayMesh = VegetationMeshes.create(kind)
 		var arrays: Array = mesh.surface_get_arrays(0)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]

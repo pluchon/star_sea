@@ -20,6 +20,18 @@ static func ruin_direction(site: Dictionary, radius: float) -> Vector3:
 	return offset_direction(up, (forward * 0.7 - forward.cross(up) * 0.7).normalized(), 62.0, radius)
 
 
+static func find_landform(noise: TerrainNoise, form: String) -> Vector3:
+	var random: RandomNumberGenerator = RandomNumberGenerator.new()
+	random.seed = 20261019 + (31 if form == "台地" else 43)
+	for candidate: int in 6000:
+		var latitude: float = random.randf_range(-0.85, 0.85)
+		var angle: float = random.randf() * TAU
+		var up: Vector3 = Vector3(sqrt(1.0 - latitude * latitude) * cos(angle), latitude, sqrt(1.0 - latitude * latitude) * sin(angle))
+		if noise.landform(up) == form and noise.height(up) < 1400.0:
+			return up
+	return Vector3.ZERO
+
+
 static func find(noise: TerrainNoise) -> Dictionary:
 	var random: RandomNumberGenerator = RandomNumberGenerator.new()
 	random.seed = 20261019
@@ -30,6 +42,8 @@ static func find(noise: TerrainNoise) -> Dictionary:
 		var up: Vector3 = Vector3(horizontal * cos(angle), y, horizontal * sin(angle))
 		var height: float = noise.height(up)
 		if height < 20.0 or height > 200.0:
+			continue
+		if noise.moisture(up) < 0.45 or noise.woodland(up) < 0.40:
 			continue
 		var forward: Vector3 = tangent_forward(up)
 		var right: Vector3 = forward.cross(up).normalized()

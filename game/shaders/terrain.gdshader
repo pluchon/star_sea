@@ -58,6 +58,9 @@ void fragment() {
 	float variation = patch(v_position / 32.0) * 0.07 + patch(v_position / 3.0) * 0.028;
 	float exposed = smoothstep(0.20, 0.40, v_slope);
 	c = mix(c, rock * (0.85 + patch(v_position / 14.0) * 0.12), exposed * 0.45);
+	// 岩壁用宽色带表现层理，保持色块风格，不增加照片纹理。
+	float strata = sin(v_height * 0.11 + patch(v_position / 70.0));
+	c *= 1.0 + strata * exposed * 0.045;
 	c *= 1.0 + variation;
 	ALBEDO = c;
 	ROUGHNESS = 1.0;

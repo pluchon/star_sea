@@ -81,6 +81,51 @@ func _build(kind: String, detail: int) -> void:
 				_crown(stem + Vector3.UP * 0.025, Vector3.ONE * 0.045, Color(0.59, 0.36, 0.12), 1.0, index, 6, 3)
 		"stone":
 			_rock()
+		"fern":
+			_fern()
+		"reeds":
+			_reeds()
+
+
+func _leaf(start: Vector3, tip: Vector3, width: float, color: Color) -> void:
+	var side: Vector3 = Vector3.UP.cross(tip - start).normalized() * width
+	var middle: Vector3 = start.lerp(tip, 0.55) + Vector3.UP * 0.025
+	_triangle(start, tip, middle - side, Vector3.UP, Vector3.UP, Vector3.UP, color, 0.6)
+	_triangle(start, middle + side, tip, Vector3.UP, Vector3.UP, Vector3.UP, color * 1.05, 0.6)
+	for vertex: int in range(_vertices.size() - 6, _vertices.size()):
+		_uv2s[vertex].x = clampf(_vertices[vertex].distance_to(start) / start.distance_to(tip), 0.0, 1.0) * 0.6
+
+
+func _fern() -> void:
+	var fronds: int = [7, 5, 3][_detail]
+	var divisions: int = [5, 3, 2][_detail]
+	for frond: int in fronds:
+		var angle: float = frond * TAU / fronds + 0.3
+		var forward: Vector3 = Vector3(cos(angle), 0, sin(angle))
+		var side: Vector3 = Vector3.UP.cross(forward)
+		var stem: Array[Vector3] = [Vector3(0, 0.03, 0), forward * 0.3 + Vector3.UP * 0.45, forward * 0.72 + Vector3.UP * 0.24]
+		_branch(stem, [0.012, 0.008, 0.002], Color(0.31, 0.43, 0.19))
+		_tag = 3.0
+		for index: int in divisions:
+			var progress: float = float(index + 1) / (divisions + 1)
+			var center: Vector3 = forward * progress * 0.72 + Vector3.UP * (sin(progress * PI) * 0.32 + 0.08)
+			for sign_value: float in [-1.0, 1.0]:
+				_leaf(center, center + side * sign_value * (0.25 * (1.0 - progress) + 0.04) + forward * 0.09, 0.04, Color(0.32, 0.50, 0.24))
+
+
+func _reeds() -> void:
+	var count: int = [6, 4, 2][_detail]
+	for index: int in count:
+		var angle: float = index * 2.39996
+		var side: Vector3 = Vector3(cos(angle), 0, sin(angle))
+		var base: Vector3 = side * (0.08 + (index % 3) * 0.08)
+		var tip: Vector3 = base + side * 0.10 + Vector3.UP * (0.95 + (index % 3) * 0.16)
+		_tube(base, tip, 0.012, 0.006, Color(0.48, 0.57, 0.25))
+		_tag = 0.0
+		_crown(tip, Vector3(0.035, 0.16, 0.035), Color(0.43, 0.30, 0.18), 0.0, index, [6, 5, 4][_detail], [4, 3, 2][_detail])
+		_tag = 3.0
+		_leaf(base + Vector3.UP * 0.20, base + side * 0.40 + Vector3.UP * 0.78, 0.035, Color(0.49, 0.62, 0.29))
+		_leaf(base + Vector3.UP * 0.35, base - side * 0.33 + Vector3.UP * 0.98, 0.03, Color(0.56, 0.67, 0.32))
 
 
 func _broadleaf() -> void:

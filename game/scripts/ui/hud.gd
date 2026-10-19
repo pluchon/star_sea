@@ -21,6 +21,7 @@ func _ready() -> void:
 	theme.set_constant("shadow_offset_x", "Label", 1)
 	theme.set_constant("shadow_offset_y", "Label", 1)
 	var layout: Control = Control.new()
+	layout.name = "Layout"
 	layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layout.theme = theme
@@ -54,10 +55,13 @@ func _ready() -> void:
 	background.content_margin_bottom = 18.0
 	_help.add_theme_stylebox_override("panel", background)
 	var text: Label = Label.new()
-	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　切换飞行 / 近地步行\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
+	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　切换飞行 / 近地步行\nV　第一 / 第三人称\nM　全球地形图\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
 	_help.add_child(text)
 	_help.visible = false
 	layout.add_child(_help)
+	var atlas: TerrainAtlas = TerrainAtlas.new()
+	atlas.name = "TerrainAtlas"
+	layout.add_child(atlas)
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
 
@@ -71,7 +75,7 @@ func _process(delta: float) -> void:
 	var offset: Vector3 = _player.global_position - planet.global_position
 	var altitude: float = offset.length() - planet.surface_radius(offset.normalized())
 	var mode_name: String = "步行" if _player.mode == StarSeaPlayer.Mode.WALK else "飞行"
-	_status.text = "%s · %s　海拔 %.0f m　%.1f m/s　H 帮助" % [planet.planet_name, mode_name, altitude, _player.velocity.length()]
+	_status.text = "%s · %s · %s　离地 %.0f m　%.1f m/s　H 帮助" % [planet.planet_name, mode_name, "第三人称" if _player.third_person else "第一人称", altitude, _player.velocity.length()]
 	if _performance.visible:
 		var cpu: float = (Performance.get_monitor(Performance.TIME_PROCESS) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
 		var gpu: float = RenderingServer.viewport_get_measured_render_time_gpu(get_viewport().get_viewport_rid())

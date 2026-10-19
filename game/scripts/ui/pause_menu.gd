@@ -78,6 +78,11 @@ func _input(event: InputEvent) -> void:
 	if _panel == null:
 		return
 	if event.is_action_pressed("release_mouse"):
+		var atlas: TerrainAtlas = _hud.get_node("Layout/TerrainAtlas") as TerrainAtlas
+		if atlas.is_open:
+			atlas.set_open(false)
+			get_viewport().set_input_as_handled()
+			return
 		if visible and _started:
 			resume()
 		else:
@@ -86,6 +91,9 @@ func _input(event: InputEvent) -> void:
 
 
 func open() -> void:
+	var atlas: TerrainAtlas = _hud.get_node("Layout/TerrainAtlas") as TerrainAtlas
+	if atlas.is_open:
+		atlas.set_open(false)
 	if not _open:
 		_hud_was_visible = _hud.visible
 	_open = true
@@ -179,7 +187,7 @@ func _quit() -> void:
 func _controls() -> void:
 	_clear()
 	_label("操作说明", 30)
-	_label("W A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　飞行 / 距地面两米内步行\nT　加速昼夜\nH　帮助　F3　性能\nF12　截图　Esc　暂停", 18)
+	_label("W A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　飞行 / 距地面两米内步行\nV　第一 / 第三人称\nM　全球地形图\nT　加速昼夜\nH　帮助　F3　性能\nF12　截图　Esc　暂停", 18)
 	_label("飞行速度随高度增加。\n离开地表后，朝远处的星球飞行。\n旅程会在退出时保存。", 16)
 	_button("返回", _home)
 

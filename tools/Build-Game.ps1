@@ -1,0 +1,28 @@
+param()
+
+$ErrorActionPreference = 'Stop'
+$repoDirectory = Split-Path -Parent $PSScriptRoot
+$outputDirectory = Join-Path $repoDirectory 'build/StarSea'
+New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+& (Join-Path $PSScriptRoot 'Check-Godot.ps1') -GodotArgs @('--headless', '--export-release', 'Windows Desktop', (Join-Path $outputDirectory 'StarSea.exe')) -LogPath 'test-output/p2/logs/export.log'
+$licensesDirectory = Join-Path $outputDirectory 'licenses'
+New-Item -ItemType Directory -Path $licensesDirectory -Force | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'game/licenses') -File | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $licensesDirectory -Force
+}
+@'
+星海尽头
+
+双击 StarSea.exe 开始漂流。首次进入地表时会等待附近碰撞生成。
+WASD 移动，鼠标环顾，Shift 加速，空格上升或跳跃，Ctrl 下降。
+F 切换飞行；陆地上距地面两米以内可以切回步行。
+T 加速时间，H 帮助，F3 性能，F12 截图，Esc 暂停菜单。
+
+菜单包含画面、声音与操作设置；退出时自动保存旅程。
+存档、设置与截图位于 %APPDATA%\Godot\app_userdata\StarSea\。
+本版本需要 Windows 64 位与支持 Vulkan 的显卡。
+'@ | Set-Content -LiteralPath (Join-Path $outputDirectory '说明.txt') -Encoding utf8
+Get-FileHash -LiteralPath (Join-Path $outputDirectory 'StarSea.exe') -Algorithm SHA256 |
+    Select-Object Algorithm, Hash | ConvertTo-Json |
+    Set-Content -LiteralPath (Join-Path $outputDirectory 'sha256.json') -Encoding utf8
+Compress-Archive -LiteralPath $outputDirectory -DestinationPath (Join-Path $repoDirectory 'build/StarSea-Windows-x64.zip') -CompressionLevel Optimal -Force

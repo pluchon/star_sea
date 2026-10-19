@@ -1,0 +1,110 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_player"]
+[ext_resource type="Shader" path="res://shaders/sky.gdshader" id="2_sky"]
+[ext_resource type="Script" path="res://scripts/planet/planet.gd" id="3_planet"]
+[ext_resource type="Script" path="res://scripts/planet/planet_terrain.gd" id="4_terrain"]
+[ext_resource type="Script" path="res://scripts/core/floating_origin.gd" id="5_origin"]
+[ext_resource type="Script" path="res://scripts/render/sky_director.gd" id="6_director"]
+[ext_resource type="Script" path="res://scripts/space/gas_giant.gd" id="7_giant"]
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="8_hud"]
+[ext_resource type="Script" path="res://scripts/ui/pause_menu.gd" id="9_menu"]
+[ext_resource type="Script" path="res://scripts/render/soundscape.gd" id="10_sound"]
+
+[sub_resource type="ShaderMaterial" id="Material_sky"]
+shader = ExtResource("2_sky")
+
+[sub_resource type="Sky" id="Sky_main"]
+radiance_size = 3
+process_mode = 3
+sky_material = SubResource("Material_sky")
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 2
+ambient_light_color = Color(0.42, 0.45, 0.7, 1)
+ambient_light_energy = 0.55
+reflected_light_source = 1
+tonemap_mode = 0
+glow_enabled = true
+glow_intensity = 0.6
+glow_bloom = 0.05
+glow_hdr_threshold = 1.0
+fog_enabled = false
+ssao_enabled = false
+ssr_enabled = false
+sdfgi_enabled = false
+ssil_enabled = false
+volumetric_fog_enabled = false
+
+[node name="Main" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-25, -25, 0)
+light_energy = 1.0
+light_angular_distance = 0.5
+shadow_enabled = true
+directional_shadow_mode = 2
+directional_shadow_max_distance = 300.0
+directional_shadow_blend_splits = true
+
+[node name="Universe" type="Node3D" parent="."]
+
+[node name="PlanetDawn" type="Node3D" parent="Universe"]
+script = ExtResource("3_planet")
+
+[node name="Terrain" type="Node3D" parent="Universe/PlanetDawn"]
+script = ExtResource("4_terrain")
+
+[node name="GasGiant" type="Node3D" parent="Universe"]
+position = Vector3(0, 60000, -450000)
+script = ExtResource("7_giant")
+
+[node name="PlanetEmber" type="Node3D" parent="Universe"]
+position = Vector3(180000, -90000, 180000)
+script = ExtResource("3_planet")
+planet_name = "烬"
+planet_seed = 20261021
+profile = 1
+radius = 26000.0
+atmosphere_height = 5500.0
+gravity = 5.8
+
+[node name="Terrain" type="Node3D" parent="Universe/PlanetEmber"]
+script = ExtResource("4_terrain")
+
+[node name="PlanetFrost" type="Node3D" parent="Universe"]
+position = Vector3(-250000, 180000, 90000)
+script = ExtResource("3_planet")
+planet_name = "霜"
+planet_seed = 20261023
+profile = 2
+radius = 32000.0
+atmosphere_height = 6500.0
+gravity = 7.2
+
+[node name="Terrain" type="Node3D" parent="Universe/PlanetFrost"]
+script = ExtResource("4_terrain")
+
+[node name="FloatingOrigin" type="Node" parent="."]
+script = ExtResource("5_origin")
+universe_path = NodePath("../Universe")
+player_path = NodePath("../Player")
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+
+[node name="SkyDirector" type="Node" parent="."]
+script = ExtResource("6_director")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("8_hud")
+
+[node name="Soundscape" type="Node" parent="."]
+script = ExtResource("10_sound")
+
+[node name="VoyageMenu" type="CanvasLayer" parent="."]
+script = ExtResource("9_menu")

@@ -1,0 +1,39 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Shader" path="res://shaders/sky.gdshader" id="1_sky"]
+
+[sub_resource type="ShaderMaterial" id="Material_sky"]
+shader = ExtResource("1_sky")
+
+[sub_resource type="Sky" id="Sky_fixture"]
+process_mode = 3
+radiance_size = 3
+sky_material = SubResource("Material_sky")
+
+[sub_resource type="Environment" id="Environment_fixture"]
+background_mode = 2
+sky = SubResource("Sky_fixture")
+ambient_light_source = 2
+ambient_light_color = Color(0.42, 0.45, 0.7, 1)
+ambient_light_energy = 0.55
+reflected_light_source = 1
+glow_enabled = true
+glow_intensity = 0.6
+glow_bloom = 0.05
+glow_hdr_threshold = 1.0
+
+[node name="LightingFixture" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_fixture")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+shadow_enabled = true
+directional_shadow_max_distance = 300.0
+light_angular_distance = 0.5
+
+[node name="Camera" type="Camera3D" parent="."]
+current = true
+near = 0.5
+far = 3000000.0
+fov = 75.0

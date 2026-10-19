@@ -64,8 +64,11 @@ func _ready() -> void:
 	_noise = _planet.noise
 	_terrain_material = ShaderMaterial.new()
 	_terrain_material.shader = load("res://shaders/terrain.gdshader") as Shader
+	_terrain_material.set_shader_parameter("planet_radius", radius)
 	_water_material = ShaderMaterial.new()
 	_water_material.shader = load("res://shaders/water.gdshader") as Shader
+	_water_material.set_shader_parameter("planet_radius", radius)
+	_terrain_material.set_shader_parameter("terrestrial", _planet.profile == 0)
 	if _planet.profile == 1:
 		_terrain_material.set_shader_parameter("snow_height", 9000.0)
 		_terrain_material.set_shader_parameter("sand", Color(0.84, 0.51, 0.32))

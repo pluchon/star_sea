@@ -47,5 +47,5 @@ star_visibility={
 }
 rim_strength={
 "type": "float",
-"value": 0.35
+"value": 0.04
 }

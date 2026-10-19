@@ -1,115 +1,148 @@
 class_name SurfaceDetails
 extends Node3D
 
-const TILE_SIZE: float = 48.0
-const TILE_RADIUS: int = 2
-const VIEW_DISTANCE: float = 170.0
+const NEAR_DIVISIONS: int = 1024
+const FOREST_DIVISIONS: int = 128
+const NEAR_DISTANCE: float = 160.0
+const FOREST_DISTANCE: float = 1400.0
+const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers"]
 
 var _planet: Planet
-var _tiles: Dictionary[Vector2i, Node3D] = {}
-var _origin_up: Vector3
-var _forward: Vector3
-var _right: Vector3
+var _tiles: Dictionary[Vector4i, Node3D] = {}
+var _desired: Dictionary = {}
+var _needed: Array[Vector4i] = []
+var _meshes: Dictionary[String, ArrayMesh] = {}
+var _materials: Dictionary[String, ShaderMaterial] = {}
+var _colliders: Dictionary[String, StaticBody3D] = {}
+var _stone_shape: ConvexPolygonShape3D
 var _elapsed: float = 0.0
-var _grass_mesh: ArrayMesh
-var _stone_mesh: SphereMesh
-var _grass_material: ShaderMaterial
-var _stone_material: ShaderMaterial
+var _collision_elapsed: float = 0.0
+var _last_position: Vector3 = Vector3.INF
+var _near_enabled: bool = false
 var _task_id: int = -1
-var _pending_key: Vector2i
-var _pending_center: Vector3
-var _pending_epoch: int = 0
-var _epoch: int = 0
+var _pending_key: Vector4i
 var _result: Dictionary = {}
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_planet = get_parent() as Planet
-	_origin_up = _planet.site["direction"]
-	_forward = _planet.site["forward"]
-	_right = _forward.cross(_origin_up).normalized()
-	_grass_mesh = _make_grass()
-	_stone_mesh = SphereMesh.new()
-	_stone_mesh.radius = 1.0
-	_stone_mesh.height = 2.0
-	_stone_mesh.radial_segments = 5
-	_stone_mesh.rings = 2
-	_grass_material = ShaderMaterial.new()
-	_grass_material.shader = load("res://shaders/surface_detail.gdshader") as Shader
-	_grass_material.set_shader_parameter("wind_strength", 0.16)
-	_stone_material = ShaderMaterial.new()
-	_stone_material.shader = _grass_material.shader
-	if _planet.profile == 0:
-		_warm_materials()
-	_make_ruin()
-
-
-func _warm_materials() -> void:
-	# 先实例化隐藏版本，使 Godot 在启动时预编译近景实例材质，避免首次降落时停顿。
+	var shader: Shader = load("res://shaders/surface_detail.gdshader") as Shader
+	for kind: String in KINDS:
+		_meshes[kind] = VegetationMeshes.create(kind)
+		var material: ShaderMaterial = ShaderMaterial.new()
+		material.shader = shader
+		material.set_shader_parameter("wind_strength", 0.0 if kind == "stone" else 0.14)
+		material.set_shader_parameter("is_grass", kind == "grass" or kind == "flowers")
+		_materials[kind] = material
+	_stone_shape = _meshes["stone"].create_convex_shape()
+	# 实际使用的树冠、草叶和投影材质均在首次进入地表前实例化。
 	var warmup: Node3D = Node3D.new()
 	warmup.name = "MaterialWarmup"
 	warmup.visible = false
 	add_child(warmup)
-	var transforms: Array[Transform3D] = [Transform3D.IDENTITY]
-	var colors: Array[Color] = [Color(0.4, 0.5, 0.3)]
-	_add_instances(warmup, _grass_mesh, _grass_material, transforms, colors)
-	_add_instances(warmup, _stone_mesh, _stone_material, transforms, colors)
+	for kind: String in KINDS:
+		_add_instances(warmup, kind, [Transform3D.IDENTITY], [Color.WHITE])
+	if _planet.profile == 0 and DisplayServer.get_name() != "headless":
+		_warm_draw_variants.call_deferred()
+	_make_ruin()
+
+
+func _warm_draw_variants() -> void:
+	# 距离渐隐会启用额外绘制路径；启动时在独立视口实际绘制，覆盖隐藏实例无法触发的路径。
+	var viewport: SubViewport = SubViewport.new()
+	viewport.name = "VegetationPipelineWarmup"
+	viewport.size = Vector2i(128, 128)
+	viewport.own_world_3d = true
+	viewport.msaa_3d = get_viewport().msaa_3d
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(viewport)
+	var stage: Node3D = Node3D.new()
+	viewport.add_child(stage)
+	var camera: Camera3D = Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = 28.0
+	camera.position = Vector3(0, 5, 30)
+	stage.add_child(camera)
+	var sun: DirectionalLight3D = DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-35, -30, 0)
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	stage.add_child(sun)
+	for index: int in KINDS.size():
+		var transform: Transform3D = Transform3D(Basis.IDENTITY, Vector3(index * 3.2 - 8.0, 0, 0))
+		for fading: bool in [false, true]:
+			_add_instances(stage, KINDS[index], [transform], [Color.WHITE])
+			var instance: MultiMeshInstance3D = stage.get_child(stage.get_child_count() - 1) as MultiMeshInstance3D
+			instance.visibility_range_end = 45.0 if fading else 0.0
+			instance.visibility_range_end_margin = 30.0 if fading else 0.0
+	for frame: int in 8:
+		await get_tree().process_frame
+	viewport.queue_free()
 
 
 func _process(delta: float) -> void:
+	_collect_tile()
 	_elapsed += delta
-	if _elapsed < 0.08:
+	_collision_elapsed += delta
+	if _elapsed < 0.04:
 		return
 	_elapsed = 0.0
-	_collect_tile()
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	if camera == null:
 		return
 	var local: Vector3 = _planet.to_local(camera.global_position)
-	var altitude: float = local.length() - _planet.surface_radius(local.normalized())
-	# 高空不生成近景，已有分块在下一次进入地表时继续复用。
-	visible = altitude < 400.0
-	if not visible:
-		return
 	var up: Vector3 = local.normalized()
-	# 每次离开切平面约一公里后重新建立坐标，覆盖整个球面。
-	if up.dot(_origin_up) < 0.9997:
-		_epoch += 1
-		for tile: Node3D in _tiles.values():
-			tile.queue_free()
-		_tiles.clear()
-		_origin_up = up
-		_forward = SurfaceSites.tangent_forward(up)
-		_right = _forward.cross(up).normalized()
-	var relative: Vector3 = local - _origin_up * _planet.radius
-	var center: Vector2i = Vector2i(floori(relative.dot(_right) / TILE_SIZE), floori(relative.dot(_forward) / TILE_SIZE))
-	for key: Vector2i in _tiles.keys():
-		if absi(key.x - center.x) > TILE_RADIUS or absi(key.y - center.y) > TILE_RADIUS:
+	var altitude: float = local.length() - _planet.surface_radius(up)
+	visible = altitude < 2200.0
+	if not visible:
+		_clear_colliders()
+		return
+	var near_enabled: bool = altitude < 220.0
+	if local.distance_to(_last_position) > 20.0 or near_enabled != _near_enabled:
+		_last_position = local
+		_near_enabled = near_enabled
+		_update_desired(up)
+	if _task_id == -1 and not _needed.is_empty():
+		_request_tile(_needed.pop_front())
+	if _collision_elapsed > 0.5:
+		_collision_elapsed = 0.0
+		_refresh_colliders(local)
+
+
+func _update_desired(up: Vector3) -> void:
+	_desired.clear()
+	_needed.clear()
+	var near_keys: Array[Vector3i] = []
+	var forest_keys: Array[Vector3i] = []
+	if _near_enabled:
+		near_keys = SurfaceGrid.nearby(up, _planet.radius, NEAR_DISTANCE, NEAR_DIVISIONS)
+	if _planet.profile == 0:
+		forest_keys = SurfaceGrid.nearby(up, _planet.radius, FOREST_DISTANCE, FOREST_DIVISIONS)
+	# 近景和树林交替生成，避免草地全部上传之后才出现树木。
+	for index: int in maxi(near_keys.size(), forest_keys.size()):
+		if index < near_keys.size():
+			var key: Vector3i = near_keys[index]
+			_desired[Vector4i(NEAR_DIVISIONS, key.x, key.y, key.z)] = true
+		if index < forest_keys.size():
+			var key: Vector3i = forest_keys[index]
+			_desired[Vector4i(FOREST_DIVISIONS, key.x, key.y, key.z)] = true
+	for key: Vector4i in _tiles.keys():
+		if not _desired.has(key):
 			_tiles[key].queue_free()
 			_tiles.erase(key)
-	# 每次只创建一个近景分块，避免步行时集中上传实例。
-	for ring: int in TILE_RADIUS + 1:
-		for y: int in range(-ring, ring + 1):
-			for x: int in range(-ring, ring + 1):
-				var key: Vector2i = center + Vector2i(x, y)
-				if not _tiles.has(key):
-					if _task_id == -1:
-						_request_tile(key)
-					return
+	for key: Vector4i in _desired:
+		if not _tiles.has(key) and not (_task_id != -1 and key == _pending_key):
+			_needed.append(key)
 
 
-func _request_tile(key: Vector2i) -> void:
+func _request_tile(key: Vector4i) -> void:
 	_pending_key = key
-	_pending_epoch = _epoch
-	_pending_center = (_origin_up * _planet.radius + _right * (key.x + 0.5) * TILE_SIZE + _forward * (key.y + 0.5) * TILE_SIZE).normalized() * _planet.radius
-	var center: Vector3 = _pending_center
-	var right: Vector3 = _right
-	var forward: Vector3 = _forward
 	var noise: TerrainNoise = _planet.noise
 	var planet_seed: int = _planet.planet_seed
+	var spawn_direction: Vector3 = _planet.site["direction"]
 	_task_id = WorkerThreadPool.add_task(func() -> void:
-		_result = _generate(noise, center, right, forward, planet_seed))
+		_result = generate(noise, key, planet_seed, spawn_direction))
 
 
 func _collect_tile() -> void:
@@ -117,89 +150,174 @@ func _collect_tile() -> void:
 		return
 	WorkerThreadPool.wait_for_task_completion(_task_id)
 	_task_id = -1
-	if _pending_epoch == _epoch and visible:
+	if _desired.has(_pending_key) and not _tiles.has(_pending_key):
 		var tile: Node3D = Node3D.new()
-		tile.position = _pending_center
+		tile.position = _result["center"]
 		add_child(tile)
-		_add_instances(tile, _grass_mesh, _grass_material, _result["grass"], _result["grass_colors"])
-		_add_instances(tile, _stone_mesh, _stone_material, _result["stones"], _result["stone_colors"])
+		for kind: String in KINDS:
+			_add_instances(tile, kind, _result[kind], _result[kind + "_colors"])
+		tile.set_meta("trunks", _result["broadleaf"] + _result["pine"])
+		tile.set_meta("rocks", _result["stone"])
 		_tiles[_pending_key] = tile
 	_result = {}
 
 
-static func _generate(noise: TerrainNoise, center: Vector3, right: Vector3, forward: Vector3, planet_seed: int) -> Dictionary:
+func is_settled() -> bool:
+	return visible and _task_id == -1 and _needed.is_empty() and not _desired.is_empty()
+
+
+static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn_direction: Vector3 = Vector3.ZERO) -> Dictionary:
+	var divisions: int = key.x
+	var cell: Vector3i = Vector3i(key.y, key.z, key.w)
+	var center: Vector3 = SurfaceGrid.direction(cell, divisions) * noise.radius
+	var result: Dictionary = {"center": center}
+	for kind: String in KINDS:
+		var transforms: Array[Transform3D] = []
+		var colors: Array[Color] = []
+		result[kind] = transforms
+		result[kind + "_colors"] = colors
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = hash(Vector3i(roundi(center.x), roundi(center.y), roundi(center.z))) + planet_seed
-	var grass: Array[Transform3D] = []
-	var stones: Array[Transform3D] = []
-	var grass_colors: Array[Color] = []
-	var stone_colors: Array[Color] = []
-	for index: int in 520:
-		var direction: Vector3 = (center + right * rng.randf_range(-24.0, 24.0) + forward * rng.randf_range(-24.0, 24.0)).normalized()
-		var height: float = noise.height(direction)
-		if height < 3.0:
+	rng.seed = hash(key) + planet_seed
+	var forest: bool = divisions == FOREST_DIVISIONS
+	for index: int in (440 if forest else 650):
+		var direction: Vector3 = SurfaceGrid.direction(cell, divisions, Vector2(rng.randf(), rng.randf()))
+		var elevation: float = noise.height(direction)
+		if elevation < 3.0:
 			continue
+		var moisture: float = noise.moisture(direction)
+		var temperature: float = noise.temperature(direction, elevation)
+		var grove: float = noise.woodland(direction)
+		var kind: String = "grass"
+		var scale_value: float = rng.randf_range(0.65, 1.30)
+		var tint: Color = Color.WHITE
+		var slope: float = noise.slope(direction, elevation)
+		if forest:
+			if elevation < 16.0 or elevation > 1600.0 or slope > 0.65 or temperature < 0.16:
+				continue
+			if rng.randf() > (0.08 + grove * 0.72) * smoothstep(0.20, 0.65, moisture):
+				continue
+			kind = "pine" if temperature < 0.48 or elevation > 750.0 else "broadleaf"
+			tint = Color(0.77, 0.87, 0.72).lerp(Color(1.08, 1.02, 0.78), rng.randf())
+		elif index > 618:
+			kind = "stone"
+			scale_value = rng.randf_range(0.15, 1.3)
+			if index > 644 and noise.profile == 0:
+				scale_value = rng.randf_range(1.4, 3.0)
+			tint = Color(0.72, 0.76, 0.75).lerp(Color(1.1, 1.03, 0.91), rng.randf())
+		elif noise.profile != 0 or elevation < 9.0 or elevation > 1550.0 or slope > 0.9:
+			continue
+		elif index > 600 and grove > 0.38 and moisture > 0.35:
+			kind = "shrub"
+			scale_value = rng.randf_range(0.6, 1.6)
+		elif index > 560 and moisture > 0.36 and temperature > 0.40:
+			kind = "flowers"
+			tint = Color(1.05, 0.94, 0.85) if index % 2 == 0 else Color(0.82, 0.85, 1.15)
+		else:
+			if rng.randf() > 0.45 + moisture * 0.5:
+				continue
+			tint = Color(0.68, 0.85, 0.64).lerp(Color(1.03, 0.97, 0.72), 1.0 - moisture)
+			if grove > 0.7:
+				tint *= 0.84
 		var tangent: Vector3 = SurfaceSites.tangent_forward(direction).rotated(direction, rng.randf() * TAU)
-		var basis: Basis = Basis.looking_at(tangent, direction)
-		var position_local: Vector3 = direction * (noise.radius + height - 0.10) - center
-		if index < 492 and height > 8.0 and height < 1250.0 and noise.profile == 0:
-			var scale: float = rng.randf_range(0.45, 1.25)
-			grass.append(Transform3D(basis.scaled(Vector3.ONE * scale), position_local))
-			grass_colors.append(Color(0.20, 0.37, 0.20).lerp(Color(0.48, 0.60, 0.29), rng.randf()))
-		elif index >= 492:
-			var size: float = rng.randf_range(0.18, 0.85)
-			stones.append(Transform3D(basis.scaled(Vector3(size * 1.2, size * 0.55, size)), position_local))
-			stone_colors.append(Color(0.43, 0.46, 0.49).lerp(Color(0.69, 0.67, 0.61), rng.randf()))
-	return {"grass": grass, "stones": stones, "grass_colors": grass_colors, "stone_colors": stone_colors}
+		var basis: Basis = Basis.looking_at(tangent, direction).scaled(Vector3.ONE * scale_value)
+		# 出生点保留固定空地，避免开始旅程时落在树干或巨石内部。
+		var clearance: float = 12.0 if kind == "broadleaf" or kind == "pine" else 6.0
+		if kind != "grass" and kind != "flowers" and direction.distance_to(spawn_direction) * noise.radius < clearance:
+			continue
+		var surface_position: Vector3 = direction * (noise.radius + elevation - 0.08)
+		# 球面坐标以单精度保存；用最终位置重新采样，避免陡坡的方向舍入放大贴地误差。
+		for correction: int in 2:
+			var actual_direction: Vector3 = surface_position.normalized()
+			var radial_error: float = noise.radius + noise.height(actual_direction) - 0.08 - surface_position.length()
+			surface_position += actual_direction * radial_error
+		var position_local: Vector3 = surface_position - center
+		(result[kind] as Array[Transform3D]).append(Transform3D(basis, position_local))
+		(result[kind + "_colors"] as Array[Color]).append(tint)
+	return result
 
 
-func _exit_tree() -> void:
-	if _task_id != -1:
-		WorkerThreadPool.wait_for_task_completion(_task_id)
-		_task_id = -1
-
-
-func _add_instances(parent: Node3D, mesh: Mesh, material: ShaderMaterial, transforms: Array[Transform3D], colors: Array[Color]) -> void:
+func _add_instances(parent: Node3D, kind: String, transforms: Array, colors: Array) -> void:
 	if transforms.is_empty():
 		return
 	var multi: MultiMesh = MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
 	multi.use_colors = true
 	multi.use_custom_data = true
-	multi.mesh = mesh
+	multi.mesh = _meshes[kind]
 	multi.instance_count = transforms.size()
 	for index: int in transforms.size():
 		multi.set_instance_transform(index, transforms[index])
 		multi.set_instance_color(index, colors[index])
 		multi.set_instance_custom_data(index, Color(float(index) / transforms.size(), 0.0, 0.0))
 	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	instance.name = kind.capitalize()
 	instance.multimesh = multi
-	instance.material_override = material
-	instance.visibility_range_end = VIEW_DISTANCE
-	instance.visibility_range_end_margin = 25.0
+	instance.material_override = _materials[kind]
+	var tree: bool = kind == "broadleaf" or kind == "pine"
+	instance.visibility_range_end = 1800.0 if tree else 230.0
+	instance.visibility_range_end_margin = 90.0 if tree else 30.0
 	instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if kind != "grass" and kind != "flowers" else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.extra_cull_margin = 0.8
 	parent.add_child(instance)
 
 
-func _make_grass() -> ArrayMesh:
-	var vertices: PackedVector3Array = []
-	var normals: PackedVector3Array = []
-	for index: int in 5:
-		var angle: float = float(index) * TAU / 5.0
-		var right: Vector3 = Vector3(cos(angle), 0.0, sin(angle))
-		var base: Vector3 = right * 0.12
-		var tip: Vector3 = Vector3.UP * (0.55 + float(index % 3) * 0.13) + right * 0.22
-		vertices.append_array(PackedVector3Array([base - right * 0.045, tip, base + right * 0.045]))
-		for vertex: int in 3:
-			normals.append(Vector3.UP)
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	var mesh: ArrayMesh = ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
+func _refresh_colliders(camera_position: Vector3) -> void:
+	# 本轮实体碰撞只完善晨，其他星球沿用原型行为。
+	if _planet.profile != 0:
+		return
+	var desired: Dictionary = {}
+	for key: Vector4i in _tiles:
+		var tile: Node3D = _tiles[key]
+		if tile.position.distance_to(camera_position) > 800.0:
+			continue
+		var trunks: Array = tile.get_meta("trunks")
+		var obstacles: Array = trunks + (tile.get_meta("rocks") as Array)
+		for index: int in obstacles.size():
+			var transform: Transform3D = obstacles[index]
+			var position_local: Vector3 = tile.position + transform.origin
+			if position_local.distance_to(camera_position) > 65.0:
+				continue
+			var identity: String = str(key) + "/" + str(index)
+			desired[identity] = true
+			if _colliders.has(identity):
+				continue
+			var body: StaticBody3D = StaticBody3D.new()
+			body.collision_layer = 2
+			body.set_meta("ecology_obstacle", true)
+			body.set_meta("ecology_kind", "tree" if index < trunks.size() else "stone")
+			body.position = position_local
+			body.basis = transform.basis.orthonormalized()
+			var scale_value: float = transform.basis.get_scale().x
+			var shape: CapsuleShape3D = CapsuleShape3D.new()
+			shape.radius = 0.38 * scale_value
+			shape.height = 6.0 * scale_value
+			var collider: CollisionShape3D = CollisionShape3D.new()
+			if index < trunks.size():
+				collider.shape = shape
+				collider.position.y = 3.0 * scale_value
+			else:
+				collider.shape = _stone_shape
+				body.basis = transform.basis
+			body.add_child(collider)
+			add_child(body)
+			_colliders[identity] = body
+	for identity: String in _colliders.keys():
+		if not desired.has(identity):
+			_colliders[identity].queue_free()
+			_colliders.erase(identity)
+
+
+func _clear_colliders() -> void:
+	for body: StaticBody3D in _colliders.values():
+		body.queue_free()
+	_colliders.clear()
+
+
+func _exit_tree() -> void:
+	if _task_id != -1:
+		WorkerThreadPool.wait_for_task_completion(_task_id)
+		_task_id = -1
 
 
 func _make_ruin() -> void:

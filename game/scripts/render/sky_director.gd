@@ -55,9 +55,9 @@ func _update_environment() -> void:
 	var sunset: Color = Color(1.0, 0.62, 0.42)
 	var noon: Color = Color(1.0, 0.97, 0.92)
 	_sun.light_color = sunset.lerp(noon, smoothstep(0.0, 0.35, sun_height)).lerp(noon, space)
-	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height), 1.0, space)
-	_environment.ambient_light_color = Color(0.10, 0.12, 0.28).lerp(Color(0.42, 0.45, 0.70), day).lerp(Color(0.08, 0.08, 0.16), space)
-	_environment.ambient_light_energy = lerpf(lerpf(0.35, 0.55, day), 0.3, space)
+	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height) * 1.25, 1.0, space)
+	_environment.ambient_light_color = Color(0.12, 0.16, 0.30).lerp(Color(0.46, 0.56, 0.72), day).lerp(Color(0.08, 0.08, 0.16), space)
+	_environment.ambient_light_energy = lerpf(lerpf(0.18, 0.32, day), 0.20, space)
 	for node: Node in get_tree().get_nodes_in_group("planets"):
 		var planet: Planet = node as Planet
 		if planet.atmosphere_material != null:

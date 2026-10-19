@@ -9,6 +9,9 @@ var _continent: FastNoiseLite
 var _mountain: FastNoiseLite
 var _hills: FastNoiseLite
 var _detail: FastNoiseLite
+var _moisture: FastNoiseLite
+var _groves: FastNoiseLite
+var _drainage: FastNoiseLite
 
 
 func _init(planet_seed: int, planet_radius: float, terrain_profile: int = 0) -> void:
@@ -19,6 +22,9 @@ func _init(planet_seed: int, planet_radius: float, terrain_profile: int = 0) -> 
 	_mountain.fractal_gain = 0.42
 	_hills = _make(planet_seed + 2, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 700.0, FastNoiseLite.FRACTAL_FBM, 3)
 	_detail = _make(planet_seed + 3, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 90.0, FastNoiseLite.FRACTAL_FBM, 2)
+	_moisture = _make(planet_seed + 4, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 3400.0, FastNoiseLite.FRACTAL_FBM, 3)
+	_groves = _make(planet_seed + 5, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 280.0, FastNoiseLite.FRACTAL_FBM, 2)
+	_drainage = _make(planet_seed + 6, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 2100.0, FastNoiseLite.FRACTAL_FBM, 3)
 
 
 func _make(planet_seed: int, noise_type: FastNoiseLite.NoiseType, frequency: float, fractal: FastNoiseLite.FractalType, octaves: int) -> FastNoiseLite:
@@ -53,4 +59,27 @@ func height(direction: Vector3) -> float:
 		# 冰原保留宽阔盆地，以相互连接的山脊区分于海岸和沙丘。
 		var basin: float = smoothstep(-0.25, 0.42, continent)
 		return 24.0 + basin * 400.0 + pow(ridge, 2.0) * basin * 1900.0 + hills * 0.35 + detail * 0.5
-	return lerpf(-420.0, 40.0, land) + upland + mountain + foothills + hills + detail
+	# 高地沟谷使用连续等值线下切，海岸与低地不受影响；三种地形查询仍共用本函数。
+	var valley: float = 1.0 - smoothstep(0.015, 0.13, absf(_drainage.get_noise_3dv(point)))
+	var erosion: float = valley * smoothstep(150.0, 900.0, mountain + upland) * 120.0
+	return lerpf(-420.0, 40.0, land) + upland + mountain + foothills + hills + detail - erosion
+
+
+func moisture(direction: Vector3) -> float:
+	return clampf(0.52 + _moisture.get_noise_3dv(direction * radius) * 1.1, 0.0, 1.0)
+
+
+func temperature(direction: Vector3, elevation: float) -> float:
+	return clampf(1.05 - absf(direction.y) * 0.72 - maxf(elevation, 0.0) / 2800.0, 0.0, 1.0)
+
+
+func woodland(direction: Vector3) -> float:
+	return smoothstep(-0.22, 0.28, _groves.get_noise_3dv(direction * radius))
+
+
+func slope(direction: Vector3, elevation: float) -> float:
+	var tangent: Vector3 = SurfaceSites.tangent_forward(direction)
+	var right: Vector3 = tangent.cross(direction)
+	var a: float = height((direction * radius + tangent * 4.0).normalized()) - elevation
+	var b: float = height((direction * radius + right * 4.0).normalized()) - elevation
+	return sqrt(a * a + b * b) / 4.0

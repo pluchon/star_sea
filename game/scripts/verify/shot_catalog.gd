@@ -1,7 +1,7 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost"]
+const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit"]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -44,6 +44,31 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 			player.place_at(planet.global_position + up * height, forward, up)
 			player.camera.rotation.x = deg_to_rad(35.0)
 			director.set_sun_altitude(up, -forward, -30.0)
+		"s9_woodland":
+			up = SurfaceSites.find_woodland(planet.noise, up)
+			forward = SurfaceSites.tangent_forward(up)
+			var best_height: float = -INF
+			var reference: Vector3 = forward
+			for heading: int in 16:
+				var tangent: Vector3 = reference.rotated(up, heading * TAU / 16.0)
+				var inland_height: float = planet.noise.height(SurfaceSites.offset_direction(up, tangent, 150.0, planet.radius))
+				if inland_height > best_height:
+					best_height = inland_height
+					forward = tangent
+			player.place_at(planet.global_position + up * (planet.surface_radius(up) + 1.0), forward, up)
+			director.set_sun_altitude(up, (-forward + forward.cross(up)).normalized(), 28.0)
+		"s10_highland":
+			up = planet.site["mountain_direction"]
+			forward = SurfaceSites.tangent_forward(up)
+			player.place_at(planet.global_position + up * (planet.surface_radius(up) + 180.0), forward, up)
+			player.camera.rotation.x = deg_to_rad(-18.0)
+			director.set_sun_altitude(up, forward.cross(up).normalized(), 22.0)
+		"s11_orbit":
+			up = -up
+			forward = SurfaceSites.tangent_forward(up)
+			player.place_at(planet.global_position + up * (planet.radius + 80000.0), forward, up)
+			player.camera.global_basis = Basis.looking_at(-up, forward)
+			director.set_sun_altitude(up, forward, 12.0)
 		"s6_shore":
 			up = planet.site["shore_direction"]
 			forward = planet.site["shore_forward"]

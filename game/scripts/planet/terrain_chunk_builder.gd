@@ -45,7 +45,7 @@ static func build(noise: TerrainNoise, normal: Vector3, axis_a: Vector3, axis_b:
 			var vertex_normal: Vector3 = tangent_a.cross(tangent_b).normalized()
 			vertices[index] = position - center
 			normals[index] = vertex_normal
-			colors[index] = Color(clampf(heights[padded_index] / TerrainNoise.MAX_HEIGHT * 0.5 + 0.5, 0.0, 1.0), 1.0 - vertex_normal.dot(direction), 0.0, 1.0)
+			colors[index] = Color(clampf(heights[padded_index] / TerrainNoise.MAX_HEIGHT * 0.5 + 0.5, 0.0, 1.0), 1.0 - vertex_normal.dot(direction), noise.moisture(direction), noise.woodland(direction))
 			if not water_vertices.is_empty():
 				water_vertices[index] = direction * noise.radius - center
 				water_normals[index] = direction

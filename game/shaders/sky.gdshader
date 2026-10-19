@@ -81,10 +81,12 @@ void sky() {
 		float elevation = dot(dir, sky_up);
 		float day = smoothstep(-0.08, 0.18, dot(sky_up, sun_dir));
 		// 云层使用球面方向，不随浮动原点偏移；高空逐渐消失。
-		float cloud_shape = fbm(dir * vec3(8.0, 13.0, 8.0) + vec3(TIME * 0.003, 0.0, 0.0));
-		float clouds = smoothstep(0.49, 0.62, cloud_shape) * smoothstep(0.04, 0.22, elevation) * (1.0 - smoothstep(0.55, 0.90, elevation));
+		vec3 cloud_point = dir / max(elevation, 0.12) * 3.4 + vec3(TIME * 0.005, 0.0, 0.0);
+		float cloud_shape = fbm(cloud_point);
+		float clouds = smoothstep(0.51, 0.65, cloud_shape) * smoothstep(0.04, 0.20, elevation);
 		vec3 cloud_color = mix(vec3(0.17, 0.18, 0.32), mix(vec3(1.0, 0.65, 0.46), vec3(0.83, 0.91, 0.97), day), smoothstep(-0.18, 0.04, dot(sky_up, sun_dir)));
-		col = mix(col, cloud_color, clouds * surface_sky * 0.72);
+		cloud_color *= mix(0.78, 1.05, smoothstep(0.50, 0.70, cloud_shape));
+		col = mix(col, cloud_color, clouds * surface_sky * 0.92);
 		COLOR = col;
 	}
 }

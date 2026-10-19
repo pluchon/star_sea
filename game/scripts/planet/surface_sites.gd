@@ -135,3 +135,22 @@ static func find_inland(noise: TerrainNoise) -> Dictionary:
 			if peak > height + 500.0 and _clear_view(noise, up, tangent, height):
 				return {"direction": up, "forward": tangent, "height_m": height, "mountain_height_m": peak, "mountain_distance_m": 4000.0, "candidate_index": candidate}
 	return {}
+
+
+# 额外机位覆盖密集树林与高地，避免只检查出生点的一片草地。
+static func find_woodland(noise: TerrainNoise, origin: Vector3) -> Vector3:
+	var forward: Vector3 = tangent_forward(origin)
+	var best: Vector3 = origin
+	var score: float = -INF
+	for heading: int in 24:
+		var tangent: Vector3 = forward.rotated(origin, heading * TAU / 24.0)
+		for step: int in range(1, 21):
+			var direction: Vector3 = offset_direction(origin, tangent, step * 350.0, noise.radius)
+			var elevation: float = noise.height(direction)
+			if elevation < 30.0 or elevation > 1000.0 or noise.slope(direction, elevation) > 0.25:
+				continue
+			var weight: float = noise.woodland(direction) * noise.moisture(direction)
+			if weight > score:
+				score = weight
+				best = direction
+	return best

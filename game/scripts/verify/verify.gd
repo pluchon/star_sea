@@ -70,7 +70,11 @@ func _wait_for_terrain() -> bool:
 	var stable_since: int = -1
 	while Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
-		if _terrain.is_settled():
+		var details: SurfaceDetails = _planet.get_node("SurfaceDetails") as SurfaceDetails
+		var camera_offset: Vector3 = _player.camera.global_position - _planet.global_position
+		var altitude: float = camera_offset.length() - _planet.surface_radius(camera_offset.normalized())
+		var surface_ready: bool = altitude >= 2200.0 or details.is_settled()
+		if _terrain.is_settled() and surface_ready:
 			if stable_since < 0:
 				stable_since = Time.get_ticks_msec()
 			if Time.get_ticks_msec() - stable_since >= 400:
@@ -142,7 +146,7 @@ func _capture_shot(name: String, output_directory: String) -> void:
 		_fail("无法保存机位报告：" + error_string(save_error))
 		return
 	print(JSON.stringify(report))
-	get_tree().quit(0)
+	await _finish(0)
 
 
 func _cpu_ms() -> float:
@@ -239,7 +243,7 @@ func _measure_descent(path: String) -> void:
 		_fail("无法写入降落验证报告。")
 		return
 	print(JSON.stringify({"descent": path, "frame_ms": statistics, "slow_frames_after_3s": slow_frames.size(), "remaining_distance_m": remaining, "maximum_upload_ms": report["maximum_upload_ms"]}))
-	get_tree().quit(0 if report["performance_passed"] and report["landing_passed"] and report["upload_budget_passed"] else 1)
+	await _finish(0 if report["performance_passed"] and report["landing_passed"] and report["upload_budget_passed"] else 1)
 
 
 func _measure_walk(path: String) -> void:
@@ -275,7 +279,16 @@ func _measure_walk(path: String) -> void:
 		_fail("无法写入行走验证报告。")
 		return
 	print(JSON.stringify({"walk": path, "minimum_altitude_m": minimum_altitude, "horizontal_displacement_m": horizontal_distance, "passed": passed}))
-	get_tree().quit(0 if passed else 1)
+	await _finish(0 if passed else 1)
+
+
+func _finish(code: int) -> void:
+	# 先回收场景与后台资源，再关闭渲染器，避免退出时遗留线程引用。
+	var tree: SceneTree = get_tree()
+	tree.current_scene.queue_free()
+	for frame: int in 6:
+		await tree.process_frame
+	tree.quit(code)
 
 
 func _fail(message: String) -> void:

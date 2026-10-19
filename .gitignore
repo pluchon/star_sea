@@ -1,0 +1,13 @@
+# Godot 本地缓存
+game/.godot/
+*.tmp
+
+# 打包、截图与临时验证输出
+build/
+screenshots/
+test-output/
+
+# 系统杂项
+Thumbs.db
+desktop.ini
+.DS_Store

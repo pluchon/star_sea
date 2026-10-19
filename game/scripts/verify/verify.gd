@@ -22,6 +22,7 @@ func _run() -> void:
 	var output_directory: String = "res://../test-output/p1/shots"
 	var descent_path: String = ""
 	var walk_path: String = ""
+	var acceptance: String = ""
 	for argument: String in OS.get_cmdline_user_args():
 		if argument.begins_with("--shot="):
 			shot = argument.trim_prefix("--shot=")
@@ -31,11 +32,13 @@ func _run() -> void:
 			descent_path = argument.trim_prefix("--descent=")
 		elif argument.begins_with("--walk="):
 			walk_path = argument.trim_prefix("--walk=")
+		elif argument.begins_with("--acceptance="):
+			acceptance = argument.trim_prefix("--acceptance=")
 		else:
 			_fail("未知验证参数：" + argument)
 			return
-	if int(not shot.is_empty()) + int(not descent_path.is_empty()) + int(not walk_path.is_empty()) != 1:
-		_fail("每次运行只能选择一个截图、降落或行走验证项目。")
+	if int(not shot.is_empty()) + int(not descent_path.is_empty()) + int(not walk_path.is_empty()) + int(not acceptance.is_empty()) != 1:
+		_fail("每次运行只能选择一个截图、降落、行走或完整验收项目。")
 		return
 	if DisplayServer.get_name() == "headless":
 		_fail("性能与画面验收必须使用真实渲染器。")
@@ -54,7 +57,24 @@ func _run() -> void:
 	get_window().size = Vector2i(1920, 1080)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	RenderingServer.viewport_set_measure_render_time(_viewport_rid, true)
-	if not shot.is_empty():
+	if not acceptance.is_empty():
+		var report: Dictionary
+		if acceptance == "core":
+			report = await AcceptanceChecks.core(scene, output_directory)
+		elif acceptance == "world":
+			report = await AcceptanceChecks.world(scene, output_directory)
+		elif acceptance == "audio":
+			report = await AcceptanceChecks.audio(scene, output_directory)
+		else:
+			_fail("未知完整验收项目：" + acceptance)
+			return
+		var error: Error = VerificationMetrics.write_json(output_directory.path_join(acceptance + ".json"), report)
+		if error != OK:
+			_fail("验收报告写入失败。")
+			return
+		print(JSON.stringify(report))
+		await _finish(0 if report["passed"] else 1)
+	elif not shot.is_empty():
 		if not ShotCatalog.NAMES.has(shot):
 			_fail("未知机位：" + shot)
 			return
@@ -137,6 +157,8 @@ func _capture_shot(name: String, output_directory: String) -> void:
 		"cpu_metric": "TIME_PROCESS + TIME_PHYSICS_PROCESS; one-second peak monitors, not per-frame CPU samples",
 		"gpu_ms": VerificationMetrics.summarize(gpu_times),
 		"visible_chunks": _terrain.visible_chunks,
+		"render_primitives": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+		"render_draw_calls": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 		"maximum_upload_ms": float(_terrain.maximum_upload_us) / 1000.0,
 		"site": _site_report(),
 		"performance_passed": float(interval_statistics["mean"]) <= 12.5 and float(interval_statistics["p95"]) <= 16.0,

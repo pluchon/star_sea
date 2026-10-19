@@ -2,7 +2,7 @@ class_name InteractionChecks
 extends RefCounted
 
 
-static func run(scene: Node3D) -> Dictionary:
+static func run(scene: Node3D, output_directory: String = "res://../test-output/p1") -> Dictionary:
 	var player: StarSeaPlayer = scene.get_node("Player") as StarSeaPlayer
 	var terrain: PlanetTerrain = scene.get_node("Universe/PlanetDawn/Terrain") as PlanetTerrain
 	var director: SkyDirector = scene.get_node("SkyDirector") as SkyDirector
@@ -67,7 +67,8 @@ static func run(scene: Node3D) -> Dictionary:
 	# 界面留图不使用刚完成 PNG 编码时的一秒峰值读数。
 	await scene.get_tree().create_timer(2.2).timeout
 	await RenderingServer.frame_post_draw
-	var image_path: String = ProjectSettings.globalize_path("res://../test-output/p1/interface.png")
+	var image_path: String = ProjectSettings.globalize_path(output_directory.path_join("interface.png")) if output_directory.begins_with("res://") else output_directory.path_join("interface.png")
+	DirAccess.make_dir_recursive_absolute(image_path.get_base_dir())
 	var image_error: Error = window.get_texture().get_image().save_png(image_path)
 	if image_error != OK:
 		failures.append("交互验收截图保存失败。")

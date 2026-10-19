@@ -24,18 +24,29 @@ func _begin() -> void:
 		var forward: Vector3 = planet.site["forward"]
 		player.place_at(planet.global_position + up * (planet.surface_radius(up) + 10.0), forward, up)
 		player.mode = StarSeaPlayer.Mode.FLY
+		player.set_head_pitch(0.37)
+		director.sun_direction = Vector3(0.2, 0.7, -0.4).normalized()
 		await physics_frame
 		await physics_frame
 		var expected: Vector3 = player.global_position - planet.global_position
+		var expected_basis: Quaternion = player.global_basis.get_rotation_quaternion()
+		var expected_sun: Vector3 = director.sun_direction
 		var saved: Error = JourneyStore.save(scene, path)
 		# 同一路径再次保存，验证覆盖写入与临时文件替换。
 		var replaced: Error = JourneyStore.save(scene, path)
 		player.global_position += up * 5000.0
+		player.global_basis = Basis.IDENTITY
+		player.set_head_pitch(0.0)
+		player.mode = StarSeaPlayer.Mode.WALK
+		director.sun_direction = Vector3.UP
 		var restored: Error = JourneyStore.restore(scene, path)
 		var position_error: float = (player.global_position - planet.global_position).distance_to(expected)
-		if saved != OK or replaced != OK or restored != OK or position_error > 0.1:
+		var orientation_error: float = player.global_basis.get_rotation_quaternion().angle_to(expected_basis)
+		var view_restored: bool = orientation_error < 0.001 and absf(player.head_pitch() - 0.37) < 0.0001
+		var state_restored: bool = player.mode == StarSeaPlayer.Mode.FLY and director.sun_direction.angle_to(expected_sun) < 0.001
+		if saved != OK or replaced != OK or restored != OK or position_error > 0.1 or not view_restored or not state_restored:
 			_failures.append(planet.planet_name + "的存档往返失败。")
-		records.append({"planet": planet.planet_name, "save": saved, "replace": replaced, "restore": restored, "position_error_m": position_error})
+		records.append({"planet": planet.planet_name, "save": saved, "replace": replaced, "restore": restored, "position_error_m": position_error, "orientation_error_degrees": rad_to_deg(orientation_error), "view_restored": view_restored, "mode_and_sun_restored": state_restored})
 	var invalid: ConfigFile = ConfigFile.new()
 	invalid.set_value("journey", "version", 999)
 	invalid.save(path)
@@ -92,11 +103,14 @@ func _begin() -> void:
 		var audio: AudioStreamPlayer = node as AudioStreamPlayer
 		if audio.playing:
 			loop_count += 1
-	if DisplayServer.get_name() != "headless" and (audio_players.size() != 4 or loop_count != 3):
+	if DisplayServer.get_name() != "headless" and (audio_players.size() != 5 or loop_count != 4):
 		_failures.append("环境音未能正常开始循环。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
 	VerificationMetrics.write_json(OUTPUT.path_join("completion_checks.json"), report)
 	print(JSON.stringify(report))
+	scene.queue_free()
+	for frame: int in 6:
+		await process_frame
 	quit(0 if _failures.is_empty() else 1)
 
 

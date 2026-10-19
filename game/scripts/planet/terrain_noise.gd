@@ -104,6 +104,11 @@ func moisture(direction: Vector3) -> float:
 	return clampf(0.52 + _moisture.get_noise_3dv(direction * radius) * 1.1, 0.0, 1.0)
 
 
+func biome(direction: Vector3) -> String:
+	var elevation: float = height(direction)
+	return DawnBiomes.classify(elevation, temperature(direction, elevation), moisture(direction), woodland(direction))
+
+
 func temperature(direction: Vector3, elevation: float) -> float:
 	return clampf(1.05 - absf(direction.y) * 0.72 - maxf(elevation, 0.0) / 2800.0, 0.0, 1.0)
 

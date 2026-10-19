@@ -5,7 +5,7 @@ const NEAR_DIVISIONS: int = 1024
 const FOREST_DIVISIONS: int = 128
 const NEAR_DISTANCE: float = 160.0
 const FOREST_DISTANCE: float = 1400.0
-const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers", "fern", "reeds"]
+const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers", "fern", "reeds", "mushrooms"]
 
 var _planet: Planet
 var _tiles: Dictionary[Vector4i, Node3D] = {}
@@ -73,7 +73,7 @@ func _warm_draw_variants() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	stage.add_child(sun)
 	for index: int in KINDS.size():
-		var transform: Transform3D = Transform3D(Basis.IDENTITY, Vector3(index * 3.2 - 8.0, 0, 0))
+		var transform: Transform3D = Transform3D(Basis.IDENTITY, Vector3((index - (KINDS.size() - 1) * 0.5) * 2.8, 0, 0))
 		for fading: bool in [false, true]:
 			_add_instances(stage, KINDS[index], [transform], [Color.WHITE])
 			var instance: MultiMeshInstance3D = stage.get_child(stage.get_child_count() - 1) as MultiMeshInstance3D
@@ -194,6 +194,7 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		var moisture: float = noise.moisture(direction)
 		var temperature: float = noise.temperature(direction, elevation)
 		var grove: float = noise.woodland(direction)
+		var forest_cover: float = DawnBiomes.forest_cover(elevation, temperature, moisture, grove)
 		var kind: String = "grass"
 		var scale_value: float = rng.randf_range(0.65, 1.30)
 		var tint: Color = Color.WHITE
@@ -201,11 +202,16 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		if forest:
 			if elevation < 16.0 or elevation > 1600.0 or slope > 0.65 or temperature < 0.16:
 				continue
-			if rng.randf() > (0.08 + grove * 0.72) * smoothstep(0.20, 0.65, moisture):
+			if rng.randf() > 0.035 + forest_cover * 0.82:
 				continue
-			kind = "pine" if temperature < 0.48 or elevation > 750.0 else "broadleaf"
-			tint = Color(0.77, 0.87, 0.72).lerp(Color(1.08, 1.02, 0.78), rng.randf())
+			if temperature < 0.24 or elevation > 1400.0 or moisture < 0.34:
+				continue
+			kind = "pine" if temperature < 0.50 or elevation > 750.0 else "broadleaf"
+			tint = Color(0.77, 0.92, 0.84).lerp(Color(1.08, 1.02, 0.78), rng.randf())
 		elif index > 618:
+			# 晨的草地保留连续留白，小石块分布较疏，巨石仍作为近景轮廓。
+			if noise.profile == 0 and index <= 630:
+				continue
 			if slope > 1.25:
 				continue
 			kind = "stone"
@@ -213,26 +219,38 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 			if index > 644 and noise.profile == 0:
 				scale_value = rng.randf_range(1.4, 3.0)
 			tint = Color(0.72, 0.76, 0.75).lerp(Color(1.1, 1.03, 0.91), rng.randf())
+			if noise.profile == 0:
+				tint.a = smoothstep(0.48, 0.80, moisture) * (1.0 - smoothstep(1100.0, 1500.0, elevation))
 		elif noise.profile != 0 or elevation < 9.0 or elevation > 1550.0 or slope > 0.9:
 			continue
-		elif noise.profile == 0 and index > 590 and elevation < 45.0 and moisture > 0.62 and slope < 0.3:
+		elif noise.profile == 0 and index > 580 and elevation < 100.0 and moisture > 0.72 and slope < 0.3:
 			kind = "reeds"
 			scale_value = rng.randf_range(0.65, 1.05)
-		elif noise.profile == 0 and index > 600 and grove > 0.65 and moisture > 0.58:
+		elif noise.profile == 0 and index > 600 and forest_cover > 0.35 and moisture > 0.58:
 			kind = "fern"
 			scale_value = rng.randf_range(0.65, 1.4)
+		elif index > 575 and index < 585 and forest_cover > 0.38 and moisture > 0.55:
+			kind = "mushrooms"
+			scale_value = rng.randf_range(0.75, 1.2)
 		elif index > 600 and grove > 0.38 and moisture > 0.35:
 			kind = "shrub"
 			scale_value = rng.randf_range(0.6, 1.6)
+			if temperature < 0.28 or elevation > 1250.0:
+				scale_value *= 0.36
+				tint = Color(0.93, 0.81, 0.91)
 		elif index > 560 and moisture > 0.36 and temperature > 0.40:
 			kind = "flowers"
 			tint = Color(1.05, 0.94, 0.85) if index % 2 == 0 else Color(0.82, 0.85, 1.15)
 		else:
-			if rng.randf() > 0.45 + moisture * 0.5:
+			if rng.randf() > (0.35 + moisture * 0.45) * lerpf(1.0, 0.28, smoothstep(1150.0, 1500.0, elevation)):
 				continue
 			tint = Color(0.68, 0.85, 0.64).lerp(Color(1.03, 0.97, 0.72), 1.0 - moisture)
 			if grove > 0.7:
 				tint *= 0.84
+			if moisture < 0.38:
+				tint = Color(1.22, 1.03, 0.68)
+			if temperature < 0.26:
+				scale_value *= 0.5
 		var tangent: Vector3 = SurfaceSites.tangent_forward(direction).rotated(direction, rng.randf() * TAU)
 		var basis: Basis = Basis.looking_at(tangent, direction).scaled(Vector3.ONE * scale_value)
 		if noise.profile == 0 and (kind == "broadleaf" or kind == "pine" or kind == "stone"):
@@ -289,7 +307,7 @@ func _add_batch(parent: Node3D, kind: String, transforms: Array, colors: Array) 
 	for index: int in transforms.size():
 		multi.set_instance_transform(index, transforms[index])
 		multi.set_instance_color(index, colors[index])
-		multi.set_instance_custom_data(index, Color(float(index) / transforms.size(), 0.0, 0.0))
+		multi.set_instance_custom_data(index, Color(float(index) / transforms.size(), (colors[index] as Color).a if kind == "stone" else 0.0, 0.0))
 	var instance: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	instance.name = kind.capitalize()
 	instance.multimesh = multi
@@ -298,7 +316,8 @@ func _add_batch(parent: Node3D, kind: String, transforms: Array, colors: Array) 
 	instance.visibility_range_end = 1800.0 if tree else 230.0
 	instance.visibility_range_end_margin = 90.0 if tree else 30.0
 	instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if kind != "grass" and kind != "flowers" else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# 小型薄叶不投影，避免亚像素叶片在草地上形成密集闪点；树木、灌木和岩石保留投影。
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if kind in ["broadleaf", "pine", "stone", "shrub"] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	instance.extra_cull_margin = 0.8
 	parent.add_child(instance)
 

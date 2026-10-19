@@ -85,6 +85,22 @@ func _build(kind: String, detail: int) -> void:
 			_fern()
 		"reeds":
 			_reeds()
+		"mushrooms":
+			_mushrooms()
+
+
+func _mushrooms() -> void:
+	# 菌盖与菌柄分别建模，使用柔和的赭红色和奶白色，不采用照片材质。
+	for index: int in [3, 2, 1][_detail]:
+		var base: Vector3 = Vector3(sin(index * 3.4) * 0.26, 0, cos(index * 3.4) * 0.22)
+		var height: float = 0.20 + index * 0.07
+		_tube(base, base + Vector3.UP * height, 0.035, 0.025, Color(0.85, 0.77, 0.57))
+		_tag = 0.0
+		_crown(base + Vector3.UP * height, Vector3(0.15, 0.065, 0.15), Color(0.68, 0.35, 0.22), 0.0, index, [10, 7, 5][_detail], [5, 4, 3][_detail])
+		if _detail == 0:
+			for spot: int in 3:
+				var angle: float = spot * TAU / 3.0 + index
+				_crown(base + Vector3(cos(angle) * 0.075, height + 0.054, sin(angle) * 0.075), Vector3(0.018, 0.006, 0.018), Color(0.91, 0.82, 0.63), 0.0, spot, 5, 3)
 
 
 func _leaf(start: Vector3, tip: Vector3, width: float, color: Color) -> void:
@@ -175,8 +191,13 @@ func _pine() -> void:
 			_tube(start, tip, 0.065, 0.015, wood)
 			_tag = 3.0
 			_crown(start.lerp(tip, 0.70), Vector3(0.7, 0.65, radius_value * 0.65), color, 0.7, level * 7 + branch, 8, 4, Basis.looking_at(side, Vector3.UP))
+			# 在枝条末端叠加较小针叶簇，打破整层圆环轮廓。
+			_crown(tip + Vector3.UP * 0.15, Vector3(0.42, 0.32, 0.6), color * 1.10, 0.8, branch + level, 6, 3, Basis.looking_at(side, Vector3.UP))
 	_tag = 3.0
-	_cone(10.6, 2.3, 0.8, Color(0.38, 0.56, 0.34))
+	if _detail == 0:
+		_crown(Vector3(0.12, 11.5, 0.04), Vector3(0.62, 1.25, 0.65), Color(0.38, 0.56, 0.34), 0.8, 58, 8, 5)
+	else:
+		_cone(10.6, 2.3, 0.8, Color(0.38, 0.56, 0.34))
 
 
 func _triangle(a: Vector3, b: Vector3, c: Vector3, na: Vector3, nb: Vector3, nc: Vector3, color: Color, wind: float) -> void:
@@ -333,7 +354,7 @@ func _rock() -> void:
 
 func _rock_point(layer: int, angle: float) -> Vector3:
 	var heights: Array[float] = [-0.25, -0.02, 0.32, 0.67, 0.94]
-	var radii: Array[float] = [0.65, 1.0, 0.94, 0.75, 0.24]
+	var radii: Array[float] = [0.65, 1.0, 0.94, 0.88, 0.52]
 	var radius_value: float = radii[layer] * (1.0 + sin(angle * 3.0 + 0.7) * 0.13 + cos(angle * 5.0) * 0.06)
 	var point: Vector3 = Vector3(cos(angle) * radius_value, heights[layer] + sin(angle * 3.0) * 0.045, sin(angle) * radius_value * 0.83)
 	point.x = minf(point.x, 0.79 - point.y * 0.18 - point.z * 0.12)

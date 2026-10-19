@@ -7,18 +7,19 @@ global uniform float rim_strength;
 uniform vec3 planet_center;
 
 uniform vec3 sand : source_color = vec3(0.86, 0.80, 0.64);
-uniform vec3 grass : source_color = vec3(0.37, 0.49, 0.23);
-uniform vec3 grass_far : source_color = vec3(0.48, 0.54, 0.34);
+uniform vec3 grass : source_color = vec3(0.48, 0.60, 0.28);
+uniform vec3 grass_far : source_color = vec3(0.54, 0.61, 0.38);
 uniform vec3 rock : source_color = vec3(0.43, 0.44, 0.46);
 uniform vec3 snow : source_color = vec3(0.95, 0.96, 1.0);
-uniform vec3 dry_grass : source_color = vec3(0.60, 0.56, 0.31);
-uniform vec3 wet_grass : source_color = vec3(0.25, 0.37, 0.20);
+uniform vec3 dry_grass : source_color = vec3(0.71, 0.61, 0.35);
+uniform vec3 wet_grass : source_color = vec3(0.29, 0.46, 0.34);
 uniform vec3 cold_grass : source_color = vec3(0.48, 0.48, 0.34);
 uniform vec3 forest_ground : source_color = vec3(0.24, 0.34, 0.16);
 uniform float planet_radius = 40000.0;
 uniform float snow_height = 1580.0;
 uniform float beach_height = 12.0;
 uniform bool terrestrial = true;
+uniform sampler2D ground_paint : filter_linear_mipmap_anisotropic, repeat_enable;
 
 varying float v_height;
 varying float v_slope;
@@ -43,11 +44,14 @@ void vertex() {
 void fragment() {
 	vec3 c = mix(grass, grass_far, smoothstep(300.0, 1200.0, v_height));
 	if (terrestrial) {
-		c = mix(dry_grass, c, smoothstep(0.18, 0.55, v_climate.x));
-		c = mix(c, wet_grass, smoothstep(0.55, 0.86, v_climate.x) * 0.6);
-		c = mix(c, cold_grass, 1.0 - smoothstep(0.15, 0.40, v_climate.y));
-		float woodland = v_grove * smoothstep(0.20, 0.65, v_climate.x) * (1.0 - smoothstep(1200.0, 1600.0, v_height));
-		c = mix(c, forest_ground, woodland * 0.38 * smoothstep(10.0, 25.0, v_height));
+		c = mix(dry_grass, c, smoothstep(0.28, 0.48, v_climate.x));
+		float wetland = smoothstep(0.66, 0.80, v_climate.x) * (1.0 - smoothstep(70.0, 120.0, v_height));
+		c = mix(c, wet_grass, wetland * 0.85);
+		float alpine = max(1.0 - smoothstep(0.20, 0.30, v_climate.y), smoothstep(1150.0, 1400.0, v_height));
+		c = mix(c, cold_grass, alpine * 0.8);
+		float woodland = v_grove * smoothstep(0.34, 0.62, v_climate.x) * smoothstep(0.24, 0.36, v_climate.y) * (1.0 - smoothstep(1150.0, 1400.0, v_height)) * (1.0 - wetland);
+		vec3 forest_color = mix(forest_ground * vec3(0.91, 1.0, 1.13), forest_ground, smoothstep(0.45, 0.55, v_climate.y));
+		c = mix(c, forest_color, woodland * 0.57 * smoothstep(10.0, 25.0, v_height));
 	}
 	float meadow = patch(v_position / 110.0) * 0.5 + 0.5;
 	c = mix(c, c * vec3(1.08, 1.02, 0.88), meadow * 0.45);
@@ -62,6 +66,14 @@ void fragment() {
 	float strata = sin(v_height * 0.11 + patch(v_position / 70.0));
 	c *= 1.0 + strata * exposed * 0.045;
 	c *= 1.0 + variation;
+	if (terrestrial) {
+		// 自绘短笔触采用三轴投影，近景补充细节，远景淡出以避免闪烁和规则网格。
+		vec3 weights = pow(abs(normalize(v_position)), vec3(4.0));
+		weights /= weights.x + weights.y + weights.z;
+		float brush = dot(vec3(texture(ground_paint, v_position.yz / 9.0).r, texture(ground_paint, v_position.xz / 9.0).r, texture(ground_paint, v_position.xy / 9.0).r), weights);
+		float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
+		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
+	}
 	ALBEDO = c;
 	ROUGHNESS = 1.0;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);

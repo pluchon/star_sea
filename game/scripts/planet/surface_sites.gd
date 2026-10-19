@@ -32,6 +32,22 @@ static func find_landform(noise: TerrainNoise, form: String) -> Vector3:
 	return Vector3.ZERO
 
 
+static func find_biome(noise: TerrainNoise, biome: String) -> Vector3:
+	var random: RandomNumberGenerator = RandomNumberGenerator.new()
+	random.seed = 20261020 + DawnBiomes.NAMES.find(biome) * 701
+	for candidate: int in 12000:
+		var y: float = random.randf_range(-0.94, 0.94)
+		var angle: float = random.randf() * TAU
+		var up: Vector3 = Vector3(sqrt(1.0 - y * y) * cos(angle), y, sqrt(1.0 - y * y) * sin(angle))
+		var elevation: float = noise.height(up)
+		if elevation < 22.0 or elevation > 1500.0 or noise.biome(up) != biome or noise.slope(up, elevation) > 0.18:
+			continue
+		if biome in ["阔叶林", "针叶林"] and noise.woodland(up) < 0.72:
+			continue
+		return up
+	return Vector3.ZERO
+
+
 static func find(noise: TerrainNoise) -> Dictionary:
 	var random: RandomNumberGenerator = RandomNumberGenerator.new()
 	random.seed = 20261019

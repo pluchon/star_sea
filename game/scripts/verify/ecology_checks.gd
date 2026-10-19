@@ -24,6 +24,9 @@ func _begin() -> void:
 				_failures.append(kind + "的三角形绕序与外法线不符。")
 			plant_triangles += 1
 	var stats: Dictionary = TerrainStatistics.collect(noise)
+	for biome: String in DawnBiomes.NAMES:
+		if int((stats["biomes"] as Dictionary).get(biome, 0)) == 0:
+			_failures.append("球面抽样缺少群系：" + biome)
 	if not stats["passed"]:
 		_failures.append("地形海陆和高度范围不符合约束。")
 	var geometry: Dictionary = TerrainGeometryChecks.run()
@@ -69,6 +72,8 @@ func _begin() -> void:
 					if elevation < 2.9 or absf(position.length() - noise.radius - elevation + 0.08) > 0.03:
 						_failures.append("植物贴地异常：高度 %.5f，贴地误差 %.5f" % [elevation, absf(position.length() - noise.radius - elevation + 0.08)])
 					if kind == "broadleaf" or kind == "pine":
+						if noise.temperature(direction, elevation) < 0.239 or noise.moisture(direction) < 0.339 or elevation > 1400.1:
+							_failures.append("树木越过群系气候限制。")
 						if direction.distance_to(ruin_direction) * noise.radius < 9.99:
 							_failures.append("树木侵入遗迹空地。")
 						if noise.slope(direction, elevation) > 0.66:

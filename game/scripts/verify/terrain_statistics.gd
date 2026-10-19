@@ -9,6 +9,7 @@ static func collect(noise: TerrainNoise) -> Dictionary:
 	var maximum: float = -INF
 	var ocean_samples: int = 0
 	var landforms: Dictionary = {}
+	var biomes: Dictionary = {}
 	for sample: int in 20000:
 		var y: float = random.randf_range(-1.0, 1.0)
 		var angle: float = random.randf_range(0.0, TAU)
@@ -17,6 +18,8 @@ static func collect(noise: TerrainNoise) -> Dictionary:
 		var height: float = noise.height(direction)
 		var form: String = noise.landform(direction)
 		landforms[form] = int(landforms.get(form, 0)) + 1
+		var biome: String = noise.biome(direction)
+		biomes[biome] = int(biomes.get(biome, 0)) + 1
 		minimum = minf(minimum, height)
 		maximum = maxf(maximum, height)
 		if height < 0.0:
@@ -27,6 +30,7 @@ static func collect(noise: TerrainNoise) -> Dictionary:
 		"radius_m": noise.radius,
 		"samples": 20000,
 		"landforms": landforms,
+		"biomes": biomes,
 		"ocean_ratio": ocean_ratio,
 		"minimum_height_m": minimum,
 		"maximum_height_m": maximum,

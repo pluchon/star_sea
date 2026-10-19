@@ -14,6 +14,7 @@ varying float v_root;
 varying float v_surface;
 varying float v_distance;
 varying float v_up;
+varying float v_moss;
 
 void vertex() {
 	float phase = INSTANCE_CUSTOM.r * 6.28318;
@@ -24,6 +25,7 @@ void vertex() {
 	v_root = is_grass ? smoothstep(0.0, 0.35, VERTEX.y) : 1.0;
 	v_surface = UV2.y;
 	v_up = NORMAL.y;
+	v_moss = INSTANCE_CUSTOM.g;
 	v_distance = distance((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz, CAMERA_POSITION_WORLD);
 }
 
@@ -37,8 +39,8 @@ void fragment() {
 		float pigment = mix(0.88, 1.08, smoothstep(0.40, 0.78, sample_color.r));
 		ALBEDO *= mix(1.0, pigment, detail);
 		if (stone) {
-			float moss = smoothstep(0.02, 0.10, sample_color.g - sample_color.r) * smoothstep(0.05, 0.6, v_up);
-			ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.80, 0.94, 0.66), moss * detail * 0.55);
+			float moss = smoothstep(-0.04, 0.08, sample_color.g - sample_color.r) * smoothstep(0.05, 0.6, v_up) * v_moss;
+			ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.68, 0.88, 0.48), moss * detail * 0.65);
 		}
 	} else if (v_surface > 2.5) {
 		float pigment = texture(leaf_color, UV * vec2(2.0, 1.0)).r;

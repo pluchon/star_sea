@@ -9,6 +9,8 @@ func _initialize() -> void:
 
 
 func _begin() -> void:
+	root.unfocusable = true
+	root.mouse_passthrough = true
 	var scene: Node3D = (load("res://scenes/main.tscn") as PackedScene).instantiate() as Node3D
 	root.add_child(scene)
 	current_scene = scene
@@ -68,7 +70,7 @@ func _begin() -> void:
 	var settings: Button = menu.find_child("Settings", true, false) as Button
 	settings.pressed.emit()
 	await process_frame
-	if menu.find_children("*", "HSlider", true, false).size() != 4:
+	if menu.find_children("*", "HSlider", true, false).size() != 5:
 		_failures.append("设置页面缺少滑动控件。")
 	if DisplayServer.get_name() != "headless":
 		await _capture("settings.png")
@@ -77,18 +79,30 @@ func _begin() -> void:
 		root.size = Vector2i(1920, 1080)
 	var settings_node: StarSeaSettings = root.get_node("GameSettings") as StarSeaSettings
 	var original_volume: float = StarSeaSettings.volume
+	var original_music: float = StarSeaSettings.music_volume
 	var original_sensitivity: float = StarSeaSettings.sensitivity
 	StarSeaSettings.volume = 0.37
+	StarSeaSettings.music_volume = 0.21
 	StarSeaSettings.sensitivity = 0.0031
 	var settings_path: String = "user://verify_settings.cfg"
 	var settings_saved: Error = settings_node.save(settings_path)
 	StarSeaSettings.volume = 0.1
+	StarSeaSettings.music_volume = 0.0
 	StarSeaSettings.sensitivity = 0.001
 	var settings_loaded: Error = settings_node.load_settings(settings_path)
 	var settings_roundtrip: bool = settings_saved == OK and settings_loaded == OK and is_equal_approx(StarSeaSettings.volume, 0.37) and is_equal_approx(StarSeaSettings.sensitivity, 0.0031)
+	settings_roundtrip = settings_roundtrip and is_equal_approx(StarSeaSettings.music_volume, 0.21)
 	if not settings_roundtrip:
 		_failures.append("设置持久化往返失败。")
+	var legacy_settings: ConfigFile = ConfigFile.new()
+	legacy_settings.load(settings_path)
+	legacy_settings.erase_section_key("audio", "music")
+	legacy_settings.save(settings_path)
+	var legacy_music: bool = settings_node.load_settings(settings_path) == OK and is_equal_approx(StarSeaSettings.music_volume, 0.45)
+	if not legacy_music:
+		_failures.append("旧设置缺少音乐字段时没有使用默认音量。")
 	StarSeaSettings.volume = original_volume
+	StarSeaSettings.music_volume = original_music
 	StarSeaSettings.sensitivity = original_sensitivity
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(settings_path))
 	menu.resume()
@@ -101,9 +115,9 @@ func _begin() -> void:
 	var loop_count: int = 0
 	for node: Node in audio_players:
 		var audio: AudioStreamPlayer = node as AudioStreamPlayer
-		if audio.playing:
+		if audio.playing and audio in sound._loops.values():
 			loop_count += 1
-	if DisplayServer.get_name() != "headless" and (audio_players.size() != 5 or loop_count != 4):
+	if DisplayServer.get_name() != "headless" and (audio_players.size() != 6 or loop_count != 4):
 		_failures.append("环境音未能正常开始循环。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
 	VerificationMetrics.write_json(OUTPUT.path_join("completion_checks.json"), report)

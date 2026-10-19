@@ -1,7 +1,7 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley"]
+const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley", "s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra"]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -16,6 +16,13 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.set_third_person(false)
 	director.time_paused = true
 	match name:
+		"s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra":
+			var biome: String = {"s18_meadow": "草甸", "s19_broadleaf": "阔叶林", "s20_wetland": "湿地", "s21_drygrass": "干草地", "s22_tundra": "高山苔原"}[name]
+			up = SurfaceSites.find_biome(planet.noise, biome)
+			assert(up != Vector3.ZERO, "没有找到群系验收机位：" + biome)
+			forward = SurfaceSites.tangent_forward(up)
+			player.place_at(planet.global_position + up * (planet.surface_radius(up) + 1.0), forward, up)
+			director.set_sun_altitude(up, (-forward + forward.cross(up)).normalized(), 38.0)
 		"s14_third_person", "s15_relief_map":
 			player.place_at(planet.global_position + up * (height + 0.1), forward, up)
 			player.mode = StarSeaPlayer.Mode.WALK

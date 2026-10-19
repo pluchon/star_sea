@@ -50,18 +50,18 @@ static func core(scene: Node3D, output: String) -> Dictionary:
 		failures.append("损坏存档没有全部安全拒绝。")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 	var settings_path: String = "user://verify_acceptance_settings.cfg"
-	var original_settings: Array = [StarSeaSettings.sensitivity, StarSeaSettings.volume, StarSeaSettings.render_scale, StarSeaSettings.field_of_view, StarSeaSettings.fullscreen, StarSeaSettings.vsync]
+	var original_settings: Array = [StarSeaSettings.sensitivity, StarSeaSettings.volume, StarSeaSettings.render_scale, StarSeaSettings.field_of_view, StarSeaSettings.fullscreen, StarSeaSettings.vsync, StarSeaSettings.music_volume]
 	settings.save(settings_path)
 	var configuration: ConfigFile = ConfigFile.new()
 	configuration.load(settings_path)
-	var setting_cases: Array = [["controls", "sensitivity", []], ["audio", "volume", NAN], ["video", "scale", INF], ["video", "fov", "bad"], ["video", "fullscreen", 1], ["video", "vsync", {}]]
+	var setting_cases: Array = [["controls", "sensitivity", []], ["audio", "volume", NAN], ["audio", "music", INF], ["video", "scale", INF], ["video", "fov", "bad"], ["video", "fullscreen", 1], ["video", "vsync", {}]]
 	var settings_rejected: int = 0
 	for record: Array in setting_cases:
 		var original: Variant = configuration.get_value(record[0], record[1])
 		configuration.set_value(record[0], record[1], record[2])
 		configuration.save(settings_path)
 		var error: Error = settings.load_settings(settings_path)
-		var after: Array = [StarSeaSettings.sensitivity, StarSeaSettings.volume, StarSeaSettings.render_scale, StarSeaSettings.field_of_view, StarSeaSettings.fullscreen, StarSeaSettings.vsync]
+		var after: Array = [StarSeaSettings.sensitivity, StarSeaSettings.volume, StarSeaSettings.render_scale, StarSeaSettings.field_of_view, StarSeaSettings.fullscreen, StarSeaSettings.vsync, StarSeaSettings.music_volume]
 		if error == ERR_INVALID_DATA and after == original_settings:
 			settings_rejected += 1
 		configuration.set_value(record[0], record[1], original)
@@ -99,7 +99,7 @@ static func core(scene: Node3D, output: String) -> Dictionary:
 		await scene.get_tree().process_frame
 	await _capture(scene, output.path_join("menu.png"))
 	(menu.find_child("Settings", true, false) as Button).pressed.emit()
-	var settings_controls: bool = menu.find_children("*", "HSlider", true, false).size() == 4
+	var settings_controls: bool = menu.find_children("*", "HSlider", true, false).size() == 5
 	for size: Vector2i in [Vector2i(1920, 1080), Vector2i(1280, 720)]:
 		scene.get_window().size = size
 		for frame: int in 30:

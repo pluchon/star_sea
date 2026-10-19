@@ -43,8 +43,13 @@ def inspect(path: Path, loop: bool) -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--recordings", type=Path)
+    parser.add_argument("--music-recording", type=Path)
     args = parser.parse_args()
-    if args.recordings:
+    if args.music_recording:
+        records = [inspect(args.music_recording, False)]
+        count_ok = records[0]["duration_s"] >= 4.0
+        filename = "music-mix-checks.json"
+    elif args.recordings:
         paths = sorted(args.recordings.glob("s*.wav"))
         records = [inspect(path, False) for path in paths]
         count_ok = len(records) == 5
@@ -52,8 +57,9 @@ if __name__ == "__main__":
     else:
         paths = [ROOT / "game" / "audio" / f"{name}.wav" for name in ["wind", "shore", "rustle", "space"]]
         paths.extend(sorted((ROOT / "game" / "audio").glob("step_*.wav")))
+        paths.append(ROOT / "game" / "audio" / "dawn_theme.wav")
         records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space"]) for path in paths]
-        count_ok = len(records) == 16 and len({record["sha256"] for record in records}) == 16
+        count_ok = len(records) == 17 and len({record["sha256"] for record in records}) == 17
         filename = "audio-asset-checks.json"
     report = {"passed": count_ok and all(record["passed"] for record in records), "records": records}
     output = ROOT / "test-output" / "acceptance" / filename

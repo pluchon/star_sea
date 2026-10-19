@@ -158,8 +158,55 @@ static func run(scene: Node3D, output: String) -> Dictionary:
 		failures.append("720p 地图布局越界或过小。")
 	scene.get_window().size = Vector2i(1920, 1080)
 	atlas.set_open(false)
+	await tree.create_timer(0.2).timeout
+	var mini_rect: Rect2 = atlas._mini.get_global_rect()
+	var minimap_top_right: bool = mini_rect.position.x > 1500.0 and mini_rect.position.y < 40.0 and mini_rect.end.x <= 1920.0
+	if not minimap_top_right:
+		failures.append("小地图没有保持在右上角。")
 	player.set_third_person(false)
-	return {"passed": failures.is_empty(), "failures": failures, "map_capture_size": str(captured_size), "atlas_size": str(atlas.size), "map_rect": str(atlas.global_view.get_global_rect()), "map_input_transition": map_transition, "global_projection_error": projection_error, "map_height_error_m": height_error, "map_height_samples": 800, "camera_blocked_length_m": blocked_length, "camera_restored_length_m": restored_length, "camera_upward_view_clearance_m": camera_clearance, "floating_origin_marker_error_px": origin_error, "perspective_save_restored": restore_error == OK, "map_720p_layout": small_layout}
+	var music_report: Dictionary = await _music_check(scene, output)
+	if not music_report["passed"]:
+		failures.append("晨的音乐播放、独立静音或离开星球淡出检查失败。")
+	return {"passed": failures.is_empty(), "failures": failures, "map_capture_size": str(captured_size), "atlas_size": str(atlas.size), "map_rect": str(atlas.global_view.get_global_rect()), "map_input_transition": map_transition, "global_projection_error": projection_error, "map_height_error_m": height_error, "map_height_samples": 800, "camera_blocked_length_m": blocked_length, "camera_restored_length_m": restored_length, "camera_upward_view_clearance_m": camera_clearance, "floating_origin_marker_error_px": origin_error, "perspective_save_restored": restore_error == OK, "map_720p_layout": small_layout, "minimap_top_right": minimap_top_right, "music": music_report}
+
+
+static func _music_check(scene: Node3D, output: String) -> Dictionary:
+	var sound: Soundscape = scene.get_node("Soundscape") as Soundscape
+	var planet: Planet = scene.get_node("Universe/PlanetDawn") as Planet
+	var relative: Vector3 = (scene.get_node("Player") as StarSeaPlayer).global_position - planet.global_position
+	var original_volume: float = StarSeaSettings.music_volume
+	sound._music.stop()
+	sound._music_wait = 0.0
+	sound._update_music(1.0, planet, relative)
+	var started: bool = sound._music.playing
+	StarSeaSettings.music_volume = 0.0
+	sound._update_music(0.016, planet, relative)
+	var muted: bool = sound._music.volume_linear < 0.00001
+	var other: Planet = scene.get_node("Universe/PlanetEmber") as Planet
+	sound._update_music(30.0, other, Vector3.UP * (other.radius + 20.0))
+	var faded: bool = not sound._music.playing
+	StarSeaSettings.music_volume = original_volume
+	# 单独录制音乐的实际播放输出，检查其已进入混音且没有削波。
+	sound.set_process(false)
+	for audio: AudioStreamPlayer in sound._loops.values():
+		audio.volume_linear = 0.0
+	sound._step.stop()
+	var effect: AudioEffectRecord = AudioEffectRecord.new()
+	effect.format = AudioStreamWAV.FORMAT_16_BITS
+	var effect_index: int = AudioServer.get_bus_effect_count(0)
+	AudioServer.add_bus_effect(0, effect)
+	effect.set_recording_active(true)
+	sound._music.volume_linear = 0.108
+	sound._music.play()
+	await scene.get_tree().create_timer(5.0).timeout
+	effect.set_recording_active(false)
+	var recording: AudioStreamWAV = effect.get_recording()
+	var path: String = ProjectSettings.globalize_path(output.path_join("dawn_music_mix.wav"))
+	var error: Error = recording.save_to_wav(path)
+	AudioServer.remove_bus_effect(0, effect_index)
+	sound._music.stop()
+	sound.set_process(true)
+	return {"passed": started and muted and faded and error == OK and recording.data.size() > 22050, "started": started, "independent_mute": muted, "left_dawn_faded": faded, "recorded_seconds": recording.get_length()}
 
 
 static func _emit(key: Key) -> void:

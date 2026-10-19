@@ -2,6 +2,7 @@ shader_type spatial;
 render_mode cull_disabled;
 
 #include "res://shaders/toon_light.gdshaderinc"
+global uniform float rim_strength;
 
 uniform float wind_strength = 0.0;
 uniform bool is_grass = false;
@@ -47,4 +48,6 @@ void fragment() {
 		NORMAL = -NORMAL;
 	}
 	ROUGHNESS = 1.0;
+	float rim = pow(1.0 - abs(dot(NORMAL, VIEW)), 4.0);
+	EMISSION = ALBEDO * rim * rim_strength * 0.6;
 }

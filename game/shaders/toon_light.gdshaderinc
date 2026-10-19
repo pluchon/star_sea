@@ -4,6 +4,6 @@ void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = smoothstep(0.0, 0.05, ndl);
 	float tier = mix(0.72, 1.0, smoothstep(0.30, 0.36, ndl));
-	float shadow = smoothstep(0.25, 0.75, ATTENUATION);
+	float shadow = smoothstep(0.0, 1.0, ATTENUATION);
 	DIFFUSE_LIGHT += LIGHT_COLOR / PI * lit * tier * shadow;
 }

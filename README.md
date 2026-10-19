@@ -7,7 +7,9 @@
 | [docs/方案.md](docs/方案.md) | 总体方案：体验目标、画风、世界结构、技术选型、阶段 |
 | [docs/交接-第一阶段.md](docs/交接-第一阶段.md) | 第一阶段（技术小样）的逐步说明书 |
 | [docs/第一阶段开发记录.md](docs/第一阶段开发记录.md) | 实现情况、六个机位、性能结果与已知问题 |
-| [docs/地形与完整体验.md](docs/地形与完整体验.md) | 三颗星球、地形完善、菜单存档、声音与打包验证 |
+| [docs/地形与完整体验.md](docs/地形与完整体验.md) | 三颗星球原型、菜单存档、声音与打包验证 |
+| [docs/类地星球完善记录.md](docs/类地星球完善记录.md) | 晨的地形、气候植被、光照与本轮验证 |
+| [docs/试玩问题记录.md](docs/试玩问题记录.md) | 用户试玩反馈、已定位的错误与尚未完成的内容 |
 
 ## 环境要求
 
@@ -37,9 +39,11 @@ WASD 移动，鼠标环顾，Shift 加速，空格跳跃或上升，Ctrl 下降�
 .\tools\Run-Game.ps1 -GameArgs @('--walk=test-output/p1/walk.json')
 .\tools\Check-Godot.ps1 -GodotArgs @('--script','res://scripts/verify/completion_checks.gd','--','--check=completion') -LogPath 'test-output/p2/logs/completion.log'
 .\tools\Check-Godot.ps1 -GodotArgs @('--script','res://scripts/verify/surface_checks.gd','--','--check=surfaces') -LogPath 'test-output/p2/logs/surfaces.log'
+.\tools\Check-Godot.ps1 -GodotArgs @('--headless','--script','res://scripts/verify/ecology_checks.gd') -LogPath 'test-output/p4/logs/ecology.log'
+.\tools\Check-Godot.ps1 -GodotArgs @('--headless','--script','res://scripts/verify/ecology_runtime_checks.gd','--','--check=ecology_runtime') -LogPath 'test-output/p4/logs/ecology-runtime.log'
 .\tools\Build-Game.ps1
 ```
 
 截图与性能测试固定使用 1920 × 1080、关闭垂直同步；输出位于 `test-output/p1/`，不进入 Git。测试脚本会检查引擎退出码和原始错误输出，同一时间只允许运行一个 Godot 实例。
 
-已实现三颗星球、近景草石与一处遗迹、环境音、菜单、设置、存档和 Windows 导出。自动验证不能代替画面与声音的试玩验收。
+当前为可运行原型，尚未通过试玩验收。三颗球面地形、气候植被、环境音、菜单和存档已经接入。「晨」新增林木、灌木、花草与地表光照调整；地貌、美术和声音仍需实际试玩评价，已知问题见试玩记录。自动验证只能说明对应检查通过。

@@ -7,6 +7,9 @@ var _message: Label
 var _player: StarSeaPlayer
 var _started: bool = false
 var _shade: ColorRect
+var _hud: CanvasLayer
+var _hud_was_visible: bool = true
+var _open: bool = false
 
 
 func _ready() -> void:
@@ -21,6 +24,7 @@ func _ready() -> void:
 
 func initialize() -> void:
 	_player = get_parent().get_node("Player") as StarSeaPlayer
+	_hud = get_parent().get_node("HUD") as CanvasLayer
 	get_tree().auto_accept_quit = false
 	get_window().close_requested.connect(_quit)
 	var font: SystemFont = SystemFont.new()
@@ -82,6 +86,10 @@ func _input(event: InputEvent) -> void:
 
 
 func open() -> void:
+	if not _open:
+		_hud_was_visible = _hud.visible
+	_open = true
+	_hud.visible = false
 	visible = true
 	_player.controls_enabled = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -91,6 +99,8 @@ func open() -> void:
 
 func resume() -> void:
 	_started = true
+	_open = false
+	_hud.visible = _hud_was_visible
 	visible = false
 	get_tree().paused = false
 	_player.controls_enabled = true

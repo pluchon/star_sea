@@ -24,12 +24,14 @@ func _ready() -> void:
 
 func place_at(world_position: Vector3, forward: Vector3, up: Vector3) -> void:
 	global_position = world_position
+	_planet = Planet.nearest(get_tree(), world_position)
 	global_basis = Basis.looking_at(forward, up)
 	_head.rotation = Vector3.ZERO
 	velocity = Vector3.ZERO
 	_waiting_for_ground = true
 	up_direction = up
-	altitude = world_position.distance_to(_planet.global_position) - _planet.surface_radius(up)
+	var offset: Vector3 = world_position - _planet.global_position
+	altitude = offset.length() - _planet.surface_radius(offset.normalized())
 	reset_physics_interpolation()
 
 
@@ -42,15 +44,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion: InputEventMouseMotion = event as InputEventMouseMotion
-		var up: Vector3 = (_planet.global_position.direction_to(global_position)).normalized()
-		global_basis = Basis(up, -motion.relative.x * StarSeaSettings.sensitivity) * global_basis
-		_head.rotation.x = clampf(_head.rotation.x - motion.relative.y * StarSeaSettings.sensitivity, deg_to_rad(-89.0), deg_to_rad(89.0))
+		# 捕获鼠标使用屏幕位移，水平转动沿角色自身上轴，避免缩放改变灵敏度和太空侧倾。
+		var screen_delta: Vector2 = motion.screen_relative
+		global_basis = (Basis(global_basis.y.normalized(), -screen_delta.x * StarSeaSettings.sensitivity) * global_basis).orthonormalized()
+		set_head_pitch(_head.rotation.x - screen_delta.y * StarSeaSettings.sensitivity)
 	elif event.is_action_pressed("toggle_fly"):
 		if mode == Mode.WALK:
 			mode = Mode.FLY
 		elif altitude <= 2.0 and _planet.noise.height((global_position - _planet.global_position).normalized()) > 0.0:
-			mode = Mode.WALK
-			_waiting_for_ground = true
+			_start_walking()
 		velocity = Vector3.ZERO
 
 
@@ -60,7 +62,7 @@ func _physics_process(delta: float) -> void:
 	var distance: float = offset.length()
 	var up: Vector3 = offset / maxf(distance, 0.001)
 	altitude = distance - _planet.surface_radius(up)
-	if distance < _planet.radius * 3.0:
+	if mode == Mode.WALK:
 		up_direction = up
 		_align_to_up(up, delta)
 	if not controls_enabled and not simulated_forward:
@@ -95,7 +97,7 @@ func _physics_process(delta: float) -> void:
 			apply_floor_snap()
 	else:
 		var vertical_input: float = Input.get_axis("descend", "jump_up")
-		var direction: Vector3 = (forward * input.y + right * input.x + up * vertical_input).limit_length(1.0)
+		var direction: Vector3 = (forward * input.y + right * input.x + global_basis.y * vertical_input).limit_length(1.0)
 		var speed: float = clampf(altitude, 12.0, 30000.0)
 		if Input.is_action_pressed("run"):
 			speed *= 4.0
@@ -124,6 +126,21 @@ func head_pitch() -> float:
 
 func set_head_pitch(value: float) -> void:
 	_head.rotation.x = clampf(value, deg_to_rad(-89.0), deg_to_rad(89.0))
+
+
+func _start_walking() -> void:
+	var up: Vector3 = (global_position - _planet.global_position).normalized()
+	var view_direction: Vector3 = -camera.global_basis.z
+	var forward: Vector3 = view_direction - up * view_direction.dot(up)
+	if forward.length_squared() < 0.00001:
+		forward = -global_basis.z - up * (-global_basis.z).dot(up)
+	if forward.length_squared() < 0.00001:
+		forward = SurfaceSites.tangent_forward(up)
+	global_basis = Basis.looking_at(forward.normalized(), up)
+	set_head_pitch(asin(clampf(view_direction.dot(up), -1.0, 1.0)))
+	up_direction = up
+	mode = Mode.WALK
+	_waiting_for_ground = true
 
 
 func _align_to_up(up: Vector3, delta: float) -> void:

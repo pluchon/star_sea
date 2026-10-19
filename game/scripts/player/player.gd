@@ -106,7 +106,14 @@ func _physics_process(delta: float) -> void:
 
 func advance_flight(target_velocity: Vector3, delta: float) -> void:
 	velocity = velocity.lerp(target_velocity, clampf(delta * 3.0, 0.0, 1.0))
-	global_position += velocity * delta
+	var destination: Vector3 = global_position + velocity * delta
+	var contact: Dictionary = FlightSafety.sweep(get_tree(), global_position, destination)
+	if contact.is_empty():
+		global_position = destination
+	else:
+		global_position = contact["position"]
+		var contact_up: Vector3 = contact["up"]
+		velocity -= contact_up * minf(velocity.dot(contact_up), 0.0)
 	_planet = Planet.nearest(get_tree(), global_position)
 	var new_offset: Vector3 = global_position - _planet.global_position
 	var new_up: Vector3 = new_offset.normalized()
@@ -114,6 +121,7 @@ func advance_flight(target_velocity: Vector3, delta: float) -> void:
 	if new_offset.length() < surface + 1.2:
 		global_position = _planet.global_position + new_up * (surface + 1.2)
 		velocity -= new_up * minf(velocity.dot(new_up), 0.0)
+	altitude = global_position.distance_to(_planet.global_position) - surface
 
 
 func current_planet() -> Planet:

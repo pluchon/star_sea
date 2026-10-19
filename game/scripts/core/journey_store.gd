@@ -31,7 +31,12 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		return error
 	if config.get_value("journey", "version", 0) != 1:
 		return ERR_FILE_UNRECOGNIZED
-	var seed_value: int = int(config.get_value("journey", "planet_seed", 0))
+	var seed_data: Variant = config.get_value("journey", "planet_seed", null)
+	var mode_data: Variant = config.get_value("journey", "mode", null)
+	var pitch_data: Variant = config.get_value("journey", "pitch", null)
+	if not seed_data is int or not mode_data is int or (not pitch_data is float and not pitch_data is int):
+		return ERR_INVALID_DATA
+	var seed_value: int = seed_data
 	var planet: Planet
 	for node: Node in scene.get_tree().get_nodes_in_group("planets"):
 		if (node as Planet).planet_seed == seed_value:
@@ -48,11 +53,13 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	var forward: Vector3 = forward_value
 	var up: Vector3 = up_value
 	var sun: Vector3 = sun_value
-	var pitch: float = float(config.get_value("journey", "pitch", 0.0))
-	var mode: int = int(config.get_value("journey", "mode", -1))
+	var pitch: float = pitch_data
+	var mode: int = mode_data
 	if not location.is_finite() or not forward.is_finite() or not up.is_finite() or not sun.is_finite() or not is_finite(pitch):
 		return ERR_INVALID_DATA
 	if forward.length_squared() < 0.5 or up.length_squared() < 0.5 or sun.length_squared() < 0.5 or forward.cross(up).length_squared() < 0.1:
+		return ERR_INVALID_DATA
+	if forward.length_squared() > 1.5 or up.length_squared() > 1.5 or sun.length_squared() > 1.5 or absf(pitch) > deg_to_rad(89.0):
 		return ERR_INVALID_DATA
 	if location.length() < planet.radius - 450.0 or location.length() > 100000000.0 or mode < 0 or mode > 1:
 		return ERR_INVALID_DATA

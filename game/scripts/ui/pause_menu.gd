@@ -58,8 +58,6 @@ func initialize() -> void:
 	_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
 	_panel.offset_left = 100.0
 	_panel.offset_right = 550.0
-	_panel.offset_top = -380.0
-	_panel.offset_bottom = 380.0
 	var background: StyleBoxFlat = normal.duplicate() as StyleBoxFlat
 	background.bg_color = Color(0.025, 0.055, 0.075, 0.94)
 	background.content_margin_left = 36.0
@@ -68,10 +66,22 @@ func initialize() -> void:
 	background.content_margin_bottom = 30.0
 	_panel.add_theme_stylebox_override("panel", background)
 	screen.add_child(_panel)
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_panel.add_child(scroll)
 	_pages = VBoxContainer.new()
+	_pages.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pages.add_theme_constant_override("separation", 12)
-	_panel.add_child(_pages)
+	scroll.add_child(_pages)
 	_home()
+	get_viewport().size_changed.connect(_resize_panel)
+	_resize_panel()
+
+
+func _resize_panel() -> void:
+	var height: float = minf(820.0, get_viewport().get_visible_rect().size.y - 48.0)
+	_panel.offset_top = -height * 0.5
+	_panel.offset_bottom = height * 0.5
 
 
 func _input(event: InputEvent) -> void:
@@ -197,6 +207,7 @@ func _settings() -> void:
 	_label("设置", 30)
 	_slider("鼠标灵敏度", StarSeaSettings.sensitivity * 1000.0, 0.5, 6.0, 0.1, func(value: float) -> void: StarSeaSettings.sensitivity = value / 1000.0)
 	_slider("声音", StarSeaSettings.volume * 100.0, 0.0, 100.0, 1.0, func(value: float) -> void: StarSeaSettings.volume = value / 100.0)
+	_slider("音乐", StarSeaSettings.music_volume * 100.0, 0.0, 100.0, 1.0, func(value: float) -> void: StarSeaSettings.music_volume = value / 100.0)
 	_slider("渲染比例", StarSeaSettings.render_scale * 100.0, 65.0, 100.0, 5.0, func(value: float) -> void: StarSeaSettings.render_scale = value / 100.0)
 	_slider("视野", StarSeaSettings.field_of_view, 60.0, 100.0, 1.0, func(value: float) -> void: StarSeaSettings.field_of_view = value)
 	_check("全屏", StarSeaSettings.fullscreen, func(value: bool) -> void: StarSeaSettings.fullscreen = value)

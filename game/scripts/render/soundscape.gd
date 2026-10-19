@@ -11,6 +11,8 @@ var _previous_planet: Planet
 var _last_variant: int = -1
 var _environment: Dictionary = {}
 var _sample_elapsed: float = 1.0
+var _music: AudioStreamPlayer
+var _music_wait: float = 8.0
 
 
 func _ready() -> void:
@@ -40,6 +42,12 @@ func _ready() -> void:
 	_step.volume_db = -15.0
 	_step.max_polyphony = 2
 	add_child(_step)
+	_music = AudioStreamPlayer.new()
+	_music.name = "DawnMusic"
+	_music.stream = load("res://audio/dawn_theme.wav") as AudioStream
+	_music.volume_linear = 0.0
+	_music.finished.connect(func() -> void: _music_wait = 38.0)
+	add_child(_music)
 	_previous_planet = _player.current_planet()
 	_previous_relative = _player.global_position - _previous_planet.global_position
 
@@ -51,7 +59,7 @@ static func environment_at(planet: Planet, relative: Vector3) -> Dictionary:
 	var air: float = 1.0 - smoothstep(planet.atmosphere_height * 0.3, planet.atmosphere_height, altitude)
 	var near_ground: float = 1.0 - smoothstep(20.0, 200.0, altitude)
 	var slope: float = planet.noise.slope(up, height)
-	var forest: float = planet.noise.woodland(up) * smoothstep(0.3, 0.65, planet.noise.moisture(up)) if planet.profile == 0 else 0.0
+	var forest: float = DawnBiomes.forest_cover(height, planet.noise.temperature(up, height), planet.noise.moisture(up), planet.noise.woodland(up)) if planet.profile == 0 else 0.0
 	forest *= smoothstep(16.0, 60.0, height) * (1.0 - smoothstep(1350.0, 1600.0, height))
 	forest *= smoothstep(0.16, 0.3, planet.noise.temperature(up, height)) * (1.0 - smoothstep(0.4, 0.65, slope))
 	var coast: float = 0.0
@@ -78,6 +86,7 @@ static func environment_at(planet: Planet, relative: Vector3) -> Dictionary:
 func _process(delta: float) -> void:
 	var planet: Planet = _player.current_planet()
 	var relative: Vector3 = _player.global_position - planet.global_position
+	_update_music(delta, planet, relative)
 	_sample_elapsed += delta
 	if _sample_elapsed >= 0.2 or planet != _previous_planet:
 		_environment = environment_at(planet, relative)
@@ -100,6 +109,21 @@ func _process(delta: float) -> void:
 			_step.play()
 	else:
 		_step_distance = 0.0
+
+
+func _update_music(delta: float, planet: Planet, relative: Vector3) -> void:
+	var altitude: float = relative.length() - planet.surface_radius(relative.normalized())
+	var on_dawn: bool = planet.profile == 0 and altitude < 1600.0
+	# 低音量短乐句之间留出安静间隔，离开晨的近地范围时淡出。
+	if on_dawn and not _music.playing:
+		_music_wait -= delta
+		if _music_wait <= 0.0:
+			_music.play()
+	var target: float = StarSeaSettings.music_volume * 0.24 if on_dawn else 0.0
+	_music.volume_linear = 0.0 if StarSeaSettings.music_volume <= 0.0 else lerpf(_music.volume_linear, target, 1.0 - exp(-delta * 0.65))
+	if not on_dawn and _music.volume_linear < 0.0001 and _music.playing:
+		_music.stop()
+		_music_wait = 8.0
 
 
 func _exit_tree() -> void:

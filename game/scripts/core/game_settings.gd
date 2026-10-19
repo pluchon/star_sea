@@ -4,6 +4,7 @@ extends Node
 const PATH: String = "user://settings.cfg"
 static var sensitivity: float = 0.002
 static var volume: float = 0.65
+static var music_volume: float = 0.45
 static var render_scale: float = 1.0
 static var field_of_view: float = 75.0
 static var fullscreen: bool = true
@@ -29,11 +30,15 @@ func load_settings(path: String = PATH) -> Error:
 				return ERR_INVALID_DATA
 		var fullscreen_value: Variant = config.get_value("video", "fullscreen", true)
 		var vsync_value: Variant = config.get_value("video", "vsync", true)
+		var music_value: Variant = config.get_value("audio", "music", 0.45)
+		if (not music_value is float and not music_value is int) or not is_finite(float(music_value)):
+			return ERR_INVALID_DATA
 		if not fullscreen_value is bool or not vsync_value is bool:
 			return ERR_INVALID_DATA
 		# 全部校验通过后再更新，损坏的设置不能留下部分生效的状态。
 		sensitivity = clampf(values[0], 0.0005, 0.006)
 		volume = clampf(values[1], 0.0, 1.0)
+		music_volume = clampf(float(music_value), 0.0, 1.0)
 		render_scale = clampf(values[2], 0.65, 1.0)
 		field_of_view = clampf(values[3], 60.0, 100.0)
 		fullscreen = fullscreen_value
@@ -57,6 +62,7 @@ func save(path: String = PATH) -> Error:
 	var config: ConfigFile = ConfigFile.new()
 	config.set_value("controls", "sensitivity", sensitivity)
 	config.set_value("audio", "volume", volume)
+	config.set_value("audio", "music", music_volume)
 	config.set_value("video", "scale", render_scale)
 	config.set_value("video", "fov", field_of_view)
 	config.set_value("video", "fullscreen", fullscreen)

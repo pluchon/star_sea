@@ -54,6 +54,12 @@ func _run() -> void:
 	(scene.get_node("HUD") as CanvasLayer).visible = false
 	# 验收固定在 1080p、关闭垂直同步，正常运行仍使用桌面分辨率和垂直同步。
 	get_window().mode = Window.MODE_WINDOWED
+	# 自动验收只接受脚本注入事件，避免桌面键鼠操作改变机位、角色或断言条件。
+	get_window().unfocusable = true
+	get_window().mouse_passthrough = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	for action: StringName in InputMap.get_actions():
+		Input.action_release(action)
 	get_window().size = Vector2i(1920, 1080)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	RenderingServer.viewport_set_measure_render_time(_viewport_rid, true)
@@ -65,6 +71,8 @@ func _run() -> void:
 			report = await AcceptanceChecks.world(scene, output_directory)
 		elif acceptance == "audio":
 			report = await AcceptanceChecks.audio(scene, output_directory)
+		elif acceptance == "earth":
+			report = await EarthChecks.run(scene, output_directory)
 		else:
 			_fail("未知完整验收项目：" + acceptance)
 			return
@@ -109,6 +117,18 @@ func _wait_for_terrain() -> bool:
 
 func _capture_shot(name: String, output_directory: String) -> void:
 	ShotCatalog.place(name, _player, _planet, _director)
+	if name == "s14_third_person" or name == "s15_relief_map":
+		(get_tree().current_scene.get_node("HUD") as CanvasLayer).visible = true
+		var atlas: TerrainAtlas = get_tree().current_scene.get_node("HUD/Layout/TerrainAtlas") as TerrainAtlas
+		if name == "s15_relief_map":
+			_player.controls_enabled = true
+			atlas.set_open(true)
+		var deadline: int = Time.get_ticks_msec() + 120000
+		while atlas.global_view.texture == null or (name == "s14_third_person" and atlas.local_view.texture == null):
+			await get_tree().process_frame
+			if Time.get_ticks_msec() > deadline:
+				_fail("地图机位等待高度数据超时。")
+				return
 	await get_tree().physics_frame
 	_planet = Planet.nearest(get_tree(), _player.global_position)
 	_terrain = _planet.get_node("Terrain") as PlanetTerrain
@@ -281,10 +301,31 @@ func _measure_walk(path: String) -> void:
 	var next_sample: float = 0.0
 	var minimum_altitude: float = INF
 	var positions: Array[Dictionary] = []
+	var steering_events: Array[Dictionary] = []
+	var probe_shape: SphereShape3D = SphereShape3D.new()
+	probe_shape.radius = 0.48
 	var elapsed: float = 0.0
 	while elapsed < 40.0:
 		await get_tree().physics_frame
 		elapsed = float(Time.get_ticks_usec() - started) / 1000000.0
+		# 连续行走覆盖真实树干与石块碰撞，遇到物件改换方向，不把正常阻挡误判为移动故障。
+		var up: Vector3 = (_player.global_position - _planet.global_position).normalized()
+		var forward: Vector3 = -_player.global_basis.z
+		var query: PhysicsShapeQueryParameters3D = PhysicsShapeQueryParameters3D.new()
+		query.shape = probe_shape
+		query.collision_mask = 2
+		query.exclude = [_player.get_rid()]
+		query.transform = Transform3D(Basis.IDENTITY, _player.global_position + up * 0.95)
+		query.motion = forward * 3.0
+		var space: PhysicsDirectSpaceState3D = _player.get_world_3d().direct_space_state
+		if space.cast_motion(query)[0] < 1.0:
+			for angle: float in [30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 135.0, -135.0]:
+				var direction: Vector3 = forward.rotated(up, deg_to_rad(angle))
+				query.motion = direction * 3.0
+				if space.cast_motion(query)[0] >= 1.0:
+					_player.global_basis = Basis.looking_at(direction, up)
+					steering_events.append({"elapsed_s": elapsed, "angle_degrees": angle})
+					break
 		var position: Vector3 = _player.global_position - universe.global_position
 		var altitude: float = position.length() - _planet.surface_radius(position.normalized())
 		minimum_altitude = minf(minimum_altitude, altitude)
@@ -296,7 +337,7 @@ func _measure_walk(path: String) -> void:
 	var displacement: Vector3 = finish - start
 	var horizontal_distance: float = (displacement - start_up * displacement.dot(start_up)).length()
 	var passed: bool = minimum_altitude >= -0.3 and horizontal_distance > 120.0
-	var report: Dictionary = {"duration_s": elapsed, "minimum_altitude_m": minimum_altitude, "horizontal_displacement_m": horizontal_distance, "passed": passed, "samples": positions}
+	var report: Dictionary = {"duration_s": elapsed, "minimum_altitude_m": minimum_altitude, "horizontal_displacement_m": horizontal_distance, "passed": passed, "steering_events": steering_events, "samples": positions}
 	if VerificationMetrics.write_json(path, report) != OK:
 		_fail("无法写入行走验证报告。")
 		return

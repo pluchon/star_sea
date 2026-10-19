@@ -1,7 +1,7 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail"]
+const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley"]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -13,8 +13,23 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.mode = StarSeaPlayer.Mode.FLY
 	player.controls_enabled = false
 	player.simulated_forward = false
+	player.set_third_person(false)
 	director.time_paused = true
 	match name:
+		"s14_third_person", "s15_relief_map":
+			player.place_at(planet.global_position + up * (height + 0.1), forward, up)
+			player.mode = StarSeaPlayer.Mode.WALK
+			player.set_third_person(name == "s14_third_person")
+			player.set_head_pitch(-0.12 if name == "s14_third_person" else 0.0)
+			director.set_sun_altitude(up, -forward, 35.0)
+		"s16_terrace", "s17_valley":
+			up = SurfaceSites.find_landform(planet.noise, "台地" if name == "s16_terrace" else "峡谷")
+			assert(up != Vector3.ZERO, "地貌机位没有找到实际地形。")
+			forward = SurfaceSites.tangent_forward(up)
+			var eye_up: Vector3 = SurfaceSites.offset_direction(up, forward, 380.0, planet.radius)
+			player.place_at(planet.global_position + eye_up * (planet.surface_radius(eye_up) + 220.0), -forward, eye_up)
+			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(planet.global_position + up * (planet.surface_radius(up) + 25.0)), eye_up)
+			director.set_sun_altitude(up, (-forward + forward.cross(up)).normalized(), 26.0)
 		"s12_ruin":
 			var ruin_up: Vector3 = SurfaceSites.ruin_direction(planet.site, planet.radius)
 			var ruin_position: Vector3 = planet.global_position + ruin_up * (planet.surface_radius(ruin_up) - 0.3)
@@ -30,12 +45,12 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 			var origin: Vector3 = up * planet.surface_radius(up)
 			for cell: Vector3i in cells:
 				var generated: Dictionary = SurfaceDetails.generate(planet.noise, Vector4i(SurfaceDetails.FOREST_DIVISIONS, cell.x, cell.y, cell.z), planet.planet_seed, up, SurfaceSites.ruin_direction(planet.site, planet.radius))
-				for transform: Transform3D in generated["broadleaf"]:
+				for transform: Transform3D in (generated["broadleaf"] as Array) + (generated["pine"] as Array):
 					var position: Vector3 = (generated["center"] as Vector3) + transform.origin
 					if position.distance_to(origin) < closest:
 						closest = position.distance_to(origin)
 						target = position
-			assert(target != Vector3.ZERO, "树木近景机位缺少阔叶树。")
+			assert(target != Vector3.ZERO, "树木近景机位缺少树木。")
 			up = target.normalized()
 			var eye_up: Vector3 = SurfaceSites.offset_direction(up, forward, 11.0, planet.radius)
 			player.place_at(planet.global_position + eye_up * (planet.surface_radius(eye_up) + 1.0), -forward, eye_up)

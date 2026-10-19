@@ -73,11 +73,12 @@ try {
         & (Join-Path $PSScriptRoot 'Build-Game.ps1') | Out-Null
     }
     Invoke-Release 'release-core' @('--acceptance=core', "--out=$releaseDirectory")
+    Invoke-Release 'release-earth' @('--acceptance=earth', "--out=$releaseDirectory")
     Invoke-Release 'release-world' @('--acceptance=world', "--out=$releaseDirectory")
     Invoke-Release 'release-audio' @('--acceptance=audio', "--out=$releaseDirectory")
     python (Join-Path $PSScriptRoot 'Check-Audio.py') --recordings $releaseDirectory
     if ($LASTEXITCODE -ne 0) { throw '实际混音检查失败。' }
-    $shots = @('s1_space','s2_high','s3_ground_day','s4_ground_sunset','s5_ground_night','s6_shore','s7_ember','s8_frost','s9_woodland','s10_highland','s11_orbit','s12_ruin','s13_tree_detail')
+    $shots = @('s1_space','s2_high','s3_ground_day','s4_ground_sunset','s5_ground_night','s6_shore','s7_ember','s8_frost','s9_woodland','s10_highland','s11_orbit','s12_ruin','s13_tree_detail','s14_third_person','s15_relief_map','s16_terrace','s17_valley')
     $shotDirectory = Join-Path $releaseDirectory 'shots'
     foreach ($shot in $shots) {
         Invoke-Release "release-$shot" @("--shot=$shot", "--out=$shotDirectory")

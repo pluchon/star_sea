@@ -9,6 +9,7 @@ import struct
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ruin_revision as revision
+import ruin_modeling as modeling
 
 import bpy
 import bmesh
@@ -220,6 +221,8 @@ def arch(width, depth, height, broken=False, thickness=None, count=12, coursed=F
 
 def piece(name, broken=False):
     rng = random.Random(20261020 + sum(name.encode()) + broken)
+    if modeling.build(sys.modules[__name__], name):
+        return
     if revision.revise(sys.modules[__name__], name):
         return
     if name in ("floor_slab", "plinth", "lintel", "wall", "wall_low", "bridge_pier", "aqueduct_pier", "road_stone", "stele", "standing_stone", "mural_panel"):
@@ -557,10 +560,12 @@ def export_piece(name, output):
     bpy.context.view_layer.objects.active = obj
     colliders = export_collisions(name)
     bpy.ops.object.select_all(action="DESELECT")
-    for exported in (PARTS if name.startswith("echo_") else [obj]) + colliders:
+    for exported in (PARTS + modeling.RIGS if name.startswith("echo_") else [obj]) + colliders:
         exported.select_set(True)
     bpy.ops.export_scene.gltf(filepath=str(output / f"{name}.glb"), use_selection=True, export_format="GLB", export_yup=True, export_apply=True, export_vertex_color="ACTIVE", export_active_vertex_color_when_no_material=True)
     repair_vertex_colors(output / f"{name}.glb", samples)
+    if modeling.is_revised(name):
+        modeling.preview(name, PARTS, output)
     minimum = [min(point[axis] for points in surfaces.values() for point in points) for axis in range(3)]
     maximum = [max(point[axis] for points in surfaces.values() for point in points) for axis in range(3)]
     result = {"surfaces": surfaces, "colors": surface_colors, "collisions": list(COLLISIONS), "bounds_min": minimum, "bounds_size": [b - a for a, b in zip(minimum, maximum)], "triangles": len(triangles)}
@@ -568,6 +573,7 @@ def export_piece(name, output):
         bpy.data.objects.remove(item, do_unlink=True)
     PARTS.clear()
     COLLISIONS.clear()
+    modeling.RIGS.clear()
     return result
 
 
@@ -576,6 +582,7 @@ def main():
         raise RuntimeError("需要 Blender 4.x")
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=Path("game/models/ruins"))
+    parser.add_argument("--only", default="", help="只更新逗号分隔的构件，其余模型及同源记录保持不变")
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else [])
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -586,15 +593,18 @@ def main():
         material.diffuse_color = color
         MATERIALS[name] = material
     names = ["floor_slab", "plaza_ring", "plinth", "plinth_round", "steps", "wall", "wall_arc", "wall_window", "door", "wall_low", "column", "column_fallen", "lintel", "arch", "dome", "bridge_span", "bridge_pier", "aqueduct_channel", "aqueduct_pier", "road_stone", "stele", "standing_stone", "lamp_post", "brazier", "ring_monument", "statue", "statue_kneel", "cave_mouth", "temple_gate", "mural_panel", "rubble", "rubble_1", "rubble_2", "sand_drift", "vines", "vines_1", "tower_drum", "tower_stair", "tower_crown", "echo_figure", "echo_child", "vine_wall", "statue_arm"]
-    records = {}
+    selected = set(args.only.split(",")) if args.only else None
+    records = json.loads((output / "geometry.json").read_text(encoding="utf-8")) if selected else {}
     for name in names:
         for broken in ((True,) if name == "statue_arm" else ((False, True) if name not in ("rubble", "rubble_1", "rubble_2", "sand_drift", "vines", "vines_1", "echo_figure", "echo_child", "vine_wall", "column_fallen") else (False,))):
             key = name + ("_broken" if broken else "")
+            if selected is not None and key not in selected:
+                continue
             piece(name)
             if broken and name != "statue_arm":
                 seed = 20261020 + sum((index + 1) * byte for index, byte in enumerate(name.encode()))
                 if name == "statue":
-                    head = next(obj for obj in PARTS if obj.name == "Head")
+                    head = next(obj for obj in PARTS if obj.name.startswith(("Head", "HoodShell")))
                     PARTS.remove(head)
                     bpy.data.objects.remove(head, do_unlink=True)
                     retained = [obj for obj in PARTS if obj.name != "Robe"]
@@ -608,6 +618,13 @@ def main():
                 target = int(reference * 1.04) + 8
                 revision.refine_fractures(sys.modules[__name__], target)
             if name == "statue_arm":
+                # 缺臂布尔断口也参与断面细分，不能依赖旧节点名称。
+                for part in PARTS:
+                    if part.name.startswith("Robe"):
+                        attribute = part.data.attributes.get("shade") or part.data.attributes.new("shade", "FLOAT", "POINT")
+                        for vertex in part.data.vertices:
+                            if vertex.co.x > .3 and vertex.co.z > 2.5:
+                                attribute.data[vertex.index].value = 1.08
                 revision.refine_fractures(sys.modules[__name__], int(records["statue"]["triangles"] * 1.04) + 8)
             records[key] = export_piece(key, output)
     (output / "geometry.json").write_text(json.dumps(records, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

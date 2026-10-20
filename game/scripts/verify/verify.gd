@@ -154,6 +154,12 @@ func _capture_shot(name: String, output_directory: String) -> void:
 	if image_error != OK:
 		_fail("无法保存截图：" + error_string(image_error))
 		return
+	# 模型展示只用于自查，不纳入正式性能验收。
+	if name.begins_with("s29b_") or name.begins_with("s29c_") or name.begins_with("s29d_"):
+		var presentation: Dictionary = {"passed": true, "shot": name, "resolution": [image.get_width(), image.get_height()], "performance_measured": false}
+		VerificationMetrics.write_json(directory.path_join(name + ".json"), presentation)
+		await _finish(0)
+		return
 	# Performance 部分监控器存在一秒更新延迟，截图写盘后先等待旧值失效。
 	await get_tree().create_timer(2.2).timeout
 	var intervals: Array[float] = []

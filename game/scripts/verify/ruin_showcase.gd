@@ -20,6 +20,8 @@ func build(planet: Planet, display: String = "s29_ruin_kit") -> void:
 	var pieces: Array = RuinMeshes.recipes().keys()
 	if display == "s29b_figures":
 		pieces = ["statue", "statue_kneel", "statue_broken", "statue_arm_broken", "echo_figure", "echo_child"]
+	elif display == "s29d_silhouette":
+		pieces = ["statue"]
 	elif display.begins_with("s29c_details"):
 		pieces = ["wall", "wall_broken", "rubble", "stele", "door", "vines", "vine_wall"]
 	for piece: String in pieces:

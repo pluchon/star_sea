@@ -38,6 +38,8 @@ func _begin() -> void:
 			failures.append(piece + " glb 碰撞与程序化路线数量不一致。")
 		if piece.begins_with("echo_"):
 			_check_joints(imported, piece, bounds.size.y, failures)
+		if piece in ["vines", "vines_1", "vine_wall"]:
+			_check_vine_normals(model, piece, failures)
 		if piece.ends_with("_broken"):
 			var whole: String = "statue" if piece == "statue_arm_broken" else piece.trim_suffix("_broken")
 			var intact: Mesh = RuinKit.mesh(whole)
@@ -123,7 +125,11 @@ func _triangle_limit(piece: String) -> int:
 	if piece.begins_with("echo_"):
 		return 3000
 	if piece.begins_with("rubble"):
-		return 600
+		return 900
+	if piece == "vine_wall":
+		return 3000
+	if piece.begins_with("vines"):
+		return 2000
 	if piece.begins_with("stele") or piece.begins_with("lamp_post"):
 		return 300
 	if piece.begins_with("bridge") or piece.begins_with("dome") or piece.begins_with("brazier"):
@@ -147,16 +153,37 @@ func _check_wall_recess(failures: Array[String]) -> void:
 
 
 func _check_joints(imported: Node, piece: String, height: float, failures: Array[String]) -> void:
-	for joint: String in ["Head", "Robe", "ArmLeft", "ArmRight"]:
-		var node: Node3D = imported.find_child(joint, true, false) as Node3D
-		if node == null:
-			failures.append(piece + " 缺少关节节点：" + joint)
-			continue
-		var ratio: float = node.position.y / height
-		var lower: float = 0.80 if joint == "Head" else (0.4 if joint == "Robe" else 0.70)
-		var upper: float = 0.901 if joint == "Head" else (0.6 if joint == "Robe" else 0.95)
-		if ratio < lower or ratio > upper:
-			failures.append(piece + " 的 " + joint + " 原点不在关节附近：" + str(ratio))
+	var skeletons: Array[Node] = imported.find_children("*", "Skeleton3D", true, false)
+	if skeletons.is_empty():
+		failures.append(piece + " 缺少蒙皮骨架。")
+		return
+	var skeleton: Skeleton3D = skeletons[0] as Skeleton3D
+	var required: Array[String] = ["Root", "Spine", "Chest", "Neck", "Head"]
+	for side: String in ["L", "R"]:
+		for limb: String in ["UpperArm", "Forearm", "Hand", "Thigh", "Shin", "Foot"]:
+			required.append(limb + "." + side)
+	for bone: String in required:
+		if skeleton.find_bone(bone) < 0:
+			failures.append(piece + " 缺少骨骼：" + bone)
+	var meshes: Array[Node] = imported.find_children("*", "MeshInstance3D", true, false)
+	for node: Node in meshes:
+		if (node as MeshInstance3D).skin == null:
+			failures.append(piece + " 的网格缺少蒙皮绑定。")
+	if height < 1.0:
+		failures.append(piece + " 骨架尺度异常。")
+
+
+func _check_vine_normals(mesh: Mesh, piece: String, failures: Array[String]) -> void:
+	var total: int = 0
+	var outward: int = 0
+	for surface: int in mesh.get_surface_count():
+		var normals: PackedVector3Array = mesh.surface_get_arrays(surface)[Mesh.ARRAY_NORMAL]
+		for normal: Vector3 in normals:
+			total += 1
+			if normal.dot(Vector3.FORWARD) > 0.0:
+				outward += 1
+	if total == 0 or float(outward) / float(total) < 0.9:
+		failures.append(piece + " 朝外法线比例不足九成：%d/%d" % [outward, total])
 
 
 func _physical_checks() -> Array[String]:

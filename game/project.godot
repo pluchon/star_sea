@@ -73,3 +73,7 @@ cloud_shadow={
 "type": "float",
 "value": 0.0
 }
+shadow_fill={
+"type": "float",
+"value": 0.0
+}

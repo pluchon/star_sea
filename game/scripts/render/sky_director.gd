@@ -85,6 +85,7 @@ func _update_environment() -> void:
 	# 晨的日间阴影保留蓝色环境光，并适度抬亮林下和背光山坡。
 	var daytime_energy: float = 0.39 if _planet.profile == 0 else 0.32
 	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.30, 0.20, space)
+	RenderingServer.global_shader_parameter_set("shadow_fill", golden * 0.32 * (1.0 - space))
 	_update_weather(up, altitude, day)
 	_update_grade(sun_height, space)
 	for node: Node in get_tree().get_nodes_in_group("planets"):

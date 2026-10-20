@@ -66,5 +66,5 @@ float mist_amount(vec3 world_position, float camera_distance) {
 		return 0.0;
 	}
 	float height = length(world_position - focus_center) - focus_radius;
-	return mist * (1.0 - smoothstep(15.0, 150.0, height)) * smoothstep(25.0, 420.0, camera_distance) * 0.8;
+	return mist * (1.0 - smoothstep(5.0, 90.0, height)) * smoothstep(60.0, 900.0, camera_distance) * 0.45;
 }

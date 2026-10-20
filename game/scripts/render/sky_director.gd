@@ -141,7 +141,7 @@ func _update_environment() -> void:
 	_mist = lerpf(_mist, mist_target, 0.02)
 	RenderingServer.global_shader_parameter_set("mist", _mist * (1.0 - space))
 	RenderingServer.global_shader_parameter_set("focus_radius", _planet.radius)
-	var mist_tint: Color = Color(0.86, 0.88, 0.92).lerp(Color(0.98, 0.84, 0.78), golden).lerp(Color(0.22, 0.26, 0.36), 1.0 - day)
+	var mist_tint: Color = Color(0.86, 0.88, 0.92).lerp(Color(0.94, 0.88, 0.86), golden).lerp(Color(0.22, 0.26, 0.36), 1.0 - day)
 	RenderingServer.global_shader_parameter_set("mist_color", Vector3(mist_tint.r, mist_tint.g, mist_tint.b) * (0.75 + 0.25 * day))
 	# 极光只在晨的晴朗夜里出现，强弱以十几分钟为周期起伏，有的夜里几乎看不见。
 	var aurora_cycle: float = clampf(sin(_weather_time / 700.0) * 0.8 + 0.2, 0.0, 1.0)

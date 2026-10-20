@@ -1,7 +1,13 @@
 shader_type spatial;
+#define CLOUD_SHADE
+#include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
 global uniform float rim_strength;
 uniform vec4 pigment : source_color = vec4(0.8, 0.8, 0.7, 1.0);
+
+void vertex() {
+	v_sunlit = cloud_sunlit((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
+}
 
 void fragment() {
 	ALBEDO = pigment.rgb;

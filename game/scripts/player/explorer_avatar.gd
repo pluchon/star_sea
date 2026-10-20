@@ -1,15 +1,24 @@
 class_name ExplorerAvatar
 extends Node3D
 
+# 围巾由几段薄片组成，每帧按风、移动和重力重新摆放；不使用物理模拟。
+const SCARF_SEGMENTS: int = 7
+const SCARF_LENGTH: float = 0.17
+const SCARF_ROOT: Vector3 = Vector3(0.08, 1.31, 0.2)
+
 var _arms: Array[Node3D] = []
 var _legs: Array[Node3D] = []
 var _body: Node3D
 var _phase: float = 0.0
 var _materials: Dictionary = {}
+var _scarf: Array[Node3D] = []
+var _scarf_flow: Vector3 = Vector3.ZERO
+var _scarf_time: float = 0.0
+var _director: SkyDirector
 
 
 func _ready() -> void:
-	for entry: Array in [["cloth", Color(0.72, 0.79, 0.67)], ["dark", Color(0.15, 0.25, 0.28)], ["light", Color(0.91, 0.86, 0.69)], ["accent", Color(0.74, 0.36, 0.19)], ["glass", Color(0.16, 0.40, 0.48)]]:
+	for entry: Array in [["cloth", Color(0.72, 0.79, 0.67)], ["dark", Color(0.15, 0.25, 0.28)], ["light", Color(0.91, 0.86, 0.69)], ["accent", Color(0.74, 0.36, 0.19)], ["glass", Color(0.16, 0.40, 0.48)], ["scarf", Color(0.80, 0.30, 0.22)]]:
 		var material: ShaderMaterial = ShaderMaterial.new()
 		material.shader = load("res://shaders/explorer.gdshader") as Shader
 		material.set_shader_parameter("pigment", entry[1])
@@ -45,6 +54,16 @@ func _ready() -> void:
 	_capsule(_body, Vector3(0, 1.13, 0.37), 0.13, 0.36, "cloth")
 	_ring(_body, Vector3(0, 1.36, 0), 0.17, 0.09, "accent")
 	_capsule(_body, Vector3(0.06, 1.12, -0.21), 0.04, 0.16, "accent")
+	_ring(_body, Vector3(0, 1.30, 0), 0.21, 0.09, "scarf")
+	for index: int in SCARF_SEGMENTS:
+		var segment: Node3D = Node3D.new()
+		_body.add_child(segment)
+		_scarf.append(segment)
+		var piece: BoxMesh = BoxMesh.new()
+		# 越往末端越窄，末段略短，轮廓更像布条而不是木板。
+		piece.size = Vector3(lerpf(0.15, 0.11, float(index) / SCARF_SEGMENTS), SCARF_LENGTH * 1.08, 0.022)
+		_part(segment, piece, Vector3(0, -SCARF_LENGTH * 0.5, 0), Vector3.ONE, "scarf")
+	_pose_scarf(0.0, Vector3.ZERO)
 
 
 func _capsule(parent: Node3D, location: Vector3, radius_value: float, height: float, pigment: String) -> void:
@@ -92,3 +111,39 @@ func animate(delta: float, local_velocity: Vector3, flying: bool, grounded: bool
 		var side: float = -1.0 if index == 0 else 1.0
 		_arms[index].rotation = Vector3(swing * side - (0.22 if flying else 0.06), 0, side * (0.28 if flying else 0.08))
 		_legs[index].rotation.x = -swing * side + (0.16 if flying or not grounded else 0.0)
+	_pose_scarf(delta, local_velocity)
+
+
+func _pose_scarf(delta: float, local_velocity: Vector3) -> void:
+	if _director == null and is_inside_tree():
+		_director = get_tree().get_first_node_in_group("sky_director") as SkyDirector
+	var wind: Vector3 = Vector3.ZERO
+	if _director != null:
+		wind = global_basis.inverse() * _director.wind_direction * _director.wind_strength
+	# 迎面气流把围巾吹向身后；高速飞行时限制幅度，避免拉成一条直线。
+	var target: Vector3 = (wind * 1.3 - local_velocity * 0.22).limit_length(2.4)
+	_scarf_flow = _scarf_flow.lerp(target, clampf(delta * 3.0, 0.0, 1.0))
+	_scarf_time += delta
+	var strength: float = minf(_scarf_flow.length(), 1.0)
+	var point: Vector3 = SCARF_ROOT
+	for index: int in SCARF_SEGMENTS:
+		var along: float = float(index + 1) / SCARF_SEGMENTS
+		# 无风时贴着背包向下垂；越靠末端越容易被风带起，并有沿布条传递的波动。
+		var direction: Vector3 = (Vector3(0.0, -1.0, 0.75) + _scarf_flow * (0.4 + along * 0.9)).normalized()
+		var flutter: float = sin(_scarf_time * 7.5 - index * 0.85) * 0.32 * strength * along
+		direction = direction.rotated(Vector3.RIGHT, flutter).rotated(Vector3.UP, flutter * 0.5)
+		var next: Vector3 = point + direction * SCARF_LENGTH
+		# 背包占据身后约 0.86 到 1.35 米的高度，顶部较薄；布条被推到背包外侧。
+		var clearance: float = 0.52 if next.y < 1.29 else 0.38
+		if next.y > 0.86 and next.y < 1.35 and next.z < clearance:
+			next.z = clearance
+			direction = (next - point).normalized()
+			next = point + direction * SCARF_LENGTH
+		var segment: Node3D = _scarf[index]
+		segment.position = point
+		var x_axis: Vector3 = Vector3.RIGHT - direction * direction.x
+		if x_axis.length_squared() < 0.0001:
+			x_axis = Vector3.FORWARD
+		x_axis = x_axis.normalized()
+		segment.basis = Basis(x_axis, -direction, x_axis.cross(-direction))
+		point = next

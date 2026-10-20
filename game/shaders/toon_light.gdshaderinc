@@ -5,5 +5,9 @@ void light() {
 	float lit = smoothstep(0.0, 0.05, ndl);
 	float tier = mix(0.72, 1.0, smoothstep(0.30, 0.36, ndl));
 	float shadow = smoothstep(0.0, 1.0, ATTENUATION);
+#ifdef CLOUD_SHADE
+	// 云影只削弱直射光，暗面仍由环境色托底
+	shadow *= v_sunlit;
+#endif
 	DIFFUSE_LIGHT += LIGHT_COLOR / PI * lit * tier * shadow;
 }

@@ -49,3 +49,27 @@ rim_strength={
 "type": "float",
 "value": 0.04
 }
+focus_center={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+wind_dir={
+"type": "vec3",
+"value": Vector3(1, 0, 0)
+}
+wind_speed={
+"type": "float",
+"value": 1.0
+}
+cloud_offset={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+cloud_cover={
+"type": "float",
+"value": 0.0
+}
+cloud_shadow={
+"type": "float",
+"value": 0.0
+}

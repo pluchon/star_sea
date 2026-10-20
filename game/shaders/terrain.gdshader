@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode cull_back;
 
+#define CLOUD_SHADE
+#include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
 
 global uniform float rim_strength;
@@ -75,6 +77,7 @@ void fragment() {
 		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
 	}
 	ALBEDO = c;
+	v_sunlit = cloud_sunlit(v_position + planet_center);
 	ROUGHNESS = 1.0;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
 	EMISSION = ALBEDO * rim * rim_strength;

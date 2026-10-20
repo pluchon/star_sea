@@ -6,6 +6,8 @@ const FOREST_DIVISIONS: int = 128
 const NEAR_DISTANCE: float = 160.0
 const FOREST_DISTANCE: float = 1400.0
 const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers", "fern", "reeds", "mushrooms"]
+# 各类物件在阵风最强时的最大摆幅，单位为米；高大树冠摆得多，灌木和蕨类较稳。
+const WIND_SWAY: Dictionary[String, float] = {"grass": 0.17, "stone": 0.0, "broadleaf": 0.32, "pine": 0.26, "shrub": 0.08, "flowers": 0.15, "fern": 0.10, "reeds": 0.24, "mushrooms": 0.0}
 
 var _planet: Planet
 var _tiles: Dictionary[Vector4i, Node3D] = {}
@@ -32,7 +34,7 @@ func _ready() -> void:
 		_meshes[kind] = VegetationMeshes.create(kind)
 		var material: ShaderMaterial = ShaderMaterial.new()
 		material.shader = shader
-		material.set_shader_parameter("wind_strength", 0.0 if kind == "stone" else 0.14)
+		material.set_shader_parameter("wind_strength", WIND_SWAY[kind])
 		material.set_shader_parameter("is_grass", kind == "grass" or kind == "flowers")
 		material.set_shader_parameter("bark_color", load("res://textures/painted/bark.svg"))
 		material.set_shader_parameter("rock_color", load("res://textures/painted/stone.svg"))

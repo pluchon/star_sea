@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode cull_disabled;
 
+#define CLOUD_SHADE
+#include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
 global uniform float rim_strength;
 
@@ -18,9 +20,14 @@ varying float v_moss;
 
 void vertex() {
 	float phase = INSTANCE_CUSTOM.r * 6.28318;
-	float sway = UV2.x * wind_strength;
-	VERTEX.x += sin(TIME * 1.6 + phase + VERTEX.y * 0.35) * sway;
-	VERTEX.z += cos(TIME * 1.1 + phase) * sway * 0.6;
+	vec3 root_world = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	if (wind_strength > 0.0) {
+		// 位移在世界坐标里算出，再换回实例的局部坐标，使整片植被朝同一风向摆动
+		mat3 model = mat3(MODEL_MATRIX);
+		vec3 push = wind_push(root_world, phase + VERTEX.y * 0.35) * UV2.x * wind_strength;
+		VERTEX += transpose(model) * push / dot(model[0], model[0]);
+	}
+	v_sunlit = cloud_sunlit(root_world);
 	v_color = COLOR.rgb;
 	v_root = is_grass ? smoothstep(0.0, 0.35, VERTEX.y) : 1.0;
 	v_surface = UV2.y;

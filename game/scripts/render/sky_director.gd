@@ -78,13 +78,14 @@ func _update_environment() -> void:
 	var noon: Color = Color(1.0, 0.97, 0.92)
 	_sun.light_color = sunset.lerp(noon, smoothstep(0.0, 0.35, sun_height)).lerp(noon, space)
 	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height) * 1.25, 1.0, space)
-	# 日出日落前后天空最亮最暖，背光的地面也应映出紫粉色，而不是沉成黑褐色。
+	# 日出日落前后天空最亮最暖，背光的地面也应映出暖淡紫色，而不是沉成黑褐色。
+	# 环境色会与地表固有色相乘，饱和的紫色乘上草绿会发黑，所以这里用低饱和的颜色并提高强度。
 	var golden: float = smoothstep(-0.10, 0.02, sun_height) * (1.0 - smoothstep(0.10, 0.35, sun_height))
-	var ambient: Color = Color(0.12, 0.16, 0.30).lerp(Color(0.46, 0.56, 0.72), day).lerp(Color(0.70, 0.52, 0.70), golden * 0.75)
+	var ambient: Color = Color(0.12, 0.16, 0.30).lerp(Color(0.46, 0.56, 0.72), day).lerp(Color(0.80, 0.66, 0.76), golden * 0.8)
 	_environment.ambient_light_color = ambient.lerp(Color(0.08, 0.08, 0.16), space)
 	# 晨的日间阴影保留蓝色环境光，并适度抬亮林下和背光山坡。
 	var daytime_energy: float = 0.39 if _planet.profile == 0 else 0.32
-	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.30, 0.20, space)
+	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.55, 0.20, space)
 	RenderingServer.global_shader_parameter_set("shadow_fill", golden * 0.32 * (1.0 - space))
 	_update_weather(up, altitude, day)
 	_update_grade(sun_height, space)

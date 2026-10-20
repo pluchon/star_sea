@@ -4,7 +4,7 @@ extends RefCounted
 
 static func run(tree: SceneTree) -> Dictionary:
 	var failures: Array[String] = []
-	for path: String in ["res://models/ruins/geometry.json", "res://models/ship/ship_geometry.json"]:
+	for path: String in ["res://models/ruins/geometry.json", "res://models/ship/ship_geometry.json", "res://models/landforms/geometry.json"]:
 		if not FileAccess.file_exists(path):
 			failures.append("打包缺少备用网格数据：" + path)
 	if not failures.is_empty():
@@ -33,4 +33,16 @@ static func run(tree: SceneTree) -> Dictionary:
 	var world: HydrologyData = load(HydrologyData.PATH) as HydrologyData
 	if world == null or world.river_points.is_empty() or world.lake_levels.is_empty():
 		failures.append("打包缺少有效的全球水系。")
-	return {"passed": failures.is_empty(), "failures": failures, "ruin_pieces": pieces, "ship_triangles": ship_triangles, "hydrology_loaded": world != null}
+	var rocks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://models/landforms/geometry.json")) as Dictionary
+	for piece: String in rocks:
+		var scene: Node = (load("res://models/landforms/" + piece + ".glb") as PackedScene).instantiate()
+		var instances: Array[Node] = scene.find_children("*", "MeshInstance3D", true, false)
+		if instances.size() != 1:
+			failures.append("打包峡谷岩石没有单一网格：" + piece)
+		else:
+			var mesh: Mesh = (instances[0] as MeshInstance3D).mesh
+			var record: Dictionary = rocks[piece]
+			if mesh.get_faces().size() / 3 != int(record["triangles"]) or mesh.get_aabb().size.distance_to(RuinMeshes.vector(record["bounds_size"])) > 0.01:
+				failures.append("打包峡谷岩石与同源记录不一致：" + piece)
+		scene.free()
+	return {"passed": failures.is_empty(), "failures": failures, "ruin_pieces": pieces, "ship_triangles": ship_triangles, "hydrology_loaded": world != null, "canyon_models": rocks.size()}

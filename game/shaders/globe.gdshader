@@ -19,7 +19,8 @@ vec3 altitude_color(float height) {
 	vec3 pigment = mix(vec3(0.48, 0.64, 0.42), vec3(0.69, 0.73, 0.45), smoothstep(0.0, 400.0, height));
 	pigment = mix(pigment, vec3(0.68, 0.52, 0.35), smoothstep(400.0, 1000.0, height));
 	pigment = mix(pigment, vec3(0.55, 0.51, 0.47), smoothstep(1000.0, 1700.0, height));
-	return mix(pigment, vec3(0.92, 0.92, 0.83), smoothstep(1700.0, 2400.0, height));
+	pigment = mix(pigment, vec3(0.92, 0.92, 0.83), smoothstep(1700.0, 2400.0, height));
+	return mix(pigment, vec3(0.96, 0.98, 1.0), smoothstep(2400.0, 4000.0, height));
 }
 
 void vertex() {

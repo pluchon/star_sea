@@ -39,8 +39,26 @@ func _bake() -> void:
 	for property: String in ["site", "center", "axis_u", "axis_v", "volcano", "volcano_base"]:
 		_features.set(property, layout.metadata[property])
 	_features.landmarks.assign(layout.metadata["landmarks"])
+	if int(layout.metadata.get("landforms", {}).get("version", 0)) != 2:
+		layout.metadata["landforms"] = LandformLayout.generate(_noise, layout.metadata)
+		ResourceSaver.save(layout, layout_path)
+	_features.landforms = DawnLandforms.new(layout.metadata["landforms"], _noise.radius)
+	var nearest_pass: Dictionary = {}
+	var nearest_distance: float = INF
+	for pass_site: Dictionary in _features.landforms.metadata["passes"]:
+		var distance: float = Vector3(pass_site["direction"]).distance_to(_features.site["direction"])
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_pass = pass_site
+	var tower_direction: Vector3 = SurfaceSites.offset_direction(nearest_pass["direction"], nearest_pass["along"], 900.0, _noise.radius)
+	for landmark: Dictionary in _features.landmarks:
+		if landmark["kind"] == "peak_tower":
+			landmark["point"] = _features.plane(tower_direction)
+	layout.metadata["landmarks"] = _features.landmarks
+	ResourceSaver.save(layout, layout_path)
 	_data = HydrologyData.new()
 	_data.metadata = {"site": _features.site, "center": _features.center, "axis_u": _features.axis_u, "axis_v": _features.axis_v, "volcano": _features.volcano, "volcano_base": _features.volcano_base, "landmarks": _features.landmarks}
+	_data.metadata["landforms"] = layout.metadata["landforms"]
 	print("烘焙：球面格网与基础高度")
 	_grid()
 	print("烘焙：全球优先填洼")
@@ -53,10 +71,12 @@ func _bake() -> void:
 			_areas[_parent[cell]] += _areas[cell]
 	print("烘焙：连续河道")
 	_rivers()
+	_canyon_river()
 	_join_levels()
 	_mark_falls()
 	print("烘焙：空间索引")
 	_index()
+	_fine_index()
 	_data.signature = HydrologyData.source_signature()
 	var bake_seconds: float = float(Time.get_ticks_msec() - started) / 1000.0
 	_data.statistics["grid_cells"] = COUNT
@@ -83,7 +103,7 @@ func _grid() -> void:
 		var v: float = (float(y) + 0.5) * 2.0 / SIZE - 1.0
 		var direction: Vector3 = HydrologyData.corner(face, u, v)
 		_directions[cell] = direction
-		_heights[cell] = _features.with_volcano(_features.plane(direction), _noise.base_height(direction)) if _features.contains(direction) else _noise.base_height(direction)
+		_heights[cell] = _features.ground_height(direction, _noise.base_height(direction))
 		_areas[cell] = 4.0 * _noise.radius * _noise.radius / (SIZE * SIZE * pow(1.0 + u * u + v * v, 1.5))
 		for index: int in 8:
 			var nx: int = x + OFFSETS[index].x
@@ -92,6 +112,34 @@ func _grid() -> void:
 			if nx < 0 or ny < 0 or nx >= SIZE or ny >= SIZE:
 				neighbor = HydrologyData.cell_at(HydrologyData.corner(face, (float(nx) + 0.5) * 2.0 / SIZE - 1.0, (float(ny) + 0.5) * 2.0 / SIZE - 1.0))
 			_neighbors[cell * 8 + index] = neighbor
+
+
+func _canyon_river() -> void:
+	# 窄谷底可能小于全球格网间距，沿已烘焙的谷底补采样，避免格网漏掉整段河道。
+	var forms: DawnLandforms = _features.landforms
+	var length: float = 0.0
+	var last_level: float = INF
+	for segment: int in forms.canyon.size() - 1:
+		var distance: float = forms.canyon[segment].angle_to(forms.canyon[segment + 1]) * _noise.radius
+		var steps: int = ceili(distance / 15.0)
+		for sample: int in steps:
+			var direction: Vector3 = forms.canyon[segment].slerp(forms.canyon[segment + 1], sample / float(steps)).normalized()
+			var ground: float = _features.ground_height(direction, _noise.base_height(direction))
+			last_level = minf(last_level, maxf(-1.0, ground - 0.35))
+			_data.river_points.append(direction)
+			_data.river_levels.append(last_level)
+			_data.river_widths.append(9.0 + 7.0 * length / forms.canyon_lengths[-1])
+			_data.river_flags.append(2)
+			length += distance / steps
+	_data.river_points.append(forms.canyon[-1])
+	_data.river_levels.append(-1.0)
+	_data.river_widths.append(16.0)
+	_data.river_flags.append(2)
+	_data.river_starts.append(_data.river_points.size())
+	_data.river_ends.append(HydrologyData.cell_at(forms.canyon[-1]))
+	_data.river_joins.append(-1)
+	_data.statistics["river_km"] = float(_data.statistics["river_km"]) + length / 1000.0
+	_data.statistics["canyon_km"] = float(_data.statistics["canyon_km"]) + length / 1000.0
 
 
 func _flood() -> void:
@@ -238,9 +286,7 @@ func _add_river(chain: PackedInt32Array) -> void:
 			var phase: float = float(_data.river_starts.size()) * 1.37
 			var fade: float = sin(PI * (index + weight) / (points.size() - 1))
 			direction = (direction * _noise.radius + tangent * clampf(width * 1.5, 3.0, 25.0) * sin(travelled / 130.0 + phase) * fade).normalized()
-			var ground: float = _noise.base_height(direction)
-			if _features.contains(direction):
-				ground = _features.with_volcano(_features.plane(direction), ground)
+			var ground: float = _features.ground_height(direction, _noise.base_height(direction))
 			var level: float = minf(last_level, maxf(ground - 0.35, -1.0))
 			var flags: int = 0
 			if last_level < INF and last_level - level > 6.0 and (last_level - level) / maxf(length / steps, 0.01) > 0.35:
@@ -359,6 +405,32 @@ static func _heap_push(keys: PackedFloat32Array, values: PackedInt32Array, key: 
 		child = parent
 	keys[child] = key
 	values[child] = value
+
+
+func _fine_index() -> void:
+	var buckets: Dictionary = {}
+	for river: int in _data.river_starts.size() - 1:
+		for index: int in range(_data.river_starts[river], _data.river_starts[river + 1] - 1):
+			var direction: Vector3 = (_data.river_points[index] + _data.river_points[index + 1]).normalized()
+			var tangent: Vector3 = SurfaceSites.tangent_forward(direction)
+			var right: Vector3 = tangent.cross(direction)
+			var reach: float = maxf(_data.river_widths[index], _data.river_widths[index + 1]) * 5.0 + 90.0
+			var touched: Dictionary = {}
+			for x: int in range(-2, 3):
+				for y: int in range(-2, 3):
+					var sample: Vector3 = direction * _noise.radius + (tangent * x + right * y) * reach * 0.5
+					touched[HydrologyData.cell_at(sample.normalized(), HydrologyData.CARVE_GRID)] = true
+			for bucket: int in touched:
+				if not buckets.has(bucket):
+					buckets[bucket] = PackedInt32Array()
+				var list: PackedInt32Array = buckets[bucket]
+				list.append(index)
+				buckets[bucket] = list
+	for bucket: int in 6 * HydrologyData.CARVE_GRID * HydrologyData.CARVE_GRID:
+		_data.carve_offsets.append(_data.carve_segments.size())
+		if buckets.has(bucket):
+			_data.carve_segments.append_array(buckets[bucket])
+	_data.carve_offsets.append(_data.carve_segments.size())
 
 
 static func _heap_pop(keys: PackedFloat32Array, values: PackedInt32Array) -> int:

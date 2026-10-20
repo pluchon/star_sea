@@ -60,6 +60,10 @@ func _ready() -> void:
 		landmarks.name = "Landmarks"
 		add_child(landmarks)
 		landmarks.build(noise)
+		var canyon_landmarks: CanyonLandmarks = CanyonLandmarks.new()
+		canyon_landmarks.name = "CanyonLandmarks"
+		add_child(canyon_landmarks)
+		canyon_landmarks.build(self)
 		var wildlife: Wildlife = Wildlife.new()
 		wildlife.name = "Wildlife"
 		add_child(wildlife)

@@ -18,6 +18,8 @@ var crater_depth: float = 115.0
 var volcano_base: float = 0.0
 var landmarks: Array[Dictionary] = []
 var hydrology: GlobalHydrology
+var landforms: DawnLandforms
+var protected_spawn: Vector3
 
 
 static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
@@ -34,12 +36,14 @@ static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
 			(Engine.get_main_loop() as SceneTree).quit(1)
 			return features
 		features.site = data.metadata["site"]
+		features.protected_spawn = features.site["direction"]
 		features.center = data.metadata["center"]
 		features.axis_u = data.metadata["axis_u"]
 		features.axis_v = data.metadata["axis_v"]
 		features.volcano = data.metadata["volcano"]
 		features.volcano_base = data.metadata["volcano_base"]
 		features.landmarks.assign(data.metadata["landmarks"])
+		features.landforms = DawnLandforms.new(data.metadata.get("landforms", {}), noise.radius)
 		features.hydrology = GlobalHydrology.new(data, noise.radius)
 		_cache[key] = features
 	_cache_mutex.unlock()
@@ -64,8 +68,24 @@ func contains(direction: Vector3) -> bool:
 
 
 func apply(direction: Vector3, base: float) -> float:
-	var height: float = with_volcano(plane(direction), base) if contains(direction) else base
+	var height: float = base
+	# 出发地两公里内不受新地貌影响；热路径直接判断，避免额外的曲线查询。
+	if landforms != null and direction.dot(protected_spawn) < 0.99875026:
+		height = landforms.height(direction, base)
+	if direction.dot(center) >= 0.94:
+		var point: Vector2 = plane(direction)
+		if absf(point.x) <= HALF_SIZE and absf(point.y) <= HALF_SIZE:
+			height = with_volcano(point, height)
 	return hydrology.carve(direction, height)
+
+
+func ground_height(direction: Vector3, base: float) -> float:
+	var result: float = landforms.height(direction, base) if landforms != null else base
+	return with_volcano(plane(direction), result) if contains(direction) else result
+
+
+func surface_marks(direction: Vector3, elevation: float, slope: float) -> Color:
+	return landforms.surface_marks(direction, elevation, slope) if landforms != null else Color(0, 0, 0, 0)
 
 
 func with_volcano(point: Vector2, base: float) -> float:

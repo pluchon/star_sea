@@ -32,6 +32,7 @@ varying float v_slope;
 varying vec3 v_position;
 varying vec2 v_climate;
 varying float v_grove;
+varying vec4 v_marks;
 
 float patch(vec3 p) {
 	// 三轴连续变化，避免两极附近的色块拉伸成条纹。
@@ -45,6 +46,7 @@ void vertex() {
 	v_slope = COLOR.g;
 	v_climate = vec2(COLOR.b, clamp(1.05 - abs(normalize(v_position).y) * 0.72 - max(v_height, 0.0) / 2800.0, 0.0, 1.0));
 	v_grove = COLOR.a;
+	v_marks = CUSTOM0;
 	// 云影变化尺度约 700 米，沿地形顶点插值，避免每个像素重复计算噪声。
 	v_sunlit = cloud_sunlit(v_position + planet_center);
 }
@@ -96,6 +98,13 @@ void fragment() {
 		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
 	}
 	// 雨后地面颜色变深，雨停后慢慢变干。
+	if (terrestrial) {
+		float layer = mod(floor((v_height + patch(v_position / 170.0) * 3.0 + patch(v_position / 50.0) * 0.6) / 27.0), 3.0);
+		vec3 strata_color = layer < 1.0 ? vec3(0.381, 0.102, 0.045) : (layer < 2.0 ? vec3(0.584, 0.323, 0.105) : vec3(0.687, 0.610, 0.480));
+		c = mix(c, strata_color * (0.94 + patch(v_position / 50.0) * 0.06), v_marks.r);
+		vec3 ice = vec3(0.624, 0.791, 0.855) * (0.95 + smoothstep(0.92, 0.98, sin(v_position.x * 0.035 + v_position.z * 0.012)) * 0.05);
+		c = mix(c, ice, v_marks.g);
+	}
 	c *= 1.0 - wetness * 0.2;
 	float haze = mist_amount(v_position + planet_center, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
 	ALBEDO = c * (1.0 - haze);

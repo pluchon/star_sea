@@ -28,9 +28,7 @@ func _begin() -> void:
 			if data.river_levels[index] > data.river_levels[index - 1] + 0.001:
 				monotonic = false
 		var direction: Vector3 = data.river_points[end]
-		var ground: float = noise.base_height(direction)
-		if noise.features.contains(direction):
-			ground = noise.features.with_volcano(noise.features.plane(direction), ground)
+		var ground: float = noise.features.ground_height(direction, noise.base_height(direction))
 		var key: Vector3i = Vector3i((direction * noise.radius * 0.5).round())
 		if ground >= 0.0 and noise.features.hydrology.lake_surface(direction) == -INF and shared_points.get(key, river) != -1:
 			disconnected += 1

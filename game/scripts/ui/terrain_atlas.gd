@@ -135,7 +135,7 @@ func _build() -> void:
 	var legend: HBoxContainer = HBoxContainer.new()
 	legend.add_theme_constant_override("separation", 0)
 	column.add_child(legend)
-	for entry: Array in [["海洋", Color(0.13, 0.30, 0.38)], ["0 m", Color(0.48, 0.64, 0.42)], ["400 m", Color(0.69, 0.73, 0.45)], ["1000 m", Color(0.68, 0.52, 0.35)], ["1700 m", Color(0.55, 0.51, 0.47)], ["2400 m", Color(0.92, 0.92, 0.83)]]:
+	for entry: Array in [["海洋", Color(0.13, 0.30, 0.38)], ["0 m", Color(0.48, 0.64, 0.42)], ["400 m", Color(0.69, 0.73, 0.45)], ["1000 m", Color(0.68, 0.52, 0.35)], ["1700 m", Color(0.55, 0.51, 0.47)], ["2400 m", Color(0.92, 0.92, 0.83)], ["3200 m", Color(0.96, 0.98, 1.0)]]:
 		var swatch: PanelContainer = PanelContainer.new()
 		swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var style: StyleBoxFlat = StyleBoxFlat.new()

@@ -34,5 +34,5 @@ static func collect(noise: TerrainNoise) -> Dictionary:
 		"ocean_ratio": ocean_ratio,
 		"minimum_height_m": minimum,
 		"maximum_height_m": maximum,
-		"passed": ocean_ratio >= 0.25 and ocean_ratio <= 0.55 and minimum >= -450.0 and minimum <= -380.0 and maximum >= 1800.0 and maximum <= 2600.0,
+		"passed": ocean_ratio >= 0.25 and ocean_ratio <= 0.55 and minimum >= -450.0 and minimum <= -380.0 and maximum >= 1800.0 and maximum <= TerrainNoise.MAX_HEIGHT,
 	}

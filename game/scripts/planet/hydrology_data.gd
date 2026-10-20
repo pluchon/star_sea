@@ -3,6 +3,7 @@ extends Resource
 
 const GRID: int = 384 # 每个立方体面的水系格网边长。
 const BUCKET_GRID: int = 64 # 每面的索引桶边长。
+const CARVE_GRID: int = 256 # 高度查询使用细索引，避免遍历整公里桶内的河段。
 const RIVER_AREA: float = 3000000.0 # 河流最小汇水面积，平方米。
 const LAKE_AREA: float = 120000.0 # 湖泊最小面积，平方米。
 const LAKE_DEPTH: float = 4.0 # 湖泊最小深度，米。
@@ -25,6 +26,8 @@ const PATH: String = "res://data/dawn_world.res"
 @export var lake_starts: PackedInt32Array
 @export var bucket_offsets: PackedInt32Array
 @export var bucket_segments: PackedInt32Array
+@export var carve_offsets: PackedInt32Array
+@export var carve_segments: PackedInt32Array
 @export var volcanoes: Array[Dictionary]
 @export var karst_pillars: PackedVector4Array
 @export var karst_sizes: PackedVector2Array
@@ -36,6 +39,8 @@ static func source_signature() -> String:
 	# 源文件与所有烘焙算法共同签名；调整阈值或算法后必须重新烘焙。
 	var text: String = ""
 	for path: String in ["res://scripts/planet/terrain_noise.gd", "res://scripts/planet/terrain_features.gd", "res://scripts/planet/hydrology_data.gd", "res://scripts/tools/world_bake.gd", "res://data/dawn_layout.tres"]:
+		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
+	for path: String in ["res://scripts/civilization/dawn_landforms.gd", "res://scripts/civilization/landform_layout.gd"]:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
 	return text.md5_text()
 

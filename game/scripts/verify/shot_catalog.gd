@@ -1,7 +1,44 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley", "s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra", "s23_ship_parked", "s24_ship_low", "s25_waterfall", "s28_canyon", "s29_ruin_kit", "s29b_figures", "s29c_details", "s29c_details_side", "s29d_silhouette"]
+const NAMES: Array[String] = [
+	"s1_space",
+	"s2_high",
+	"s3_ground_day",
+	"s4_ground_sunset",
+	"s5_ground_night",
+	"s6_shore",
+	"s7_ember",
+	"s8_frost",
+	"s9_woodland",
+	"s10_highland",
+	"s11_orbit",
+	"s12_ruin",
+	"s13_tree_detail",
+	"s14_third_person",
+	"s15_relief_map",
+	"s16_terrace",
+	"s17_valley",
+	"s18_meadow",
+	"s19_broadleaf",
+	"s20_wetland",
+	"s21_drygrass",
+	"s22_tundra",
+	"s23_ship_parked",
+	"s24_ship_low",
+	"s25_waterfall",
+	"s28_canyon",
+	"s29_ruin_kit",
+	"s29b_figures",
+	"s29c_details",
+	"s29c_details_side",
+	"s29d_silhouette",
+	"s49_range_from_spawn",
+	"s50_horn_peak",
+	"s51_canyon_rim",
+	"s52_canyon_floor",
+	"s53_mountain_pass",
+]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -16,6 +53,8 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.set_third_person(false)
 	director.time_paused = true
 	match name:
+		"s49_range_from_spawn", "s50_horn_peak", "s51_canyon_rim", "s52_canyon_floor", "s53_mountain_pass":
+			LandformShots.place(name, player, planet, director)
 		"s25_waterfall", "s28_canyon":
 			var data: HydrologyData = planet.noise.features.hydrology.data
 			var nearest: int = -1

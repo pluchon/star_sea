@@ -1,7 +1,7 @@
 class_name TerrainNoise
 extends RefCounted
 
-const MAX_HEIGHT: float = 2600.0
+const MAX_HEIGHT: float = 4300.0
 
 var radius: float
 var profile: int = 0

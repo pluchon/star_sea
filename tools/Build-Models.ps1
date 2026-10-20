@@ -1,4 +1,4 @@
-param([ValidateSet('ship', 'ruins', 'all')][string]$Target = 'all', [string]$Only = '')
+param([ValidateSet('ship', 'ruins', 'canyon', 'all')][string]$Target = 'all', [string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
@@ -16,6 +16,12 @@ try {
         if ($Only) { $modelArguments += @('--only', $Only) }
         & $blenderPath --background --python-exit-code 1 --python art/blender/build_ruin_kit.py -- @modelArguments
         if ($LASTEXITCODE -ne 0) { throw '遗迹构件生成失败。' }
+    }
+    if ($Target -in @('canyon','all')) {
+        $modelArguments = @('--out', 'game/models/landforms')
+        if ($Only) { $modelArguments += @('--only', $Only) }
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_canyon.py -- @modelArguments
+        if ($LASTEXITCODE -ne 0) { throw '峡谷岩石模型生成失败。' }
     }
 }
 finally { Pop-Location }

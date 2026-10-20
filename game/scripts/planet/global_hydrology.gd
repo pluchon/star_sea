@@ -26,14 +26,17 @@ func _init(value: HydrologyData, planet_radius: float) -> void:
 				_inverse_lengths[index] = 1.0 / maxf(_vectors[index].length_squared(), 0.0001)
 
 
-func nearest(direction: Vector3) -> Vector4:
-	var bucket: int = HydrologyData.cell_at(direction, HydrologyData.BUCKET_GRID)
+func nearest(direction: Vector3, carving: bool = false) -> Vector4:
+	var fine: bool = carving and not data.carve_offsets.is_empty()
+	var bucket: int = HydrologyData.cell_at(direction, HydrologyData.CARVE_GRID if fine else HydrologyData.BUCKET_GRID)
+	var offsets: PackedInt32Array = data.carve_offsets if fine else data.bucket_offsets
+	var segments: PackedInt32Array = data.carve_segments if fine else data.bucket_segments
 	var point: Vector3 = direction * radius
 	var minimum: float = INF
 	var best: int = -1
 	var weight: float = 0.0
-	for cursor: int in range(data.bucket_offsets[bucket], data.bucket_offsets[bucket + 1]):
-		var index: int = data.bucket_segments[cursor]
+	for cursor: int in range(offsets[bucket], offsets[bucket + 1]):
+		var index: int = segments[cursor]
 		var offset: Vector3 = point - _positions[index]
 		var along: Vector3 = _vectors[index]
 		var t: float = clampf(offset.dot(along) * _inverse_lengths[index], 0.0, 1.0)
@@ -54,7 +57,7 @@ func lake_surface(direction: Vector3) -> float:
 
 
 func carve(direction: Vector3, height: float) -> float:
-	var nearest_value: Vector4 = nearest(direction)
+	var nearest_value: Vector4 = nearest(direction, true)
 	if nearest_value.w < 0.0:
 		return height
 	var distance: float = nearest_value.x

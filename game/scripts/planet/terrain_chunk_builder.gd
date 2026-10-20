@@ -25,12 +25,14 @@ static func build(noise: TerrainNoise, normal: Vector3, axis_a: Vector3, axis_b:
 	var vertices: PackedVector3Array = PackedVector3Array()
 	var normals: PackedVector3Array = PackedVector3Array()
 	var colors: PackedColorArray = PackedColorArray()
+	var marks: PackedByteArray = PackedByteArray()
 	var water_vertices: PackedVector3Array = PackedVector3Array()
 	var water_normals: PackedVector3Array = PackedVector3Array()
 	var vertex_count: int = (grid + 1) * (grid + 1)
 	vertices.resize(vertex_count)
 	normals.resize(vertex_count)
 	colors.resize(vertex_count)
+	marks.resize(vertex_count * 4)
 	if minimum_height < 0.0 and not with_faces:
 		water_vertices.resize(vertex_count)
 		water_normals.resize(vertex_count)
@@ -46,6 +48,9 @@ static func build(noise: TerrainNoise, normal: Vector3, axis_a: Vector3, axis_b:
 			vertices[index] = position - center
 			normals[index] = vertex_normal
 			colors[index] = Color(clampf(heights[padded_index] / TerrainNoise.MAX_HEIGHT * 0.5 + 0.5, 0.0, 1.0), 1.0 - vertex_normal.dot(direction), noise.moisture(direction), noise.woodland(direction))
+			var special: Color = noise.features.surface_marks(direction, heights[padded_index], sqrt(maxf(0.0, 1.0 / maxf(pow(vertex_normal.dot(direction), 2), 0.001) - 1.0))) if noise.features != null else Color(0, 0, 0, 0)
+			for channel: int in 4:
+				marks[index * 4 + channel] = int(clampf(special[channel], 0, 1) * 255.0)
 			if not water_vertices.is_empty():
 				water_vertices[index] = direction * noise.radius - center
 				water_normals[index] = direction
@@ -87,12 +92,16 @@ static func build(noise: TerrainNoise, normal: Vector3, axis_a: Vector3, axis_b:
 		edges.append(edge_indices)
 	var water_indices: PackedInt32Array = indices.duplicate()
 	for edge: PackedInt32Array in edges:
+		for index: int in edge:
+			for channel: int in 4:
+				marks.append(marks[index * 4 + channel])
 		_append_skirt(vertices, normals, colors, indices, edge, center, skirt)
 	var terrain_arrays: Array = []
 	terrain_arrays.resize(Mesh.ARRAY_MAX)
 	terrain_arrays[Mesh.ARRAY_VERTEX] = vertices
 	terrain_arrays[Mesh.ARRAY_NORMAL] = normals
 	terrain_arrays[Mesh.ARRAY_COLOR] = colors
+	terrain_arrays[Mesh.ARRAY_CUSTOM0] = marks
 	terrain_arrays[Mesh.ARRAY_INDEX] = indices
 	var water_arrays: Array = []
 	if not water_vertices.is_empty():

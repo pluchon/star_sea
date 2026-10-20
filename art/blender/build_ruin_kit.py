@@ -7,6 +7,8 @@ from pathlib import Path
 import random
 import struct
 import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ruin_revision as revision
 
 import bpy
 import bmesh
@@ -19,12 +21,27 @@ PARTS = []
 COLLISIONS = []
 
 
-def repair_vertex_colors(path, vines=False):
+def repair_vertex_colors(path, samples):
     """根据最终顶点位置校正导出文件中的 RGBA 通道，避免黑斑。"""
     payload = bytearray(path.read_bytes())
     json_size = struct.unpack_from("<I", payload, 12)[0]
     document = json.loads(payload[20:20 + json_size])
     binary_start = 28 + json_size
+    buckets = {}
+    for point, rgba in (samples or {}).items():
+        key = tuple(round(value * 1000) for value in point)
+        buckets.setdefault(key, []).append((point, rgba))
+
+    def nearest_color(point):
+        exact = (samples or {}).get(tuple(round(value, 5) for value in point))
+        if exact is not None:
+            return exact
+        key = tuple(round(value * 1000) for value in point)
+        candidates = [item for x in (-1, 0, 1) for y in (-1, 0, 1) for z in (-1, 0, 1)
+                      for item in buckets.get((key[0] + x, key[1] + y, key[2] + z), [])]
+        if not candidates:
+            raise ValueError("导出顶点没有对应颜色：" + str(point))
+        return min(candidates, key=lambda item: sum((a - b) ** 2 for a, b in zip(point, item[0])))[1]
 
     def layout(index):
         accessor = document["accessors"][index]
@@ -43,8 +60,8 @@ def repair_vertex_colors(path, vines=False):
             code, maximum = {5121: ("B", 255), 5123: ("H", 65535), 5126: ("f", 1)}[colors["componentType"]]
             color_size = struct.calcsize("<4" + code)
             for index in range(positions["count"]):
-                height = struct.unpack_from("<3f", payload, position_start + index * position_view.get("byteStride", 12))[1]
-                rgba = (.65 + .35 * min(max(height / 3, 0), 1), min(max(height / 2, 0), 1), float(vines), 1.0)
+                point = struct.unpack_from("<3f", payload, position_start + index * position_view.get("byteStride", 12))
+                rgba = nearest_color(point)
                 values = rgba if code == "f" else tuple(round(value * maximum) for value in rgba)
                 struct.pack_into("<4" + code, payload, color_start + index * color_view.get("byteStride", color_size), *values)
     path.write_bytes(payload)
@@ -65,7 +82,7 @@ def box(position, size, kind="stone", rotation=0, collision=True):
         COLLISIONS.append({"kind": "box", "size": list(size), "position": list(position), "rotation": rotation})
     # 短倒角形成石材断面，不靠照片纹理表现细节。
     bevel = obj.modifiers.new("石材倒角", "BEVEL")
-    bevel.width = min(size) * .045
+    bevel.width = min(.03, min(size) * .12)
     bevel.segments = 1
     bpy.ops.object.modifier_apply(modifier=bevel.name)
     return finish(obj, kind)
@@ -111,19 +128,85 @@ def ring(position, radius, tube, kind="patina", upright=False, start=0, end=math
 
 
 def glyph(position, radius=.32):
-    ring(position, radius, .025, "glyph", upright=True, steps=12)
-    box((position[0], position[1], position[2] - radius * 1.8), (.045, .035, radius * 1.7), "glyph", collision=False)
+    ring_and_path(position, (0, 1, 0), radius * 2)
 
 
-def arch(width, depth, height, broken=False, thickness=None):
+def ring_and_path(position, normal, diameter, path_length=None, width=None):
+    """用共用比例生成凹槽和槽底光纹，石面减去相同轮廓，避免光纹埋在石内。"""
+    normal = Vector(normal).normalized()
+    center = Vector(position)
+    upward = Vector((0, -1, 0)) if normal.z > .9 else Vector((0, 0, 1))
+    right = normal.cross(upward).normalized()
+    upward = right.cross(normal).normalized()
+    radius = diameter * .5
+    stroke = width or min(.06, diameter * .065)
+    length = diameter * 1.2 if path_length is None else path_length
+    vertices, faces = [], []
+    steps = 8 if diameter <= .3 else (12 if diameter <= .8 else 24)
+    for index in range(steps + 1):
+        angle = index * math.tau / steps
+        for r in (radius - stroke * .5, radius + stroke * .5):
+            vertices.append(center + (right * math.cos(angle) + upward * math.sin(angle)) * r)
+        if index:
+            a = (index - 1) * 2
+            faces.append((a, a + 1, a + 3, a + 2))
+    base = len(vertices)
+    for x, z in [(-stroke / 2, -radius), (stroke / 2, -radius), (stroke / 2, -radius - length), (-stroke / 2, -radius - length)]:
+        vertices.append(center + right * x + upward * z)
+    faces.append(tuple(range(base, base + 4)))
+    obj = revision.mesh(sys.modules[__name__], "环与径", vertices, faces, "glyph")
+    # 凹槽先刻进承载物，光纹放在低于原表面一厘米的槽底。
+    cutter_vertices, cutter_faces = [], []
+    for index in range(steps):
+        angle = index * math.tau / steps
+        for r, depth in [(radius - stroke / 2, -.03), (radius + stroke / 2, -.03), (radius + stroke / 2, .03), (radius - stroke / 2, .03)]:
+            cutter_vertices.append(center + (right * math.cos(angle) + upward * math.sin(angle)) * r + normal * depth)
+        for side in range(4):
+            a, b = index * 4 + side, index * 4 + (side + 1) % 4
+            cutter_faces.append((a, b, ((index + 1) % steps) * 4 + (side + 1) % 4, ((index + 1) % steps) * 4 + side))
+    base = len(cutter_vertices)
+    for depth in (-.03, .03):
+        for x, z in [(-stroke / 2, -radius), (stroke / 2, -radius), (stroke / 2, -radius - length), (-stroke / 2, -radius - length)]:
+            cutter_vertices.append(center + right * x + upward * z + normal * depth)
+    for face in [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]:
+        cutter_faces.append(tuple(base + index for index in face))
+    cutter = revision.mesh(sys.modules[__name__], "刻纹切割体", cutter_vertices, cutter_faces)
+    PARTS.remove(cutter)
+    bm = bmesh.new()
+    bm.from_mesh(cutter.data)
+    bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+    bm.to_mesh(cutter.data)
+    bm.free()
+    bpy.context.view_layer.update()
+    for target in PARTS[:-1]:
+        if target.data.materials[0].name not in ("stone", "patina"):
+            continue
+        modifier = target.modifiers.new("环与径凹槽", "BOOLEAN")
+        modifier.operation = "DIFFERENCE"
+        modifier.object = cutter
+        modifier.use_self = True
+        bpy.context.view_layer.objects.active = target
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+    for vertex in obj.data.vertices:
+        vertex.co -= normal * .012
+
+
+def arch(width, depth, height, broken=False, thickness=None, count=12, coursed=False):
     radius = width / 2
     thickness = width * .13 if thickness is None else thickness
     rise = min(radius, height * .55)
     leg = height - rise
-    box((-radius + thickness / 2, 0, leg / 2), (thickness, depth, leg))
-    box((radius - thickness / 2, 0, leg / 2), (thickness, depth, leg))
+    for side in (-1, 1):
+        if coursed:
+            rows = max(1, round(leg / .75))
+            for row in range(rows):
+                box((side * (radius - thickness / 2), 0, (row + .5) * leg / rows), (thickness, depth, leg / rows - .015), collision=False)
+            box((side * (radius - thickness / 2 + .025), 0, .15), (thickness + .05, depth + .04, .3), collision=False)
+            revision.occlude(box((side * (radius - thickness / 2), 0, leg / 2), (thickness - .02, depth - .02, leg), collision=False))
+        else:
+            box((side * (radius - thickness / 2), 0, leg / 2), (thickness, depth, leg))
     # 上部拱石独立分块，断口保持不规则。
-    count = 12
     for index in range(count):
         if broken and index in (5, 6):
             continue
@@ -135,40 +218,10 @@ def arch(width, depth, height, broken=False, thickness=None):
     COLLISIONS.extend([{"kind": "arch", "width": width, "depth": depth, "height": height, "broken": broken, "thickness": thickness}])
 
 
-def figure(height, broken=False, kneel=False, echo=False):
-    scale = 1.0 if kneel else height / 4.6
-    robe_height = 1.8 if kneel else 3.3 * scale
-    robe = cylinder((0, 0, robe_height / 2), .70 * scale, robe_height, top=.32 * scale, collision=False)
-    robe.scale.y = 1.2 / 1.4
-    robe.name = "Robe"
-    head_height = 2.25 if kneel else 4.05 * scale
-    hood = sphere((0, -.02 * scale, head_height), (.85 * scale, .95 * scale, 1.1 * scale))
-    hood.name = "Head"
-    # 兜帽前方的深铜阴影保持无脸的轮廓。
-    if not broken:
-        face = sphere((0, .36 * scale, head_height), (.48 * scale, .06 * scale, .63 * scale), "patina")
-        face.name = "FaceShadow"
-        matrix = face.matrix_world.copy()
-        face.parent = hood
-        face.matrix_world = matrix
-    else:
-        PARTS.remove(hood)
-        bpy.data.objects.remove(hood, do_unlink=True)
-    for side in (-1, 1):
-        if broken and side == 1:
-            continue
-        obj = box((side * .55 * scale, .16 * scale, 1.65 if kneel else 2.6 * scale), (.5 * scale, .7 * scale, .42 * scale), collision=False)
-        obj.name = "ArmLeft" if side < 0 else "ArmRight"
-    ring((0, .54 * scale, 1.8 if kneel else 2.8 * scale), .3 * scale, .055 * scale, upright=True, steps=16)
-    PARTS[-1].name = "Ring"
-    if kneel:
-        sphere((-.35, .35, .35), (.8, 1.3, .7))
-    collision_height = robe_height if broken else height
-    COLLISIONS.append({"kind": "box", "size": [1.4 * scale, 1.4 if kneel else 1.1 * scale, collision_height], "position": [0, 0, collision_height / 2], "rotation": 0})
-
-
 def piece(name, broken=False):
     rng = random.Random(20261020 + sum(name.encode()) + broken)
+    if revision.revise(sys.modules[__name__], name):
+        return
     if name in ("floor_slab", "plinth", "lintel", "wall", "wall_low", "bridge_pier", "aqueduct_pier", "road_stone", "stele", "standing_stone", "mural_panel"):
         sizes = {"floor_slab": (2, 2, .4), "plinth": (8, 8, 1.2), "lintel": (4, .6, .6),
                  "wall": (2, .6, 3.6), "wall_low": (2, .5, 1), "bridge_pier": (2, 4, 6),
@@ -183,7 +236,7 @@ def piece(name, broken=False):
         else:
             box((0, 0, height / 2), (width, depth, height))
         if name in ("stele", "mural_panel") and not broken:
-            glyph((0, depth / 2 - .024, height * .7), .3 if name == "stele" else .75)
+            ring_and_path((0 if name == "stele" else 1.55, depth / 2, 2.6 if name == "stele" else .68), (0, 1, 0), .7 if name == "stele" else .25)
     elif name in ("plaza_ring", "plinth_round"):
         radius, height = (3, .5) if name == "plaza_ring" else (5, 1.2)
         stone = cylinder((0, 0, height / 2), radius, height, sides=24)
@@ -192,7 +245,7 @@ def piece(name, broken=False):
                 if vertex.co.z > 0:
                     vertex.co.z -= height * .3 * max(math.sin(math.atan2(vertex.co.y, vertex.co.x) * 3), 0)
         if name == "plaza_ring":
-            ring((0, 0, height + .005), radius * .65, .035, "glyph", end=4.9 if broken else math.tau)
+            ring_and_path((0, 0, height), (0, 0, 1), 3, path_length=1.48, width=.3)
     elif name == "steps":
         for index in range(6 if not broken else 5):
             box((0, -1.8 + (index + .5) * .6, (index + 1) * .125), (4, .6, (index + 1) * .25), collision=False)
@@ -204,7 +257,17 @@ def piece(name, broken=False):
             box((5 * math.sin(angle), 5 * math.cos(angle) - 5, height / 2), (.33, .6, height), rotation=-angle)
     elif name == "wall_window":
         for side in (-1, 1):
-            box((side * .65, 0, 1.8 if not broken else 1.4), (.7, .6, 3.6 if not broken else 2.8))
+            core = revision.occlude(box((side * .65, -.025, 1.8), (.67, .53, 3.6), collision=False))
+            for vertex in core.data.vertices:
+                if vertex.co.y > 0:
+                    vertex.co.y += .05 - (vertex.co.z + core.location.z) / 3.6 * .1
+            for row in range(5):
+                obj = box((side * .65, -.025, (row + .5) * .69 + .075), (.7, .55, .675))
+                for vertex in obj.data.vertices:
+                    if vertex.co.y > 0:
+                        vertex.co.y += .05 - (vertex.co.z + obj.location.z) / 3.6 * .1
+            box((side * .65, 0, .15), (.7, .6, .3))
+        box((0, 0, 3.525), (2, .58, .15))
         box((0, 0, .45), (.6, .6, .9))
         box((0, 0, 3.05), (.6, .6, 1.1 if not broken else .5))
         for index in range(8):
@@ -215,13 +278,19 @@ def piece(name, broken=False):
         width, depth, height = {"door": (2.4, .8, 4.2), "arch": (4, .8, 5), "temple_gate": (6, 2, 8), "cave_mouth": (10, 4, 8)}[name]
         if name == "door":
             # 净空宽 1.6 米、高 3.2 米，上方保留厚实的门楣。
-            arch(width, depth, 3.6, broken, thickness=.4)
+            arch(width, depth, 3.6, broken, thickness=.4, coursed=True)
             if not broken:
                 box((0, 0, 3.9), (2.4, .8, .6))
         else:
-            arch(width, depth, height, broken)
+            arch(width, depth, height, broken, count=7 if name == "temple_gate" else 12)
         if name != "cave_mouth" and not broken:
-            glyph((0, depth / 2 - .006, height - .4), .22 if name == "door" else .55)
+            if name == "door":
+                ring_and_path((0, depth / 2, 3.97), (0, 1, 0), .4)
+            elif name == "temple_gate":
+                ring_and_path((0, depth / 2, 7.59), (0, 1, 0), .65)
+                for side in (-1, 1):
+                    for row in range(5):
+                        ring_and_path((side * 2.58, depth / 2, 1.2 + row * 1.05), (0, 1, 0), .3)
     elif name in ("column", "column_fallen"):
         if name == "column":
             cylinder((0, 0, .12), .35, .24)
@@ -277,31 +346,23 @@ def piece(name, broken=False):
             cylinder((0, 0, .8 if broken else 1.05), .12, 1.6 if broken else 2.1)
             if not broken:
                 ring((0, 0, 2.38), .16, .04, upright=True, steps=12)
-                cylinder((0, 0, 2.38), .075, .15, "glyph", collision=False, sides=8)
+                ring_and_path((0, .045, 2.45), (0, 1, 0), .14, width=.018)
         elif name == "brazier":
             for index in range(3):
                 angle = index * math.tau / 3
                 cylinder((.65 * math.cos(angle), .65 * math.sin(angle), .35), .1, .7, "patina")
             cylinder((0, 0, .9), .7, .5, "patina", top=1.2)
             ring((0, 0, 1.3), 1.1, .1, end=5.4 if broken else math.tau)
+            for index in range(3):
+                angle = index * math.tau / 3
+                ring_and_path((math.cos(angle) * 1.08, math.sin(angle) * 1.08, 1.05), (math.cos(angle), math.sin(angle), 0), .3)
         else:
             box((0, 0, .5), (3, 2, 1))
             ring((0, 0, 3.5), 2.25, .25, upright=True, end=5.7 if broken else math.tau)
+            ring_and_path((0, 1, .81), (0, 1, 0), .35)
             COLLISIONS.append({"kind": "ring", "radius": 2.25, "tube": .25, "height": 3.5, "end": 5.7 if broken else math.tau})
-    elif name in ("statue", "statue_kneel", "echo_figure"):
-        figure(2.8 if name == "statue_kneel" else (2.1 if name == "echo_figure" else 4.6), broken, kneel=name == "statue_kneel")
-    elif name.startswith("rubble"):
-        for index in range(6):
-            x, y = rng.uniform(-1.1, 1.1), rng.uniform(-1.1, 1.1)
-            height = rng.uniform(.25, .6)
-            box((x, y, height / 2), (rng.uniform(.3, .8), rng.uniform(.3, .8), height), rotation=rng.random(), collision=False)
-        COLLISIONS.append({"kind": "box", "size": [2.8, 2.8, .5], "position": [0, 0, .25], "rotation": 0})
     elif name == "sand_drift":
         sphere((0, 0, .5), (3, 1.3, 1.0))
-    elif name.startswith("vines"):
-        for index in range(12):
-            x = math.sin(index * 1.7 + rng.random()) * .6
-            box((x, 0, .15 + index * .14), (.22, .025, .14), "cloth", collision=False)
     elif name == "tower_drum":
         cylinder((0, 0, 1.2 if broken else 1.5), 3.2, 2.4 if broken else 3, sides=24)
         for z in (.6, 2.4):
@@ -349,6 +410,14 @@ def export_collisions(name):
         kind = record["kind"]
         if kind == "box":
             block(record["position"], record["size"], record["rotation"])
+        elif kind == "convex":
+            convex(record["points"])
+        elif kind == "faces":
+            mesh = bpy.data.meshes.new("简化断面壳")
+            mesh.from_pydata(record["points"], [], [tuple(range(index, index + 3)) for index in range(0, len(record["points"]), 3)])
+            obj = bpy.data.objects.new(f"{name}_{len(result)}-colonly", mesh)
+            bpy.context.collection.objects.link(obj)
+            result.append(obj)
         elif kind == "cylinder":
             points = [(record["position"][0] + math.cos(index * math.tau / 12) * record["radius"],
                        record["position"][1] + math.sin(index * math.tau / 12) * record["radius"],
@@ -399,25 +468,72 @@ def export_collisions(name):
 
 
 def export_piece(name, output):
+    bpy.context.view_layer.update()
     bpy.ops.object.select_all(action="DESELECT")
     surfaces = {kind: [] for kind in COLORS}
+    surface_colors = {kind: [] for kind in COLORS}
+    samples = {}
+    vines = name.startswith("vines") or name == "vine_wall"
     for obj in PARTS:
+        obj.data.update()
         obj.data.calc_loop_triangles()
-        vertices = surfaces[obj.data.materials[0].name]
+        kind = obj.data.materials[0].name
+        vertices = surfaces[kind]
+        shade = obj.data.attributes.get("shade")
+        uv = obj.data.uv_layers.get("UVMap") or obj.data.uv_layers.new(name="UVMap")
+        color = obj.data.color_attributes.get("Color") or obj.data.color_attributes.new(name="Color", type="FLOAT_COLOR", domain="CORNER")
+        # 新建属性会改变 CustomData 布局，必须重新取得已有属性，避免读写到顶点缓冲。
+        uv = obj.data.uv_layers["UVMap"]
+        color = obj.data.color_attributes["Color"]
+        shade = obj.data.attributes.get("shade")
+        loop_colors = {}
+        for polygon in obj.data.polygons:
+            for loop in polygon.loop_indices:
+                index = obj.data.loops[loop].vertex_index
+                point = obj.matrix_world @ obj.data.vertices[index].co
+                ao = .65 + .25 * min(max(point.z / 3, 0), 1)
+                if shade and shade.data[index].value > .01:
+                    value = shade.data[index].value
+                    ao = ao * 1.08 if value > 1.02 else value
+                if ao >= .6:
+                    ao *= 1 + .025 * abs(polygon.normal.z)
+                rgba = (min(ao, 1.0), 0 if vines else min(max(point.z / 2, 0), 1), float(vines), 1)
+                color.data[loop].color = rgba
+                loop_colors[loop] = rgba
+                axis = max(range(3), key=lambda value: abs(polygon.normal[value]))
+                uv.data[loop].uv = (point.y, point.z) if axis == 0 else ((point.x, point.z) if axis == 1 else (point.x, point.y))
+                # 独立动作节点的 POSITION 是局部坐标，按最终导出坐标修复颜色。
+                local = obj.data.vertices[index].co
+                sample = local if name.startswith("echo_") else point
+                samples[tuple(round(value, 5) for value in (sample.x, sample.z, -sample.y))] = rgba
         for triangle in obj.data.loop_triangles:
             corners = [obj.matrix_world @ obj.data.vertices[index].co for index in triangle.vertices]
             if (corners[1] - corners[0]).cross(corners[2] - corners[0]).length_squared < 1e-12:
                 continue
-            for point in corners:
+            for point, loop in zip(corners, triangle.loops):
                 vertices.append([round(point.x, 6), round(point.z, 6), round(-point.y, 6)])
+                surface_colors[kind].append(list(loop_colors[loop]))
+    # Blender 可能并行计算三角形；固定顺序后，同源数据可逐字节重复生成。
+    for kind in COLORS:
+        entries = []
+        for start in range(0, len(surfaces[kind]), 3):
+            points = surfaces[kind][start:start + 3]
+            rgba = surface_colors[kind][start:start + 3]
+            first = min(range(3), key=lambda index: tuple(points[index]))
+            order = [(first + index) % 3 for index in range(3)]
+            entries.append(([points[index] for index in order], [rgba[index] for index in order]))
+        entries.sort(key=lambda item: (item[0], item[1]))
+        surfaces[kind] = [point for points, rgba in entries for point in points]
+        surface_colors[kind] = [color for points, rgba in entries for color in rgba]
     # 合并为单网格，glb 与程序化路线按同一组材质分面。
-    vertices, triangles, kinds = [], [], []
+    vertices, triangles, kinds, colors = [], [], [], []
     for kind, points in surfaces.items():
         for index in range(0, len(points), 3):
             base = len(vertices)
             vertices.extend((p[0], -p[2], p[1]) for p in points[index:index + 3])
             triangles.append((base, base + 1, base + 2))
             kinds.append(list(COLORS).index(kind))
+            colors.extend(surface_colors[kind][index:index + 3])
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(vertices, [], triangles)
     for material in MATERIALS.values():
@@ -429,23 +545,25 @@ def export_piece(name, output):
     # UV 使用米制投影；顶点色 R 为简化环境遮蔽，G 为布料摆动权重。
     uv = mesh.uv_layers.new(name="UVMap")
     color = mesh.color_attributes.new(name="Color", type="FLOAT_COLOR", domain="CORNER")
+    uv = mesh.uv_layers["UVMap"]
+    color = mesh.color_attributes["Color"]
     for polygon in mesh.polygons:
         for loop_index in polygon.loop_indices:
             point = mesh.vertices[mesh.loops[loop_index].vertex_index].co
             axis = max(range(3), key=lambda value: abs(polygon.normal[value]))
             uv.data[loop_index].uv = (point.y, point.z) if axis == 0 else ((point.x, point.z) if axis == 1 else (point.x, point.y))
-            color.data[loop_index].color = (.65 + .35 * min(max(point.z / 3, 0), 1), min(max(point.z / 2, 0), 1), 1 if name.startswith("vines") else 0, 1)
+            color.data[loop_index].color = colors[mesh.loops[loop_index].vertex_index]
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     colliders = export_collisions(name)
     bpy.ops.object.select_all(action="DESELECT")
-    for exported in (PARTS if name == "echo_figure" else [obj]) + colliders:
+    for exported in (PARTS if name.startswith("echo_") else [obj]) + colliders:
         exported.select_set(True)
     bpy.ops.export_scene.gltf(filepath=str(output / f"{name}.glb"), use_selection=True, export_format="GLB", export_yup=True, export_apply=True, export_vertex_color="ACTIVE", export_active_vertex_color_when_no_material=True)
-    repair_vertex_colors(output / f"{name}.glb", name.startswith("vines"))
+    repair_vertex_colors(output / f"{name}.glb", samples)
     minimum = [min(point[axis] for points in surfaces.values() for point in points) for axis in range(3)]
     maximum = [max(point[axis] for points in surfaces.values() for point in points) for axis in range(3)]
-    result = {"surfaces": surfaces, "collisions": list(COLLISIONS), "bounds_min": minimum, "bounds_size": [b - a for a, b in zip(minimum, maximum)], "triangles": len(triangles)}
+    result = {"surfaces": surfaces, "colors": surface_colors, "collisions": list(COLLISIONS), "bounds_min": minimum, "bounds_size": [b - a for a, b in zip(minimum, maximum)], "triangles": len(triangles)}
     for item in list(bpy.context.scene.objects):
         bpy.data.objects.remove(item, do_unlink=True)
     PARTS.clear()
@@ -467,12 +585,30 @@ def main():
         material = bpy.data.materials.new(name)
         material.diffuse_color = color
         MATERIALS[name] = material
-    names = ["floor_slab", "plaza_ring", "plinth", "plinth_round", "steps", "wall", "wall_arc", "wall_window", "door", "wall_low", "column", "column_fallen", "lintel", "arch", "dome", "bridge_span", "bridge_pier", "aqueduct_channel", "aqueduct_pier", "road_stone", "stele", "standing_stone", "lamp_post", "brazier", "ring_monument", "statue", "statue_kneel", "cave_mouth", "temple_gate", "mural_panel", "rubble", "rubble_1", "rubble_2", "sand_drift", "vines", "vines_1", "tower_drum", "tower_stair", "tower_crown", "echo_figure"]
+    names = ["floor_slab", "plaza_ring", "plinth", "plinth_round", "steps", "wall", "wall_arc", "wall_window", "door", "wall_low", "column", "column_fallen", "lintel", "arch", "dome", "bridge_span", "bridge_pier", "aqueduct_channel", "aqueduct_pier", "road_stone", "stele", "standing_stone", "lamp_post", "brazier", "ring_monument", "statue", "statue_kneel", "cave_mouth", "temple_gate", "mural_panel", "rubble", "rubble_1", "rubble_2", "sand_drift", "vines", "vines_1", "tower_drum", "tower_stair", "tower_crown", "echo_figure", "echo_child", "vine_wall", "statue_arm"]
     records = {}
     for name in names:
-        for broken in (False, True) if name not in ("rubble", "rubble_1", "rubble_2", "sand_drift", "vines", "vines_1", "echo_figure", "column_fallen") else (False,):
+        for broken in ((True,) if name == "statue_arm" else ((False, True) if name not in ("rubble", "rubble_1", "rubble_2", "sand_drift", "vines", "vines_1", "echo_figure", "echo_child", "vine_wall", "column_fallen") else (False,))):
             key = name + ("_broken" if broken else "")
-            piece(name, broken)
+            piece(name)
+            if broken and name != "statue_arm":
+                seed = 20261020 + sum((index + 1) * byte for index, byte in enumerate(name.encode()))
+                if name == "statue":
+                    head = next(obj for obj in PARTS if obj.name == "Head")
+                    PARTS.remove(head)
+                    bpy.data.objects.remove(head, do_unlink=True)
+                    retained = [obj for obj in PARTS if obj.name != "Robe"]
+                    PARTS[:] = [obj for obj in PARTS if obj.name == "Robe"]
+                    revision.fracture(sys.modules[__name__], seed, fraction=.97)
+                    PARTS.extend(retained)
+                else:
+                    revision.fracture(sys.modules[__name__], seed)
+                # 为断面周边补足真实几何细分，残破件的细节预算高于完好件。
+                reference = records.get(name, records.get("statue", {})).get("triangles", 0)
+                target = int(reference * 1.04) + 8
+                revision.refine_fractures(sys.modules[__name__], target)
+            if name == "statue_arm":
+                revision.refine_fractures(sys.modules[__name__], int(records["statue"]["triangles"] * 1.04) + 8)
             records[key] = export_piece(key, output)
     (output / "geometry.json").write_text(json.dumps(records, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"已生成 {len(records)} 个构件。最大面数 {max(item['triangles'] for item in records.values())}")

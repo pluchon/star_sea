@@ -16,9 +16,8 @@ func _begin() -> void:
 			failures.append(piece + " 缺少网格。")
 			continue
 		var count: int = model.get_faces().size() / 3
-		if piece != "echo_figure":
-			_check_vertex_colors(model, piece, failures)
-		var limit: int = 5000 if piece.begins_with("statue") else (300 if piece.begins_with("rubble") or piece.begins_with("stele") or piece.begins_with("lamp_post") else (4000 if piece.begins_with("bridge") or piece.begins_with("dome") or piece.begins_with("brazier") else 1200))
+		_check_vertex_colors(model, procedural, piece, failures)
+		var limit: int = _triangle_limit(piece)
 		if count > limit:
 			failures.append(piece + " 超出三角形预算：%d > %d" % [count, limit])
 		var bounds: AABB = model.get_aabb()
@@ -37,25 +36,55 @@ func _begin() -> void:
 		var native_collisions: int = imported.find_children("*", "CollisionShape3D", true, false).size()
 		if native_collisions != shapes.size():
 			failures.append(piece + " glb 碰撞与程序化路线数量不一致。")
-		if piece == "echo_figure" and (imported.find_child("Head", true, false) == null or imported.find_child("ArmLeft", true, false) == null or imported.find_child("ArmRight", true, false) == null):
-			failures.append("回声人影缺少可独立驱动的身体节点。")
+		if piece.begins_with("echo_"):
+			_check_joints(imported, piece, bounds.size.y, failures)
+		if piece.ends_with("_broken"):
+			var whole: String = "statue" if piece == "statue_arm_broken" else piece.trim_suffix("_broken")
+			var intact: Mesh = RuinKit.mesh(whole)
+			var intact_bounds: AABB = intact.get_aabb()
+			if bounds.size.y > intact_bounds.size.y + 0.005 or bounds.size.x > intact_bounds.size.x * 1.5 or bounds.size.z > intact_bounds.size.z * 1.5:
+				failures.append(piece + " 的残破包围盒超出完好版范围。")
+			if count <= intact.get_faces().size() / 3:
+				failures.append(piece + " 的断面缺少几何细分。")
 		imported.free()
-		var needs_collision: bool = not piece.begins_with("vines") and piece != "sand_drift" and piece != "echo_figure"
+		var needs_collision: bool = not piece.begins_with("vines") and piece != "vine_wall" and piece != "sand_drift" and not piece.begins_with("echo_")
 		if needs_collision and shapes.is_empty():
 			failures.append(piece + " 缺少碰撞。")
 		for shape: Shape3D in shapes:
 			if shape is ConcavePolygonShape3D and (shape as ConcavePolygonShape3D).get_faces().size() / 3 > 64:
 				failures.append(piece + " 的简化碰撞超过 64 个三角形。")
+			if shape is ConvexPolygonShape3D and (shape as ConvexPolygonShape3D).points.size() > 34:
+				failures.append(piece + " 的凸包碰撞超过 64 个面的顶点预算。")
+		if piece in ["echo_figure", "echo_child", "vine_wall", "vines", "vines_1"]:
+			var target_height: float = {"echo_figure": 2.1, "echo_child": 1.3, "vine_wall": 6.0, "vines": 1.8, "vines_1": 2.6}[piece]
+			if absf(bounds.size.y - target_height) > target_height * 0.05:
+				failures.append(piece + " 高度不符合修订规格。")
+			if piece in ["vine_wall", "vines", "vines_1"]:
+				var target_width: float = {"vine_wall": 3.0, "vines": 2.0, "vines_1": 1.2}[piece]
+				if absf(bounds.size.x - target_width) > target_width * 0.05 or bounds.position.z < -0.15 or bounds.end.z > -0.009:
+					failures.append(piece + " 宽度或贴墙距离不符合规格。")
 		records.append({"piece": piece, "triangles": count, "size": str(bounds.size), "collisions": shapes.size()})
 	var physics_failures: Array[String] = await _physical_checks()
 	failures.append_array(physics_failures)
+	_check_wall_recess(failures)
 	var report: Dictionary = {"passed": failures.is_empty(), "failures": failures, "pieces": records.size(), "records": records, "door_clearance_checked": true}
 	VerificationMetrics.write_json("res://../test-output/wanderer/ruin_kit_checks.json", report)
 	print(JSON.stringify({"passed": report["passed"], "pieces": records.size(), "failures": failures}))
 	quit(0 if failures.is_empty() else 1)
 
 
-func _check_vertex_colors(mesh: Mesh, piece: String, failures: Array[String]) -> void:
+func _check_vertex_colors(mesh: Mesh, reference: Mesh, piece: String, failures: Array[String]) -> void:
+	var expected_colors: Dictionary = {}
+	for surface: int in reference.get_surface_count():
+		var arrays: Array = reference.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+		for index: int in vertices.size():
+			var key: Vector3i = Vector3i((vertices[index] * 1000.0).round())
+			if not expected_colors.has(key):
+				expected_colors[key] = []
+			(expected_colors[key] as Array).append(colors[index])
+	var cavity_vertices: int = 0
 	for surface: int in mesh.get_surface_count():
 		var arrays: Array = mesh.surface_get_arrays(surface)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -65,10 +94,69 @@ func _check_vertex_colors(mesh: Mesh, piece: String, failures: Array[String]) ->
 			continue
 		for index: int in vertices.size():
 			var color: Color = colors[index]
-			var ao: float = lerpf(0.65, 1.0, clampf(vertices[index].y / 3.0, 0.0, 1.0))
-			if absf(color.r - ao) > 0.02 or color.a < 0.99 or absf(color.b - (1.0 if piece.begins_with("vines") else 0.0)) > 0.01:
+			if color.r < 0.14 or color.r > 1.01 or color.a < 0.99 or absf(color.b - (1.0 if piece.begins_with("vines") or piece == "vine_wall" else 0.0)) > 0.01:
 				failures.append(piece + " 的顶点颜色通道错位。")
 				return
+			var key: Vector3i = Vector3i((vertices[index] * 1000.0).round())
+			var found: bool = false
+			var candidates: Array = expected_colors.get(key, []).duplicate()
+			for x: int in range(-1, 2):
+				for y: int in range(-1, 2):
+					for z: int in range(-1, 2):
+						candidates.append_array(expected_colors.get(key + Vector3i(x, y, z), []))
+			for candidate: Color in candidates:
+				if absf(color.r - candidate.r) < 0.02 and absf(color.g - candidate.g) < 0.02 and absf(color.b - candidate.b) < 0.02:
+					found = true
+					break
+			if not found:
+				failures.append(piece + " 的模型颜色与备用网格不一致。")
+				return
+			if color.r < 0.2:
+				cavity_vertices += 1
+	if piece in ["statue", "statue_kneel", "statue_arm_broken", "echo_figure", "echo_child"] and cavity_vertices < 24:
+		failures.append(piece + " 缺少兜帽深腔的环境遮蔽。")
+
+
+func _triangle_limit(piece: String) -> int:
+	if piece.begins_with("statue"):
+		return 5000
+	if piece.begins_with("echo_"):
+		return 3000
+	if piece.begins_with("rubble"):
+		return 600
+	if piece.begins_with("stele") or piece.begins_with("lamp_post"):
+		return 300
+	if piece.begins_with("bridge") or piece.begins_with("dome") or piece.begins_with("brazier"):
+		return 4000
+	return 1200 if piece.begins_with("vines") else 1800
+
+
+func _check_wall_recess(failures: Array[String]) -> void:
+	# 使用可见三角形检查砌缝，不能用整块碰撞代替墙面是否连续的判断。
+	var height: float = 0.3 + (3.6 - 0.45) / 4.0
+	var eye: Vector3 = Vector3(0, height, -2)
+	var closest: Vector3 = Vector3.INF
+	var faces: PackedVector3Array = RuinKit.mesh("wall").get_faces()
+	for start: int in range(0, faces.size(), 3):
+		var hit: Variant = Geometry3D.ray_intersects_triangle(eye, Vector3.BACK, faces[start], faces[start + 1], faces[start + 2])
+		if hit is Vector3 and (hit as Vector3).z < closest.z:
+			closest = hit
+	var expected_z: float = -(0.3 - 0.1 * height / 3.6 - 0.01)
+	if not closest.is_finite() or absf(closest.z - expected_z) > 0.006:
+		failures.append("墙面砌缝需要一厘米深的连续内芯，不能贯穿墙体。")
+
+
+func _check_joints(imported: Node, piece: String, height: float, failures: Array[String]) -> void:
+	for joint: String in ["Head", "Robe", "ArmLeft", "ArmRight"]:
+		var node: Node3D = imported.find_child(joint, true, false) as Node3D
+		if node == null:
+			failures.append(piece + " 缺少关节节点：" + joint)
+			continue
+		var ratio: float = node.position.y / height
+		var lower: float = 0.80 if joint == "Head" else (0.4 if joint == "Robe" else 0.70)
+		var upper: float = 0.901 if joint == "Head" else (0.6 if joint == "Robe" else 0.95)
+		if ratio < lower or ratio > upper:
+			failures.append(piece + " 的 " + joint + " 原点不在关节附近：" + str(ratio))
 
 
 func _physical_checks() -> Array[String]:

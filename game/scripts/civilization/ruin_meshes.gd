@@ -31,7 +31,11 @@ static func mesh(piece: String) -> ArrayMesh:
 				var vertex: Vector3 = vector(points[start + corner])
 				builder.set_normal(normal)
 				var ao: float = lerpf(0.65, 1.0, clampf(vertex.y / 3.0, 0.0, 1.0))
-				builder.set_color(Color(ao, clampf(vertex.y / 2.0, 0.0, 1.0), 1.0 if piece.begins_with("vines") else 0.0))
+				var color: Color = Color(ao, clampf(vertex.y / 2.0, 0.0, 1.0), 1.0 if piece.begins_with("vines") or piece == "vine_wall" else 0.0)
+				if record.has("colors"):
+					var channels: Array = record["colors"][kind][start + corner]
+					color = Color(channels[0], channels[1], channels[2], channels[3])
+				builder.set_color(color)
 				var absolute: Vector3 = normal.abs()
 				builder.set_uv(Vector2(vertex.z, vertex.y) if absolute.x > absolute.y and absolute.x > absolute.z else (Vector2(vertex.x, vertex.z) if absolute.y > absolute.z else Vector2(vertex.x, vertex.y)))
 				builder.add_vertex(vertex)
@@ -48,7 +52,22 @@ static func collision_records(piece: String) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for record: Dictionary in recipes()[piece]["collisions"]:
 		var kind: String = record["kind"]
-		if kind == "box":
+		if kind == "convex":
+			var shape: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
+			var points: PackedVector3Array = []
+			for point: Array in record["points"]:
+				points.append(Vector3(point[0], point[2], -point[1]))
+			shape.points = points
+			result.append({"shape": shape, "transform": Transform3D.IDENTITY})
+		elif kind == "faces":
+			var shape: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+			var points: PackedVector3Array = []
+			for point: Array in record["points"]:
+				points.append(Vector3(point[0], point[2], -point[1]))
+			shape.set_faces(points)
+			shape.backface_collision = true
+			result.append({"shape": shape, "transform": Transform3D.IDENTITY})
+		elif kind == "box":
 			var shape: BoxShape3D = BoxShape3D.new()
 			var size: Vector3 = vector(record["size"])
 			shape.size = Vector3(size.x, size.z, size.y)

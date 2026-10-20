@@ -1,7 +1,7 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley", "s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra", "s23_ship_parked", "s24_ship_low", "s25_waterfall", "s28_canyon", "s29_ruin_kit"]
+const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley", "s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra", "s23_ship_parked", "s24_ship_low", "s25_waterfall", "s28_canyon", "s29_ruin_kit", "s29b_figures", "s29c_details", "s29c_details_side"]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -38,13 +38,23 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 			player.place_at(planet.to_global(eye_up * (planet.surface_radius(eye_up) + (2.0 if flag == 1 else 70.0))), -side, eye_up)
 			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(planet.to_global(up * (planet.radius + data.river_levels[nearest] + 3.0))), eye_up)
 			director.set_sun_altitude(up, (-forward + side).normalized(), 32.0)
-		"s29_ruin_kit":
+		"s29_ruin_kit", "s29b_figures", "s29c_details", "s29c_details_side":
 			var showcase: RuinShowcase = RuinShowcase.new()
 			planet.add_child(showcase)
-			showcase.build(planet)
-			player.place_at(showcase.to_global(Vector3(0, 105, 75)), forward, up)
-			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(showcase.global_position), up)
-			director.set_sun_altitude(up, (-forward + forward.cross(up)).normalized(), 35.0)
+			showcase.build(planet, name)
+			var eye: Vector3 = Vector3(0, 105, 75)
+			var target: Vector3 = Vector3.ZERO
+			if name != "s29_ruin_kit":
+				player.camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+				player.camera.size = 11.5 if name == "s29b_figures" else 15.0
+				eye = Vector3(7, 5.5, -21) if name == "s29b_figures" else Vector3(0, 6, -28)
+				target = Vector3(0, 2, 0)
+				if name == "s29c_details_side":
+					eye = Vector3(16, 8, -23)
+			player.place_at(showcase.to_global(eye), forward, up)
+			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(showcase.to_global(target)), up)
+			var light_forward: Vector3 = -forward if name == "s29_ruin_kit" else forward
+			director.set_sun_altitude(up, (light_forward + forward.cross(up)).normalized(), 18.0 if name == "s29b_figures" else 35.0)
 		"s23_ship_parked":
 			player.place_at(planet.to_global(up * (height + 0.05)), forward, up)
 			player.mode = StarSeaPlayer.Mode.WALK

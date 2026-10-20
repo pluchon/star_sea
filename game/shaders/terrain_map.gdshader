@@ -24,6 +24,11 @@ vec3 altitude_color(float height) {
 	return mix(pigment, vec3(0.92, 0.92, 0.83), smoothstep(1700.0, 2400.0, height));
 }
 
+float inland_water(vec2 uv) {
+	vec2 sample_uv = global_map ? vec2(fract(uv.x), clamp(uv.y, map_step.y * 0.5, 1.0 - map_step.y * 0.5)) : clamp(uv, vec2(0.0), vec2(1.0));
+	return texture(height_map, sample_uv).g;
+}
+
 void fragment() {
 	vec2 uv = center + (UV - 0.5) / zoom;
 	float height = elevation(uv);
@@ -39,5 +44,8 @@ void fragment() {
 	pigment = mix(pigment, pigment * 0.66, contour * 0.48 * step(2.0, height));
 	float coast = 1.0 - smoothstep(0.7, 1.8, abs(height) / max(fwidth(height), 0.02));
 	pigment = mix(pigment, vec3(0.89, 0.84, 0.62), coast * 0.65);
+	// 河湖用比海略浅的蓝绿色，水深越大颜色越深。
+	float water = inland_water(uv);
+	pigment = mix(pigment, mix(vec3(0.36, 0.62, 0.66), vec3(0.20, 0.42, 0.52), smoothstep(1.0, 12.0, water)) * illumination, smoothstep(0.05, 0.4, water));
 	COLOR = vec4(pigment, 1.0);
 }

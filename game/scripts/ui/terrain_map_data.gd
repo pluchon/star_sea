@@ -19,8 +19,9 @@ static func north(up: Vector3) -> Vector3:
 
 
 static func generate(noise: TerrainNoise, size: Vector2i, center: Vector3 = Vector3.ZERO, span: float = 1600.0) -> Dictionary:
+	# 每个像素两个通道：海拔，以及河湖的水深（不在河湖里为零）。
 	var heights: PackedFloat32Array = []
-	heights.resize(size.x * size.y)
+	heights.resize(size.x * size.y * 2)
 	var northward: Vector3 = north(center) if center != Vector3.ZERO else Vector3.UP
 	var eastward: Vector3 = center.cross(northward)
 	var minimum: float = INF
@@ -34,8 +35,9 @@ static func generate(noise: TerrainNoise, size: Vector2i, center: Vector3 = Vect
 				var distance: float = tangent.length()
 				direction = SurfaceSites.offset_direction(center, tangent / maxf(distance, 0.0001), distance, noise.radius)
 			var height: float = noise.height(direction)
-			heights[row * size.x + column] = height
+			heights[(row * size.x + column) * 2] = height
+			heights[(row * size.x + column) * 2 + 1] = maxf(noise.water_surface(direction) - height, 0.0)
 			minimum = minf(minimum, height)
 			maximum = maxf(maximum, height)
-	var image: Image = Image.create_from_data(size.x, size.y, false, Image.FORMAT_RF, heights.to_byte_array())
+	var image: Image = Image.create_from_data(size.x, size.y, false, Image.FORMAT_RGF, heights.to_byte_array())
 	return {"image": image, "center": center, "span": span, "minimum": minimum, "maximum": maximum}

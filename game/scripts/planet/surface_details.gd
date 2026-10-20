@@ -193,6 +193,12 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		var elevation: float = noise.height(direction)
 		if elevation < 3.0:
 			continue
+		# 河面和湖面下不放植被；河岸与湖岸留出芦苇带，树木离水再远一些。
+		var water_level: float = noise.water_surface(direction)
+		if elevation < water_level + 0.3:
+			continue
+		var river_gap: float = noise.river_distance(direction)
+		var waterside: bool = river_gap < 9.0 or elevation < water_level + 1.5
 		var moisture: float = noise.moisture(direction)
 		var temperature: float = noise.temperature(direction, elevation)
 		var grove: float = noise.woodland(direction)
@@ -202,7 +208,7 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		var tint: Color = Color.WHITE
 		var slope: float = noise.slope(direction, elevation)
 		if forest:
-			if elevation < 16.0 or elevation > 1600.0 or slope > 0.65 or temperature < 0.16:
+			if elevation < 16.0 or elevation > 1600.0 or slope > 0.65 or temperature < 0.16 or river_gap < 7.0 or waterside:
 				continue
 			if rng.randf() > 0.035 + forest_cover * 0.82:
 				continue
@@ -228,6 +234,9 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		elif noise.profile == 0 and index > 580 and elevation < 100.0 and moisture > 0.72 and slope < 0.3:
 			kind = "reeds"
 			scale_value = rng.randf_range(0.65, 1.05)
+		elif noise.profile == 0 and index > 540 and waterside and slope < 0.5 and temperature > 0.24:
+			kind = "reeds"
+			scale_value = rng.randf_range(0.7, 1.15)
 		elif noise.profile == 0 and index > 600 and forest_cover > 0.35 and moisture > 0.58:
 			kind = "fern"
 			scale_value = rng.randf_range(0.65, 1.4)

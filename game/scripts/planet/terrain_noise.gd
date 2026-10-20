@@ -5,6 +5,9 @@ const MAX_HEIGHT: float = 2600.0
 
 var radius: float
 var profile: int = 0
+var planet_seed: int = 0
+# 晨样板区的火山、河流与湖泊；其他星球为空。
+var features: TerrainFeatures
 var _continent: FastNoiseLite
 var _mountain: FastNoiseLite
 var _hills: FastNoiseLite
@@ -15,23 +18,26 @@ var _drainage: FastNoiseLite
 var _geology: FastNoiseLite
 
 
-func _init(planet_seed: int, planet_radius: float, terrain_profile: int = 0) -> void:
+func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 0) -> void:
 	radius = planet_radius
 	profile = terrain_profile
-	_continent = _make(planet_seed, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 14000.0, FastNoiseLite.FRACTAL_FBM, 4)
-	_mountain = _make(planet_seed + 1, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 5200.0, FastNoiseLite.FRACTAL_RIDGED, 4)
+	planet_seed = planet_seed_value
+	_continent = _make(planet_seed_value, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 14000.0, FastNoiseLite.FRACTAL_FBM, 4)
+	_mountain = _make(planet_seed_value + 1, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 5200.0, FastNoiseLite.FRACTAL_RIDGED, 4)
 	_mountain.fractal_gain = 0.42
-	_hills = _make(planet_seed + 2, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 700.0, FastNoiseLite.FRACTAL_FBM, 3)
-	_detail = _make(planet_seed + 3, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 90.0, FastNoiseLite.FRACTAL_FBM, 2)
-	_moisture = _make(planet_seed + 4, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 3400.0, FastNoiseLite.FRACTAL_FBM, 3)
-	_groves = _make(planet_seed + 5, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 280.0, FastNoiseLite.FRACTAL_FBM, 2)
-	_drainage = _make(planet_seed + 6, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 2100.0, FastNoiseLite.FRACTAL_FBM, 3)
-	_geology = _make(planet_seed + 7, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 4800.0, FastNoiseLite.FRACTAL_FBM, 3)
+	_hills = _make(planet_seed_value + 2, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 700.0, FastNoiseLite.FRACTAL_FBM, 3)
+	_detail = _make(planet_seed_value + 3, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 90.0, FastNoiseLite.FRACTAL_FBM, 2)
+	_moisture = _make(planet_seed_value + 4, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 3400.0, FastNoiseLite.FRACTAL_FBM, 3)
+	_groves = _make(planet_seed_value + 5, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 280.0, FastNoiseLite.FRACTAL_FBM, 2)
+	_drainage = _make(planet_seed_value + 6, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 2100.0, FastNoiseLite.FRACTAL_FBM, 3)
+	_geology = _make(planet_seed_value + 7, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 4800.0, FastNoiseLite.FRACTAL_FBM, 3)
+	if profile == 0:
+		features = TerrainFeatures.for_noise(self)
 
 
-func _make(planet_seed: int, noise_type: FastNoiseLite.NoiseType, frequency: float, fractal: FastNoiseLite.FractalType, octaves: int) -> FastNoiseLite:
+func _make(seed_value: int, noise_type: FastNoiseLite.NoiseType, frequency: float, fractal: FastNoiseLite.FractalType, octaves: int) -> FastNoiseLite:
 	var noise: FastNoiseLite = FastNoiseLite.new()
-	noise.seed = planet_seed
+	noise.seed = seed_value
 	noise.noise_type = noise_type
 	noise.frequency = frequency
 	noise.fractal_type = fractal
@@ -41,6 +47,12 @@ func _make(planet_seed: int, noise_type: FastNoiseLite.NoiseType, frequency: flo
 
 # 网格、碰撞、贴地保护共用高度函数，避免表面位置出现差异。
 func height(direction: Vector3) -> float:
+	var base: float = base_height(direction)
+	return features.apply(direction, base) if features != null else base
+
+
+# 不含样板区特征的基础地形；只供特征计算和出发地选址使用。
+func base_height(direction: Vector3) -> float:
 	var point: Vector3 = direction * radius
 	var continent: float = _continent.get_noise_3dv(point)
 	var land: float = smoothstep(-0.35, 0.0, continent)
@@ -62,10 +74,13 @@ func height(direction: Vector3) -> float:
 		var basin: float = smoothstep(-0.25, 0.42, continent)
 		return 24.0 + basin * 400.0 + pow(ridge, 2.0) * basin * 1900.0 + hills * 0.35 + detail * 0.5
 	# 高地沟谷使用连续等值线下切，海岸与低地不受影响；三种地形查询仍共用本函数。
-	var valley: float = 1.0 - smoothstep(0.015, 0.13, absf(_drainage.get_noise_3dv(point)))
+	var drainage: float = absf(_drainage.get_noise_3dv(point))
+	# 低处沟谷为 V 形；高山上的沟谷底部展宽成冰川 U 形谷，两壁更陡。
+	var glacial: float = smoothstep(700.0, 1300.0, mountain + upland)
+	var valley: float = lerpf(1.0 - smoothstep(0.015, 0.13, drainage), 1.0 - smoothstep(0.075, 0.13, drainage), glacial)
 	var geology: float = _geology.get_noise_3dv(point) * 0.5 + 0.5
 	var highland: float = mountain + upland + foothills
-	var erosion: float = valley * smoothstep(150.0, 900.0, mountain + upland) * lerpf(90.0, 210.0, smoothstep(0.35, 0.65, geology))
+	var erosion: float = valley * smoothstep(150.0, 900.0, mountain + upland) * lerpf(90.0, 210.0, smoothstep(0.35, 0.65, geology)) * (1.0 + glacial * 0.25)
 	# 台地保留宽阔台面与圆缓坡肩，只改变高地，不在出生低地制造台阶。
 	var terrace_mask: float = smoothstep(0.56, 0.74, geology) * smoothstep(160.0, 500.0, highland)
 	var tier: float = highland / 180.0
@@ -83,6 +98,11 @@ func landform(direction: Vector3) -> String:
 	var geology: float = _geology.get_noise_3dv(point) * 0.5 + 0.5
 	if elevation < 0.0:
 		return "海洋"
+	var water: String = water_body(direction)
+	if not water.is_empty():
+		return water
+	if features != null and features.volcano != Vector2.INF and features.contains(direction) and features.plane(direction).distance_to(features.volcano) < features.volcano_radius * 0.75:
+		return "火山"
 	if elevation < 12.0:
 		return "沙滩"
 	if elevation > 1600.0:
@@ -123,3 +143,16 @@ func slope(direction: Vector3, elevation: float) -> float:
 	var a: float = height((direction * radius + tangent * 4.0).normalized()) - elevation
 	var b: float = height((direction * radius + right * 4.0).normalized()) - elevation
 	return sqrt(a * a + b * b) / 4.0
+
+
+# 河面或湖面水位；不在样板区的河湖里时返回负无穷。
+func water_surface(direction: Vector3) -> float:
+	return features.water_surface(direction) if features != null else -INF
+
+
+func water_body(direction: Vector3) -> String:
+	return features.water_body(direction) if features != null else ""
+
+
+func river_distance(direction: Vector3) -> float:
+	return features.river_distance(direction) if features != null else INF

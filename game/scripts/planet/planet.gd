@@ -17,7 +17,8 @@ func _enter_tree() -> void:
 	# 子节点的 _ready 先于父节点执行，噪声必须在子节点进入场景前就绪。
 	noise = TerrainNoise.new(planet_seed, radius, profile)
 	if profile == 0:
-		site = SurfaceSites.find(noise)
+		# 出发地按基础地形选定，与样板区特征使用同一个位置。
+		site = noise.features.site
 	else:
 		site = SurfaceSites.find_inland(noise)
 	assert(not site.is_empty(), "固定种子下没有找到符合地形约束的观景位置。")
@@ -50,6 +51,11 @@ func _ready() -> void:
 	shell.material_override = atmosphere_material
 	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(shell)
+	if noise.features != null:
+		var waters: InlandWaters = InlandWaters.new()
+		waters.name = "InlandWaters"
+		add_child(waters)
+		waters.build(noise.features)
 	var details: SurfaceDetails = SurfaceDetails.new()
 	details.name = "SurfaceDetails"
 	add_child(details)

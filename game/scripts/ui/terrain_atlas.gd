@@ -173,7 +173,8 @@ func _process(delta: float) -> void:
 	var up: Vector3 = relative.normalized()
 	var on_dawn: bool = _player.current_planet() == _planet
 	if on_dawn:
-		_mini_title.text = "晨 · %s　 N ↑　 M" % _planet.noise.biome(up)
+		var water: String = _planet.noise.water_body(up)
+		_mini_title.text = "晨 · %s　 N ↑　 M" % (water if not water.is_empty() else _planet.noise.biome(up))
 	for view: TerrainMapView in [global_view, local_view]:
 		view.player_direction = up if on_dawn else Vector3.ZERO
 		view.player_forward = -_player.camera.global_basis.z

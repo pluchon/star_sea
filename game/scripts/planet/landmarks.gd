@@ -116,10 +116,17 @@ func _peak_tower(landmark: Dictionary) -> void:
 			var length: float = half * 2.0 + 1.0 + crown * 2.0 - (1.0 if (course + side) % 2 == 0 else 0.0)
 			var mesh: ArrayMesh = StoneworkMeshes.block(Vector3(length, 0.92, 1.0), course * 5 + side)
 			parts.append([mesh, Transform3D(basis, basis * Vector3(0.0, 0.47 + course * 0.95, half + crown))])
-	var mesh_value: ArrayMesh = LandmarkMeshes.merge(parts)
+	# 塔身用偏暗的石色，和雪顶拉开对比；顶上插一面长旗。
+	var mesh_value: ArrayMesh = LandmarkMeshes.merge(parts, Color(0.62, 0.56, 0.52))
+	var top: float = courses * 0.95
+	var flag: MeshInstance3D = MeshInstance3D.new()
+	flag.mesh = LandmarkMeshes.banner(9.0, 7.0)
+	flag.material_override = _material
+	flag.position = Vector3(0.0, top, 0.0)
 	var box: BoxShape3D = BoxShape3D.new()
 	box.size = Vector3(half * 2.0 + 1.0, courses * 0.95, half * 2.0 + 1.0)
-	_body("PeakTower", _anchor(landmark, 1.5), mesh_value, [[box, Transform3D(Basis.IDENTITY, Vector3(0.0, box.size.y * 0.5, 0.0))]])
+	var tower: StaticBody3D = _body("PeakTower", _anchor(landmark, 1.5), mesh_value, [[box, Transform3D(Basis.IDENTITY, Vector3(0.0, box.size.y * 0.5, 0.0))]])
+	tower.add_child(flag)
 
 
 func _fallen_ring(landmark: Dictionary) -> void:

@@ -36,8 +36,8 @@ static func arch(span: float, height: float, thickness: float, seed_value: int) 
 	return builder._finish()
 
 
-# 把若干石块按各自的变换合成一个网格。
-static func merge(parts: Array) -> ArrayMesh:
+# 把若干石块按各自的变换合成一个网格；tint 用来整体压暗或染色。
+static func merge(parts: Array, tint: Color = Color.WHITE) -> ArrayMesh:
 	var builder: LandmarkMeshes = LandmarkMeshes.new()
 	for part: Array in parts:
 		var mesh: ArrayMesh = part[0]
@@ -51,9 +51,31 @@ static func merge(parts: Array) -> ArrayMesh:
 		for index: int in vertices.size():
 			builder._vertices.append(transform * vertices[index])
 			builder._normals.append((transform.basis * normals[index]).normalized())
-			builder._colors.append(colors[index])
+			builder._colors.append(colors[index] * tint)
 			builder._uvs.append(uvs[index])
 			builder._uv2s.append(uv2s[index])
+	return builder._finish()
+
+
+# 塔顶的长旗：一根细杆加一面向下飘的三角旗，暖色在雪顶和天空前都很醒目。
+static func banner(height: float, length: float) -> ArrayMesh:
+	var builder: LandmarkMeshes = LandmarkMeshes.new()
+	builder._tag = 0.0
+	var pole: Color = Color(0.35, 0.28, 0.22)
+	for corner: int in 6:
+		var a: float = TAU * corner / 6.0
+		var b: float = TAU * (corner + 1) / 6.0
+		var p0: Vector3 = Vector3(cos(a), 0.0, sin(a)) * 0.12
+		var p1: Vector3 = Vector3(cos(b), 0.0, sin(b)) * 0.12
+		var top: Vector3 = Vector3.UP * height
+		builder._outward_face(p0, p1, p0 + top, Vector3(0.0, height * 0.5, 0.0), pole)
+		builder._outward_face(p1, p1 + top, p0 + top, Vector3(0.0, height * 0.5, 0.0), pole)
+	var cloth: Color = Color(0.88, 0.40, 0.22)
+	var root: Vector3 = Vector3(0.0, height - 0.3, 0.0)
+	var foot: Vector3 = Vector3(0.0, height - length * 0.45, 0.0)
+	var tip: Vector3 = Vector3(length, height - length * 0.35, 0.3)
+	builder._triangle(root, tip, foot, Vector3.BACK, Vector3.BACK, Vector3.BACK, cloth, 0.0)
+	builder._triangle(root, foot, tip, Vector3.FORWARD, Vector3.FORWARD, Vector3.FORWARD, cloth, 0.0)
 	return builder._finish()
 
 

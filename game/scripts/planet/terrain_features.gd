@@ -539,7 +539,7 @@ func _place_landmarks(noise: TerrainNoise) -> void:
 			if ground > best:
 				best = ground
 				peak = candidate
-	landmarks.append({"kind": "peak_tower", "point": peak, "height": 34.0, "radius": 3.6, "clearance": 10.0, "facing": 0.3})
+	landmarks.append({"kind": "peak_tower", "point": peak, "height": 58.0, "radius": 4.6, "clearance": 12.0, "facing": 0.3})
 	# 内陆草地上半埋着一个倒下的巨大石环。
 	var ring_point: Vector2 = _find_spot(noise, Vector2.ZERO, 1100.0, 2200.0, func(point: Vector2, ground: float) -> bool:
 		return ground > 25.0 and ground < 400.0 and noise.slope(direction_at(point), ground) < 0.08 and river_distance(direction_at(point)) > 120.0 and _lake_level[_cell_index(point)] == -INF)

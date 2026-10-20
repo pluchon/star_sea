@@ -2,9 +2,9 @@ class_name ExplorerAvatar
 extends Node3D
 
 # 围巾由几段薄片组成，每帧按风、移动和重力重新摆放；不使用物理模拟。
-const SCARF_SEGMENTS: int = 7
-const SCARF_LENGTH: float = 0.17
-const SCARF_ROOT: Vector3 = Vector3(0.08, 1.31, 0.2)
+const SCARF_SEGMENTS: int = 6
+const SCARF_LENGTH: float = 0.13
+const SCARF_ROOT: Vector3 = Vector3(0.08, 1.30, 0.22)
 
 var _arms: Array[Node3D] = []
 var _legs: Array[Node3D] = []
@@ -61,7 +61,7 @@ func _ready() -> void:
 		_scarf.append(segment)
 		var piece: BoxMesh = BoxMesh.new()
 		# 越往末端越窄，末段略短，轮廓更像布条而不是木板。
-		piece.size = Vector3(lerpf(0.15, 0.11, float(index) / SCARF_SEGMENTS), SCARF_LENGTH * 1.08, 0.022)
+		piece.size = Vector3(lerpf(0.17, 0.12, float(index) / SCARF_SEGMENTS), SCARF_LENGTH * 1.1, 0.024)
 		_part(segment, piece, Vector3(0, -SCARF_LENGTH * 0.5, 0), Vector3.ONE, "scarf")
 	_pose_scarf(0.0, Vector3.ZERO)
 
@@ -129,7 +129,7 @@ func _pose_scarf(delta: float, local_velocity: Vector3) -> void:
 	for index: int in SCARF_SEGMENTS:
 		var along: float = float(index + 1) / SCARF_SEGMENTS
 		# 无风时贴着背包向下垂；越靠末端越容易被风带起，并有沿布条传递的波动。
-		var direction: Vector3 = (Vector3(0.0, -1.0, 0.75) + _scarf_flow * (0.4 + along * 0.9)).normalized()
+		var direction: Vector3 = (Vector3(0.0, -1.0, 0.9) + _scarf_flow * (0.6 + along * 1.2)).normalized()
 		var flutter: float = sin(_scarf_time * 7.5 - index * 0.85) * 0.32 * strength * along
 		direction = direction.rotated(Vector3.RIGHT, flutter).rotated(Vector3.UP, flutter * 0.5)
 		var next: Vector3 = point + direction * SCARF_LENGTH

@@ -3,7 +3,7 @@ render_mode cull_back, specular_disabled;
 
 // 地图里的立体地球仪：用全球高度图按海拔分层设色，顶点按海拔外推并适度夸大，看得出山脉的起伏。
 uniform sampler2D height_map : filter_linear, repeat_enable;
-uniform float relief = 0.00004;
+uniform float relief = 0.000025;
 uniform vec2 map_step = vec2(0.0009765625, 0.001953125);
 
 varying vec3 v_direction;

@@ -22,6 +22,8 @@ var _press_position: Vector2
 var _dragging: bool = false
 var _flag_mesh: ArrayMesh
 var _flag_material: StandardMaterial3D
+var _head_mesh: SphereMesh
+var _head_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -37,13 +39,13 @@ func _ready() -> void:
 	environment.background_mode = Environment.BG_CLEAR_COLOR
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.55, 0.62, 0.75)
-	environment.ambient_light_energy = 0.55
+	environment.ambient_light_energy = 0.32
 	var world: WorldEnvironment = WorldEnvironment.new()
 	world.environment = environment
 	_viewport.add_child(world)
 	var light: DirectionalLight3D = DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-35.0, -40.0, 0.0)
-	light.light_energy = 1.1
+	light.light_energy = 0.85
 	_viewport.add_child(light)
 	_camera = Camera3D.new()
 	_camera.fov = 40.0
@@ -67,6 +69,12 @@ func _ready() -> void:
 	_flag_material = StandardMaterial3D.new()
 	_flag_material.vertex_color_use_as_albedo = true
 	_flag_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_head_mesh = SphereMesh.new()
+	_head_mesh.radius = 0.013
+	_head_mesh.height = 0.026
+	_head_material = StandardMaterial3D.new()
+	_head_material.albedo_color = Color(0.93, 0.36, 0.28)
+	_head_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_player_marker = MeshInstance3D.new()
 	var dot: SphereMesh = SphereMesh.new()
 	dot.radius = 0.018
@@ -108,6 +116,17 @@ func refresh() -> void:
 		var side: Vector3 = Vector3.UP.cross(up) if absf(up.y) < 0.95 else Vector3.RIGHT
 		marker.transform = Transform3D(Basis.looking_at(side.normalized(), up), up * 1.004)
 		_markers.add_child(marker)
+		# 旗杆顶上的圆头：正对旗杆俯视时旗面看不见，靠它标出位置。
+		var head: MeshInstance3D = MeshInstance3D.new()
+		head.mesh = _head_mesh
+		head.material_override = _head_material
+		head.position = Vector3(0.0, 0.072, 0.0)
+		marker.add_child(head)
+	set_player(player_direction)
+
+
+func set_player(direction: Vector3) -> void:
+	player_direction = direction
 	_player_marker.visible = player_direction != Vector3.ZERO
 	_player_marker.position = player_direction.normalized() * 1.012
 

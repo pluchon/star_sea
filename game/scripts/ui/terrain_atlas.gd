@@ -299,6 +299,8 @@ func _process(delta: float) -> void:
 		view.player_direction = up if on_dawn else Vector3.ZERO
 		view.player_forward = -_player.camera.global_basis.z
 		view.queue_redraw()
+	if is_open and globe_view.visible:
+		globe_view.set_player(up if on_dawn else Vector3.ZERO)
 	_mini.visible = not is_open and on_dawn and relative.length() - _planet.radius < 8000.0
 	if _mini.visible and is_visible_in_tree() and _local_task == -1 and up.distance_to(_last_local_center) * _planet.radius > 100.0:
 		_last_local_center = up

@@ -44,23 +44,23 @@ func _begin() -> void:
 	var drift: float = player.camera.global_basis.get_rotation_quaternion().angle_to(before.get_rotation_quaternion())
 	if drift > 0.0005:
 		_failures.append("飞行时没有鼠标输入仍自动改变观察方向。")
-	var ember: Planet = scene.get_node("Universe/PlanetEmber") as Planet
-	var ember_up: Vector3 = ember.site["direction"]
-	player.global_position = ember.global_position + ember_up * (ember.radius + 5000.0)
-	for frame: int in 20:
-		await physics_frame
-	var crossing_drift: float = player.camera.global_basis.get_rotation_quaternion().angle_to(before.get_rotation_quaternion())
-	if crossing_drift > 0.0005 or player.current_planet() != ember:
-		_failures.append("最近星球发生变化时，飞行朝向不稳定。")
+	var crossing_drift: float = 0.0
+	if not VerificationMetrics.dawn_only():
+		var ember: Planet = scene.get_node("Universe/PlanetEmber") as Planet
+		var ember_up: Vector3 = ember.site["direction"]
+		player.global_position = ember.global_position + ember_up * (ember.radius + 5000.0)
+		for frame: int in 20:
+			await physics_frame
+		crossing_drift = player.camera.global_basis.get_rotation_quaternion().angle_to(before.get_rotation_quaternion())
+		if crossing_drift > 0.0005 or player.current_planet() != ember:
+			_failures.append("最近星球发生变化时，飞行朝向不稳定。")
 	var forward: Vector3 = SurfaceSites.tangent_forward(up)
 	player.place_at(planet.global_position + up * (planet.surface_radius(up) + 1.2), forward, up.rotated(forward, 0.4))
 	player.set_head_pitch(0.25)
 	player.controls_enabled = true
 	var landing_view: Vector3 = -player.camera.global_basis.z
-	var toggle: InputEventKey = InputEventKey.new()
-	toggle.physical_keycode = KEY_F
-	toggle.pressed = true
-	player._unhandled_input(toggle)
+	# 径向对齐仍单独验证；F 的完整降落过渡由 ship_checks 覆盖。
+	player._start_walking()
 	var landing_error: float = landing_view.angle_to(-player.camera.global_basis.z)
 	if player.mode != StarSeaPlayer.Mode.WALK or landing_error > 0.0005 or player.global_basis.y.dot(up) < 0.9999:
 		_failures.append("切回步行时未能对齐地面并保留观察方向。")
@@ -79,7 +79,8 @@ func _begin() -> void:
 		"roll_error_degrees": rad_to_deg(roll_error),
 		"scaling_error_degrees": rad_to_deg(scaling_error),
 		"idle_flight_drift_degrees": rad_to_deg(drift),
-		"interplanetary_drift_degrees": rad_to_deg(crossing_drift),
+		"interplanetary_check_executed": not VerificationMetrics.dawn_only(),
+		"interplanetary_drift_degrees": rad_to_deg(crossing_drift) if not VerificationMetrics.dawn_only() else null,
 		"walk_transition_view_error_degrees": rad_to_deg(landing_error),
 		"pitch_error_degrees": rad_to_deg(pitch_error),
 	}

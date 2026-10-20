@@ -20,19 +20,22 @@ static func run(scene: Node3D, output_directory: String = "res://../test-output/
 		await scene.get_tree().process_frame
 	player.controls_enabled = true
 	var failures: Array[String] = []
+	var ship: StarSeaShip = player.ship
+	var ship_up: Vector3 = ship.planet.to_local(ship.global_position).normalized()
+	var boarding_direction: Vector3 = SurfaceSites.offset_direction(ship_up, -ship.global_basis.x, 4.0, ship.planet.radius)
+	player.place_at(ship.planet.to_global(boarding_direction * (ship.planet.surface_radius(boarding_direction) + 0.05)), -ship.global_basis.z, boarding_direction)
 	_emit_key(KEY_F, true)
 	await scene.get_tree().process_frame
 	_emit_key(KEY_F, false)
+	await scene.get_tree().create_timer(1.2).timeout
 	if player.mode != StarSeaPlayer.Mode.FLY:
-		failures.append("F 未能切换到飞行模式。")
+		failures.append("F 未能登船。")
 	_emit_key(KEY_F, true)
 	await scene.get_tree().process_frame
 	_emit_key(KEY_F, false)
+	await scene.get_tree().create_timer(2.9).timeout
 	if player.mode != StarSeaPlayer.Mode.WALK:
-		failures.append("近地按 F 未能切回步行模式。")
-	_emit_key(KEY_F, true)
-	await scene.get_tree().process_frame
-	_emit_key(KEY_F, false)
+		failures.append("近地按 F 未能完成降落。")
 	_emit_key(KEY_H, true)
 	_emit_key(KEY_F3, true)
 	await scene.get_tree().process_frame

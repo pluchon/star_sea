@@ -3,7 +3,15 @@ extends CharacterBody3D
 
 enum Mode { WALK, FLY }
 
-var mode: Mode = Mode.WALK
+var mode: Mode = Mode.WALK:
+	set(value):
+		mode = value
+		if is_node_ready() and ship != null:
+			if value == Mode.FLY:
+				ship.attach_to(self)
+			elif ship.state == StarSeaShip.State.CARRIED:
+				park_ship_nearby()
+			set_third_person(third_person)
 var controls_enabled: bool = true
 var simulated_forward: bool = false
 var altitude: float = 0.0
@@ -14,6 +22,14 @@ var _planet: Planet
 @onready var camera: Camera3D = $Head/CameraBoom/Camera
 @onready var camera_boom: SpringArm3D = $Head/CameraBoom
 var explorer: ExplorerAvatar
+var ship: StarSeaShip
+var transition_busy: bool = false
+var _f_held: float = -1.0
+var _f_consumed: bool = false
+var _message: String = ""
+var _message_time: float = 0.0
+var _fade: ColorRect
+var _boarding_hint_seen: bool = false
 
 
 func _ready() -> void:
@@ -26,6 +42,11 @@ func _ready() -> void:
 	var up: Vector3 = _planet.site["direction"]
 	var forward: Vector3 = _planet.site["forward"]
 	place_at(up * (_planet.surface_radius(up) + 0.05) + _planet.global_position, forward, up)
+	ship = StarSeaShip.new()
+	ship.name = "Ship"
+	add_child(ship)
+	ship._player = self
+	park_ship_nearby()
 	if DisplayServer.get_name() != "headless" and OS.get_cmdline_user_args().is_empty():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -44,7 +65,7 @@ func place_at(world_position: Vector3, forward: Vector3, up: Vector3) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not controls_enabled:
+	if not controls_enabled or transition_busy:
 		return
 	if event.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -56,24 +77,46 @@ func _unhandled_input(event: InputEvent) -> void:
 		var screen_delta: Vector2 = motion.screen_relative
 		global_basis = (Basis(global_basis.y.normalized(), -screen_delta.x * StarSeaSettings.sensitivity) * global_basis).orthonormalized()
 		set_head_pitch(_head.rotation.x - screen_delta.y * StarSeaSettings.sensitivity)
-	elif event.is_action_pressed("toggle_fly"):
-		if mode == Mode.WALK:
-			mode = Mode.FLY
-		elif altitude <= 2.0 and _planet.noise.height((global_position - _planet.global_position).normalized()) > 0.0:
-			_start_walking()
-		velocity = Vector3.ZERO
+	elif event.is_action_pressed("toggle_fly") and not event.is_echo():
+		_f_held = 0.0
+		_f_consumed = false
+	elif event.is_action_released("toggle_fly"):
+		if _f_held >= 0.0 and _f_held < 0.4 and not _f_consumed:
+			if mode == Mode.FLY:
+				land()
+			elif ship.state == StarSeaShip.State.PARKED and global_position.distance_to(ship.global_position) <= StarSeaShip.BOARD_RANGE:
+				board()
+		_f_held = -1.0
 	elif event.is_action_pressed("toggle_perspective"):
 		set_third_person(not third_person)
 
 
 func set_third_person(enabled: bool) -> void:
 	third_person = enabled
-	camera_boom.spring_length = 4.5 if enabled else 0.0
-	camera.position = Vector3(0, 0, 4.5 if enabled else 0.0)
-	explorer.visible = enabled
+	var riding: bool = mode == Mode.FLY
+	var length: float = (12.0 if riding else 4.5) if enabled else 0.0
+	camera_boom.spring_length = length
+	camera_boom.position.y = 2.0 if enabled and riding else 0.0
+	camera.position = Vector3(0, 0, length)
+	explorer.visible = enabled and not riding
+	if ship != null and ship.state == StarSeaShip.State.CARRIED:
+		ship.visual.visible = enabled
 
 
 func _process(delta: float) -> void:
+	_message_time = maxf(0.0, _message_time - delta)
+	var near_ship: bool = ship != null and mode == Mode.WALK and ship.state == StarSeaShip.State.PARKED and global_position.distance_to(ship.global_position) <= StarSeaShip.BOARD_RANGE
+	if near_ship and not _boarding_hint_seen and controls_enabled:
+		notify("F 登船")
+	_boarding_hint_seen = near_ship
+	if not controls_enabled:
+		_f_held = -1.0
+	elif _f_held >= 0.0:
+		_f_held += delta
+		if not _f_consumed and _f_held >= StarSeaShip.HOLD_TIME and mode == Mode.WALK:
+			_f_consumed = true
+			if not near_ship:
+				call_ship()
 	if third_person and _planet != null:
 		var offset: Vector3 = camera.global_position - _planet.global_position
 		if offset.length() < _planet.surface_radius(offset.normalized()) + 0.3:
@@ -91,7 +134,7 @@ func _process(delta: float) -> void:
 					low = middle
 			camera.global_position = start + movement * low
 	# 相机受阻收回到头部附近时隐藏身体，避免头盔遮住整个视野。
-	explorer.visible = third_person and camera.global_position.distance_to(_head.global_position) > 0.75
+	explorer.visible = third_person and mode == Mode.WALK and camera.global_position.distance_to(_head.global_position) > 0.75
 	if explorer.visible:
 		explorer.animate(delta, global_basis.inverse() * velocity, mode == Mode.FLY, is_on_floor())
 
@@ -105,6 +148,8 @@ func _physics_process(delta: float) -> void:
 	# 近地缩短裁剪范围，使近物可见；太空保留足够的近裁剪距离，避免超大远近比使视锥退化。
 	camera.near = 0.15 if altitude < 5000.0 else 0.5
 	camera.far = 200000.0 if altitude < 5000.0 else 3000000.0
+	if transition_busy:
+		return
 	if mode == Mode.WALK:
 		up_direction = up
 		_align_to_up(up, delta)
@@ -201,3 +246,114 @@ func _align_to_up(up: Vector3, delta: float) -> void:
 		forward = SurfaceSites.tangent_forward(up)
 	var target: Basis = Basis.looking_at(forward.normalized(), up)
 	global_basis = global_basis.orthonormalized().slerp(target, clampf(delta * 8.0, 0.0, 1.0))
+
+
+func park_ship_nearby() -> bool:
+	var up: Vector3 = _planet.to_local(global_position).normalized()
+	var location: Transform3D = StarSeaShip.find_landing(_planet, up, SurfaceSites.tangent_forward(up), true)
+	if not location.origin.is_finite():
+		notify("附近没有能降落的地方")
+		return false
+	ship.park(_planet, location)
+	return true
+
+
+func land() -> void:
+	if transition_busy or mode != Mode.FLY or altitude > 40.0 or velocity.length() >= 30.0:
+		return
+	var landing_planet: Planet = current_planet()
+	var direction: Vector3 = landing_planet.to_local(global_position).normalized()
+	var reason: String = StarSeaShip.can_land(landing_planet, direction)
+	if not reason.is_empty():
+		notify(reason)
+		return
+	var local_velocity: Vector3 = velocity
+	# 先预测减速后的停留点，避免减速阶段前移、下降阶段又退回原位置。
+	var braking_position: Vector3 = landing_planet.to_local(global_position) + local_velocity * 0.3
+	direction = braking_position.normalized()
+	reason = StarSeaShip.can_land(landing_planet, direction)
+	if not reason.is_empty():
+		notify(reason)
+		return
+	transition_busy = true
+	_f_held = -1.0
+	var destination: Transform3D = StarSeaShip.landing_transform(landing_planet, direction, -global_basis.z)
+	var initial: Transform3D = Transform3D(global_basis, landing_planet.to_local(global_position))
+	var elapsed: float = 0.0
+	while elapsed < 2.6:
+		await get_tree().physics_frame
+		if get_tree().paused:
+			continue
+		elapsed += get_physics_process_delta_time()
+		var progress: float = smoothstep(0.6, 2.6, elapsed)
+		var t: float = clampf(elapsed / 0.6, 0.0, 1.0)
+		# 积分平滑减速曲线，0.6 秒后保留实际位移，再从该点下降。
+		var braking_distance: float = 0.6 * (t - t * t * t + 0.5 * t * t * t * t)
+		var local_position: Vector3 = (initial.origin + local_velocity * braking_distance).lerp(destination.origin - direction * 0.4, progress)
+		var local_up: Vector3 = local_position.normalized()
+		local_position = local_up * maxf(local_position.length(), landing_planet.surface_radius(local_up) + 0.8)
+		global_position = landing_planet.to_global(local_position)
+		global_basis = initial.basis.orthonormalized().slerp(destination.basis, smoothstep(0.0, 2.6, elapsed))
+		velocity = local_velocity * (1.0 - smoothstep(0.0, 0.6, elapsed))
+	ship.park(landing_planet, destination)
+	ship.play_effect("ship_land")
+	var exit_position: Vector3 = destination.origin - destination.basis.x * 4.0
+	var exit_up: Vector3 = exit_position.normalized()
+	place_at(landing_planet.to_global(exit_up * (landing_planet.surface_radius(exit_up) + 0.05)), -destination.basis.z, exit_up)
+	mode = Mode.WALK
+	velocity = Vector3.ZERO
+	transition_busy = false
+
+
+func board() -> void:
+	if transition_busy or mode != Mode.WALK or ship.state != StarSeaShip.State.PARKED or global_position.distance_to(ship.global_position) > StarSeaShip.BOARD_RANGE:
+		return
+	transition_busy = true
+	_f_held = -1.0
+	ship.play_effect("ship_hatch")
+	await _screen_fade(1.0)
+	var boarding_position: Vector3 = ship.global_position + ship.global_basis.y * 3.0
+	var boarding_basis: Basis = ship.global_basis
+	place_at(boarding_position, -boarding_basis.z, boarding_basis.y)
+	mode = Mode.FLY
+	await _screen_fade(0.0)
+	transition_busy = false
+
+
+func call_ship() -> void:
+	if transition_busy or mode != Mode.WALK or ship.state == StarSeaShip.State.CALLED:
+		return
+	if ship.planet != _planet:
+		notify("飞船不在这颗星球上")
+		return
+	var location: Transform3D = StarSeaShip.find_landing(_planet, _planet.to_local(global_position).normalized(), -global_basis.z)
+	if not location.origin.is_finite():
+		notify("附近没有能降落的地方")
+		return
+	ship.call_to(_planet, location.origin.normalized())
+
+
+func notify(text: String) -> void:
+	_message = text
+	_message_time = 2.0
+
+
+func interaction_hint() -> String:
+	if _message_time > 0.0:
+		return _message
+	return ""
+
+
+func _screen_fade(alpha: float) -> void:
+	if _fade == null:
+		var layer: CanvasLayer = CanvasLayer.new()
+		layer.layer = 20
+		add_child(layer)
+		_fade = ColorRect.new()
+		_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_fade.color = Color(0, 0, 0, 0)
+		layer.add_child(_fade)
+	var tween: Tween = create_tween()
+	tween.tween_property(_fade, "color:a", alpha, 0.5)
+	await tween.finished

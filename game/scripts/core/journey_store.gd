@@ -19,6 +19,14 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	config.set_value("journey", "mode", int(player.mode))
 	config.set_value("journey", "third_person", player.third_person)
 	config.set_value("journey", "sun", director.sun_direction)
+	config.set_value("journey", "boarded", player.mode == StarSeaPlayer.Mode.FLY)
+	var ship: StarSeaShip = player.ship
+	var ship_planet: Planet = planet if player.mode == StarSeaPlayer.Mode.FLY else ship.planet
+	var ship_transform: Transform3D = ship.target if ship.state == StarSeaShip.State.CALLED else Transform3D(ship.global_basis, ship.global_position - ship_planet.global_position)
+	config.set_value("journey", "ship_planet_seed", ship_planet.planet_seed)
+	config.set_value("journey", "ship_position", ship_transform.origin)
+	config.set_value("journey", "ship_forward", -ship_transform.basis.z)
+	config.set_value("journey", "ship_up", ship_transform.basis.y)
 	var atlas: TerrainAtlas = scene.get_node_or_null("HUD/Layout/TerrainAtlas") as TerrainAtlas
 	if atlas != null:
 		config.set_value("journey", "flags", atlas.flags)
@@ -79,11 +87,47 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		if not item is Vector3 or not (item as Vector3).is_finite() or absf((item as Vector3).length() - 1.0) > 0.01:
 			return ERR_INVALID_DATA
 		flags.append((item as Vector3).normalized())
+	var boarded: Variant = config.get_value("journey", "boarded", mode == StarSeaPlayer.Mode.FLY)
+	if not boarded is bool or boarded != (mode == StarSeaPlayer.Mode.FLY):
+		return ERR_INVALID_DATA
+	var ship_data: Dictionary = {}
+	var ship_fields: Array[String] = ["ship_planet_seed", "ship_position", "ship_forward", "ship_up"]
+	var ship_field_count: int = 0
+	for key: String in ship_fields:
+		if config.has_section_key("journey", key):
+			ship_field_count += 1
+	if ship_field_count != 0 and ship_field_count != ship_fields.size():
+		return ERR_INVALID_DATA
+	if ship_field_count > 0:
+		var ship_seed: Variant = config.get_value("journey", "ship_planet_seed")
+		var ship_position: Variant = config.get_value("journey", "ship_position")
+		var ship_forward: Variant = config.get_value("journey", "ship_forward")
+		var ship_up: Variant = config.get_value("journey", "ship_up")
+		if not ship_seed is int or not ship_position is Vector3 or not ship_forward is Vector3 or not ship_up is Vector3:
+			return ERR_INVALID_DATA
+		var ship_planet: Planet
+		for node: Node in scene.get_tree().get_nodes_in_group("planets"):
+			if (node as Planet).planet_seed == ship_seed:
+				ship_planet = node as Planet
+		if ship_planet == null or not (ship_position as Vector3).is_finite() or not (ship_forward as Vector3).is_finite() or not (ship_up as Vector3).is_finite():
+			return ERR_INVALID_DATA
+		if (ship_position as Vector3).length() < ship_planet.radius - 450.0 or (ship_position as Vector3).length() > 100000000.0:
+			return ERR_INVALID_DATA
+		if absf((ship_forward as Vector3).length() - 1.0) > 0.01 or absf((ship_up as Vector3).length() - 1.0) > 0.01 or absf((ship_forward as Vector3).dot(ship_up)) > 0.01:
+			return ERR_INVALID_DATA
+		ship_data = {"planet": ship_planet, "transform": Transform3D(Basis.looking_at(ship_forward, ship_up), ship_position)}
 	var player: StarSeaPlayer = scene.get_node("Player") as StarSeaPlayer
+	if player.transition_busy:
+		return ERR_BUSY
 	var surface: float = planet.surface_radius(location.normalized())
 	location = location.normalized() * maxf(location.length(), surface + (0.05 if mode == StarSeaPlayer.Mode.WALK else 1.2))
 	player.place_at(planet.global_position + location, forward.normalized(), up.normalized())
 	player.mode = mode as StarSeaPlayer.Mode
+	if not boarded:
+		if ship_data.is_empty():
+			player.park_ship_nearby()
+		else:
+			player.ship.park(ship_data["planet"], ship_data["transform"])
 	player.set_head_pitch(pitch)
 	player.set_third_person(perspective)
 	(scene.get_node("SkyDirector") as SkyDirector).sun_direction = sun.normalized()

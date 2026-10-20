@@ -55,7 +55,7 @@ func _ready() -> void:
 		var waters: InlandWaters = InlandWaters.new()
 		waters.name = "InlandWaters"
 		add_child(waters)
-		waters.build(noise.features)
+		waters.build_features(noise.features)
 		var landmarks: Landmarks = Landmarks.new()
 		landmarks.name = "Landmarks"
 		add_child(landmarks)

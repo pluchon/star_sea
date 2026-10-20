@@ -10,7 +10,7 @@ static func core(scene: Node3D, output: String) -> Dictionary:
 	player.controls_enabled = false
 	director.time_paused = true
 	var flight: Array[Dictionary] = []
-	for node: Node in scene.get_tree().get_nodes_in_group("planets"):
+	for node: Node in VerificationMetrics.planets(scene.get_tree()):
 		var planet: Planet = node as Planet
 		var worst: float = INF
 		for index: int in 24:
@@ -76,7 +76,7 @@ static func core(scene: Node3D, output: String) -> Dictionary:
 	if not muted:
 		failures.append("音量为零时没有静音。")
 	var environments: Array[Dictionary] = []
-	for node: Node in scene.get_tree().get_nodes_in_group("planets"):
+	for node: Node in VerificationMetrics.planets(scene.get_tree()):
 		var planet: Planet = node as Planet
 		var up: Vector3 = planet.site["direction"]
 		var ground: Dictionary = Soundscape.environment_at(planet, up * (planet.surface_radius(up) + 1.0))
@@ -149,7 +149,7 @@ static func world(scene: Node3D, output: String) -> Dictionary:
 	director.time_paused = true
 	var routes: Array[Dictionary] = []
 	var landings: Array[Dictionary] = []
-	for node: Node in scene.get_tree().get_nodes_in_group("planets"):
+	for node: Node in VerificationMetrics.planets(scene.get_tree()):
 		var planet: Planet = node as Planet
 		for axis: Vector3 in [Vector3.UP, Vector3.RIGHT, Vector3.FORWARD]:
 			var reference: Vector3 = SurfaceSites.tangent_forward(axis)
@@ -235,7 +235,11 @@ static func audio(scene: Node3D, output: String) -> Dictionary:
 	effect.format = AudioStreamWAV.FORMAT_16_BITS
 	var effect_index: int = AudioServer.get_bus_effect_count(0)
 	AudioServer.add_bus_effect(0, effect)
-	for shot: String in ["s6_shore", "s9_woodland", "s7_ember", "s8_frost", "s1_space"]:
+	var shots: Array[String] = ["s6_shore", "s9_woodland", "s7_ember", "s8_frost", "s1_space"]
+	if VerificationMetrics.dawn_only():
+		shots.erase("s7_ember")
+		shots.erase("s8_frost")
+	for shot: String in shots:
 		ShotCatalog.place(shot, player, dawn, director)
 		if shot != "s1_space" and not await _settle(scene, player.current_planet()):
 			failures.append(shot + "录音前等待地形超时。")
@@ -266,10 +270,11 @@ static func audio(scene: Node3D, output: String) -> Dictionary:
 static func _settle(scene: Node, planet: Planet) -> bool:
 	var terrain: PlanetTerrain = planet.get_node("Terrain") as PlanetTerrain
 	var details: SurfaceDetails = planet.get_node("SurfaceDetails") as SurfaceDetails
+	var waters: InlandWaters = planet.get_node_or_null("InlandWaters") as InlandWaters
 	var deadline: int = Time.get_ticks_msec() + 120000
 	for frame: int in 30:
 		await scene.get_tree().process_frame
-	while not terrain.is_settled() or not details.is_settled():
+	while not terrain.is_settled() or not details.is_settled() or (waters != null and not waters.is_settled()):
 		await scene.get_tree().process_frame
 		if Time.get_ticks_msec() > deadline:
 			return false

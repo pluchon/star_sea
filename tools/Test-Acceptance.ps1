@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [ValidateSet('dawn', 'all')][string]$Scope = 'dawn'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +17,7 @@ $results = [Collections.Generic.List[object]]::new()
 function Invoke-SourceCheck {
     param([string]$Name, [string[]]$EngineArguments, [string]$Report)
 	$started = [DateTime]::UtcNow
+    if ($EngineArguments -contains '--') { $EngineArguments += '--scope=' + $Scope }
     & (Join-Path $PSScriptRoot 'Check-Godot.ps1') -GodotArgs $EngineArguments -LogPath (Join-Path $logDirectory "$Name.log") | Out-Null
     $sourcePath = Join-Path $repoDirectory $Report
 	if ((Get-Item -LiteralPath $sourcePath).LastWriteTimeUtc -lt $started) { throw "$Name 没有生成本次报告。" }
@@ -46,6 +48,7 @@ function Invoke-Release {
     if (@(Get-Process -Name 'Godot*', 'StarSea*' -ErrorAction SilentlyContinue).Count -gt 0) {
         throw '已有 Godot 或 StarSea 进程，无法执行独立验收。'
     }
+    $GameArguments += "--scope=$Scope"
     $logPath = Join-Path $logDirectory "$Name.log"
     if ($Startup) {
         & $executable --quit-after 180 2>&1 | Set-Content -LiteralPath $logPath -Encoding utf8
@@ -64,6 +67,11 @@ try {
     & (Join-Path $PSScriptRoot 'Check-Godot.ps1') -GodotArgs @('--headless', '--import') -LogPath (Join-Path $logDirectory 'acceptance-import.log') | Out-Null
     python (Join-Path $PSScriptRoot 'Check-Audio.py')
     if ($LASTEXITCODE -ne 0) { throw '音频素材检查失败。' }
+    Invoke-SourceCheck 'hydrology' @('--headless', '--script', 'res://scripts/verify/hydrology_checks.gd', '--', '--check=hydrology') 'test-output/wanderer/hydrology_checks.json'
+    Invoke-SourceCheck 'ruin-kit' @('--headless', '--script', 'res://scripts/verify/ruin_kit_checks.gd', '--', '--check=ruins') 'test-output/wanderer/ruin_kit_checks.json'
+    Invoke-SourceCheck 'ship' @('--script', 'res://scripts/verify/ship_checks.gd', '--', '--check=ship') 'test-output/wanderer/ship_checks.json'
+    python (Join-Path $PSScriptRoot 'Check-Audio.py') --ship-recordings (Join-Path $repoDirectory 'test-output/wanderer/audio')
+    if ($LASTEXITCODE -ne 0) { throw '飞船实际混音检查失败。' }
     Invoke-SourceCheck 'ecology' @('--headless', '--script', 'res://scripts/verify/ecology_checks.gd') 'test-output/p4/ecology_checks.json'
     Invoke-SourceCheck 'ecology-runtime' @('--headless', '--script', 'res://scripts/verify/ecology_runtime_checks.gd', '--', '--check=ecology_runtime') 'test-output/p4/ecology_runtime_checks.json'
     Invoke-SourceCheck 'camera' @('--script', 'res://scripts/verify/camera_checks.gd', '--', '--check=camera') 'test-output/p3/camera_checks.json'
@@ -72,15 +80,17 @@ try {
     if (-not $SkipBuild) {
         & (Join-Path $PSScriptRoot 'Build-Game.ps1') | Out-Null
     }
+    Invoke-Release 'release-assets' @('--acceptance=assets', "--out=$releaseDirectory")
     Invoke-Release 'release-core' @('--acceptance=core', "--out=$releaseDirectory")
     Invoke-Release 'release-earth' @('--acceptance=earth', "--out=$releaseDirectory")
     python (Join-Path $PSScriptRoot 'Check-Audio.py') --music-recording (Join-Path $releaseDirectory 'dawn_music_mix.wav')
     if ($LASTEXITCODE -ne 0) { throw '音乐实际播放录制检查失败。' }
     Invoke-Release 'release-world' @('--acceptance=world', "--out=$releaseDirectory")
     Invoke-Release 'release-audio' @('--acceptance=audio', "--out=$releaseDirectory")
-    python (Join-Path $PSScriptRoot 'Check-Audio.py') --recordings $releaseDirectory
+    python (Join-Path $PSScriptRoot 'Check-Audio.py') --recordings $releaseDirectory --scope $Scope
     if ($LASTEXITCODE -ne 0) { throw '实际混音检查失败。' }
-    $shots = @('s1_space','s2_high','s3_ground_day','s4_ground_sunset','s5_ground_night','s6_shore','s7_ember','s8_frost','s9_woodland','s10_highland','s11_orbit','s12_ruin','s13_tree_detail','s14_third_person','s15_relief_map','s16_terrace','s17_valley','s18_meadow','s19_broadleaf','s20_wetland','s21_drygrass','s22_tundra')
+    $shots = @('s1_space','s2_high','s3_ground_day','s4_ground_sunset','s5_ground_night','s6_shore','s7_ember','s8_frost','s9_woodland','s10_highland','s11_orbit','s12_ruin','s13_tree_detail','s14_third_person','s15_relief_map','s16_terrace','s17_valley','s18_meadow','s19_broadleaf','s20_wetland','s21_drygrass','s22_tundra','s23_ship_parked','s24_ship_low','s25_waterfall','s28_canyon','s29_ruin_kit')
+    if ($Scope -eq 'dawn') { $shots = @($shots | Where-Object { $_ -notin @('s7_ember', 's8_frost') }) }
     $shotDirectory = Join-Path $releaseDirectory 'shots'
     foreach ($shot in $shots) {
         Invoke-Release "release-$shot" @("--shot=$shot", "--out=$shotDirectory")
@@ -113,12 +123,12 @@ try {
     $binaryHash = (Get-FileHash -LiteralPath (Join-Path $repoDirectory 'build/StarSea/StarSea.exe') -Algorithm SHA256).Hash
     $manifest = Get-Content -LiteralPath (Join-Path $repoDirectory 'build/StarSea/sha256.json') -Raw | ConvertFrom-Json
     if ($binaryHash -ne $manifest.Hash -or $binaryHash -ne $archiveHash) { throw '可执行文件、清单和压缩包内容不一致。' }
-    [pscustomobject]@{ passed = $true; status = 'passed'; completed_at = [DateTimeOffset]::Now.ToString('o'); binary_sha256 = $binaryHash; checks = $results } |
+    [pscustomobject]@{ passed = $true; status = 'passed'; scope = $Scope; completed_at = [DateTimeOffset]::Now.ToString('o'); binary_sha256 = $binaryHash; checks = $results } |
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $outputDirectory 'summary.json') -Encoding utf8
     Write-Output '全部自动验收通过。'
 }
 catch {
-    [pscustomobject]@{ passed = $false; status = 'failed'; error = $_.Exception.Message; checks = $results } |
+    [pscustomobject]@{ passed = $false; status = 'failed'; scope = $Scope; error = $_.Exception.Message; checks = $results } |
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $outputDirectory 'summary.json') -Encoding utf8
     throw
 }

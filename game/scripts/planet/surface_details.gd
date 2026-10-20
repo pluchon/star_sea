@@ -30,10 +30,11 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_planet = get_parent() as Planet
 	var shader: Shader = load("res://shaders/surface_detail.gdshader") as Shader
+	var solid_shader: Shader = load("res://shaders/surface_solid.gdshader") as Shader
 	for kind: String in KINDS:
 		_meshes[kind] = VegetationMeshes.create(kind)
 		var material: ShaderMaterial = ShaderMaterial.new()
-		material.shader = shader
+		material.shader = solid_shader if kind in ["broadleaf", "pine", "stone", "shrub", "mushrooms"] else shader
 		material.set_shader_parameter("wind_strength", WIND_SWAY[kind])
 		material.set_shader_parameter("is_grass", kind == "grass" or kind == "flowers")
 		material.set_shader_parameter("bark_color", load("res://textures/painted/bark.svg"))
@@ -219,15 +220,15 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 			kind = "pine" if temperature < 0.50 or elevation > 750.0 else "broadleaf"
 			tint = Color(0.77, 0.92, 0.84).lerp(Color(1.08, 1.02, 0.78), rng.randf())
 		elif index > 618:
-			# 晨的草地保留连续留白，小石块分布较疏，巨石仍作为近景轮廓。
-			if noise.profile == 0 and index <= 630:
+			# 晨每块只保留五个石块候选点，其中一个稍大；降低遮挡并扩大开局视野。
+			if noise.profile == 0 and index not in [632, 636, 640, 644, 648]:
 				continue
 			if slope > 1.25:
 				continue
 			kind = "stone"
-			scale_value = rng.randf_range(0.15, 1.3)
+			scale_value = rng.randf_range(0.2, 0.65) if noise.profile == 0 else rng.randf_range(0.15, 1.3)
 			if index > 644 and noise.profile == 0:
-				scale_value = rng.randf_range(1.4, 3.0)
+				scale_value = rng.randf_range(0.75, 1.1)
 			tint = Color(0.72, 0.76, 0.75).lerp(Color(1.1, 1.03, 0.91), rng.randf())
 			if noise.profile == 0:
 				tint.a = smoothstep(0.48, 0.80, moisture) * (1.0 - smoothstep(1100.0, 1500.0, elevation))
@@ -269,7 +270,7 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		if noise.profile == 0 and (kind == "broadleaf" or kind == "pine" or kind == "stone"):
 			basis = basis.scaled_local(Vector3(rng.randf_range(0.85, 1.18), rng.randf_range(0.82, 1.20), rng.randf_range(0.85, 1.18)))
 		# 出生点保留固定空地，避免开始旅程时落在树干或巨石内部。
-		var clearance: float = 12.0 if kind == "broadleaf" or kind == "pine" else 6.0
+		var clearance: float = 32.0 if kind == "stone" else (12.0 if kind == "broadleaf" or kind == "pine" else 6.0)
 		if kind != "grass" and kind != "flowers" and direction.distance_to(spawn_direction) * noise.radius < clearance:
 			continue
 		# 拱门通道与倒塌石块周围保留空地，树冠也不能穿入拱券。

@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="HydrologyData" format=4]
+
+[ext_resource type="Script" path="res://scripts/planet/hydrology_data.gd" id="1_c3bxb"]
+
+[resource]
+script = ExtResource("1_c3bxb")
+metadata = {
+"axis_u": Vector3(0.7188779, 0.14027789, 0.68083525),
+"axis_v": Vector3(0.5505395, 0.48308346, -0.68083525),
+"center": Vector3(-0.42440638, 0.86426413, 0.2700495),
+"landmarks": [{
+"clearance": 0.0,
+"facing": 0.0,
+"height": 24.0,
+"kind": "sea_stack",
+"point": Vector2(-40.000595, -321.65524),
+"radius": 6.88
+}, {
+"clearance": 0.0,
+"facing": 1.3,
+"height": 34.0,
+"kind": "sea_stack",
+"point": Vector2(34.99941, -381.65524),
+"radius": 8.08
+}, {
+"clearance": 0.0,
+"facing": 2.6,
+"height": 16.0,
+"kind": "sea_stack",
+"point": Vector2(-10.000588, -471.65524),
+"radius": 5.92
+}, {
+"clearance": 0.0,
+"facing": -1.5707963,
+"height": 22.0,
+"kind": "sea_arch",
+"point": Vector2(139.9994, -421.65524),
+"radius": 30.0
+}, {
+"clearance": 9.0,
+"facing": -1.5707963,
+"height": 16.0,
+"kind": "lighthouse",
+"point": Vector2(717.9984, -774.313),
+"radius": 3.4
+}, {
+"clearance": 12.0,
+"facing": 0.3,
+"height": 58.0,
+"kind": "peak_tower",
+"point": Vector2(7324.3257, -0.0011920929),
+"radius": 4.6
+}, {
+"clearance": 19.0,
+"facing": -1.1707963,
+"height": 0.0,
+"kind": "fallen_ring",
+"point": Vector2(-642.5403, 1519.7506),
+"radius": 15.0
+}],
+"site": {
+"candidate_index": 3678,
+"direction": Vector3(-0.42440638, 0.86426413, 0.2700495),
+"forward": Vector3(0.7188779, 0.14027789, 0.68083525),
+"height_m": 48.98535685465337,
+"mountain_direction": Vector3(-0.29276174, 0.8754874, 0.38446388),
+"mountain_distance_m": 7000.0,
+"mountain_height_m": 1802.1896178433533,
+"shore_direction": Vector3(-0.42758766, 0.8614519, 0.27398795),
+"shore_forward": Vector3(-0.5480724, -0.48808065, 0.6792599)
+},
+"volcano": Vector2(-4804.1733, 1989.9541),
+"volcano_base": 33.935595825635446
+}

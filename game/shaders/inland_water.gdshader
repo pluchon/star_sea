@@ -7,6 +7,9 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 global uniform vec3 sun_dir;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 uniform bool flowing = true;
+uniform bool falling = false;
+uniform bool far_proxy = false;
+uniform bool near_detail = false;
 uniform vec3 shallow : source_color = vec3(0.42, 0.74, 0.70);
 uniform vec3 deep : source_color = vec3(0.13, 0.34, 0.42);
 
@@ -19,6 +22,10 @@ void vertex() {
 }
 
 void fragment() {
+	// 两套湖面按片元距离交接，避免用整个湖的锚点距离造成远岸空洞。
+	if ((far_proxy && length(VERTEX) < 3000.0) || (near_detail && length(VERTEX) >= 3000.0)) {
+		discard;
+	}
 	float depth = textureLod(depth_tex, SCREEN_UV, 0.0).r;
 	vec4 view = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
 	view.xyz /= view.w;
@@ -32,7 +39,7 @@ void fragment() {
 	if (flowing) {
 		// 河面亮纹顺着河道方向移动，中间流得快、两边慢。
 		float across = UV.x;
-		float speed = 1.6 * (1.0 - across * across * 0.6);
+		float speed = 1.6 * (1.0 - across * across * 0.6) * (falling ? 4.0 : 1.0);
 		float phase = UV.y * 0.32 - TIME * speed + sin(across * 3.1 + UV.y * 0.05) * 1.4;
 		streak = smoothstep(0.82, 0.97, sin(phase) * 0.5 + 0.5) * (1.0 - abs(across)) * near;
 		foam = smoothstep(0.78, 0.98, abs(across)) * (0.55 + 0.45 * sin(UV.y * 0.9 - TIME * 1.3));
@@ -51,6 +58,7 @@ void fragment() {
 	water = mix(water, sky, fresnel * 0.6);
 	water = mix(water, vec3(0.86, 0.95, 0.93), foam * 0.75);
 	water += vec3(0.85, 0.95, 1.0) * streak * 0.18;
+	water = mix(water, vec3(0.82, 0.92, 0.94), falling ? 0.55 : 0.0);
 	vec3 half_direction = normalize(eye + sun_dir);
 	float glint = pow(max(dot(v_up, half_direction), 0.0), 220.0);
 	water *= mix(0.16, 1.0, day);

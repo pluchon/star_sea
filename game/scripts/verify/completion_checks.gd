@@ -20,7 +20,7 @@ func _begin() -> void:
 	director.time_paused = true
 	var path: String = "user://verify_journey.cfg"
 	var records: Array[Dictionary] = []
-	for node: Node in get_nodes_in_group("planets"):
+	for node: Node in VerificationMetrics.planets(self):
 		var planet: Planet = node as Planet
 		var up: Vector3 = planet.site["direction"]
 		var forward: Vector3 = planet.site["forward"]

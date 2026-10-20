@@ -1,7 +1,7 @@
 class_name ShotCatalog
 extends RefCounted
 
-const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley", "s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra"]
+const NAMES: Array[String] = ["s1_space", "s2_high", "s3_ground_day", "s4_ground_sunset", "s5_ground_night", "s6_shore", "s7_ember", "s8_frost", "s9_woodland", "s10_highland", "s11_orbit", "s12_ruin", "s13_tree_detail", "s14_third_person", "s15_relief_map", "s16_terrace", "s17_valley", "s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra", "s23_ship_parked", "s24_ship_low", "s25_waterfall", "s28_canyon", "s29_ruin_kit"]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
@@ -16,6 +16,53 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.set_third_person(false)
 	director.time_paused = true
 	match name:
+		"s25_waterfall", "s28_canyon":
+			var data: HydrologyData = planet.noise.features.hydrology.data
+			var nearest: int = -1
+			var distance: float = INF
+			var flag: int = 1 if name == "s25_waterfall" else 2
+			for index: int in data.river_flags.size():
+				if data.river_flags[index] & flag and up.distance_squared_to(data.river_points[index]) < distance:
+					distance = up.distance_squared_to(data.river_points[index])
+					nearest = index
+			assert(nearest >= 0, "没有找到瀑布或峡谷机位。")
+			up = data.river_points[nearest]
+			forward = SurfaceSites.tangent_forward(up)
+			var side: Vector3 = forward.cross(up)
+			if flag == 1:
+				forward = (data.river_points[nearest + 1] - up).slide(up).normalized()
+				side = forward.cross(up).normalized()
+			var eye_up: Vector3 = SurfaceSites.offset_direction(up, side, 40.0 if flag == 1 else 100.0, planet.radius)
+			if flag == 1:
+				eye_up = (up * planet.radius + forward * 35.0 + side * (data.river_widths[nearest] + 8.0)).normalized()
+			player.place_at(planet.to_global(eye_up * (planet.surface_radius(eye_up) + (2.0 if flag == 1 else 70.0))), -side, eye_up)
+			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(planet.to_global(up * (planet.radius + data.river_levels[nearest] + 3.0))), eye_up)
+			director.set_sun_altitude(up, (-forward + side).normalized(), 32.0)
+		"s29_ruin_kit":
+			var showcase: RuinShowcase = RuinShowcase.new()
+			planet.add_child(showcase)
+			showcase.build(planet)
+			player.place_at(showcase.to_global(Vector3(0, 105, 75)), forward, up)
+			player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(showcase.global_position), up)
+			director.set_sun_altitude(up, (-forward + forward.cross(up)).normalized(), 35.0)
+		"s23_ship_parked":
+			player.place_at(planet.to_global(up * (height + 0.05)), forward, up)
+			player.mode = StarSeaPlayer.Mode.WALK
+			player.park_ship_nearby()
+			var anchor: Vector3 = player.ship.position
+			var eye: Vector3 = anchor - player.ship.basis.x * 9.0 - player.ship.basis.z * 10.0
+			var eye_up: Vector3 = eye.normalized()
+			var eye_world: Vector3 = planet.to_global(eye_up * (planet.surface_radius(eye_up) + 0.05))
+			var toward_ship: Vector3 = eye_world.direction_to(player.ship.global_position)
+			toward_ship = (toward_ship - eye_up * toward_ship.dot(eye_up)).normalized()
+			player.place_at(eye_world, toward_ship, eye_up)
+			player.set_third_person(true)
+			director.set_sun_altitude(up, -forward, 32.0)
+		"s24_ship_low":
+			player.place_at(planet.to_global(up * (height + 80.0)), forward, up)
+			player.set_third_person(true)
+			player.set_head_pitch(-0.12)
+			director.set_sun_altitude(up, -forward, 32.0)
 		"s18_meadow", "s19_broadleaf", "s20_wetland", "s21_drygrass", "s22_tundra":
 			var biome: String = {"s18_meadow": "草甸", "s19_broadleaf": "阔叶林", "s20_wetland": "湿地", "s21_drygrass": "干草地", "s22_tundra": "高山苔原"}[name]
 			up = SurfaceSites.find_biome(planet.noise, biome)

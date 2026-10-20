@@ -18,7 +18,7 @@ func _begin() -> void:
 	player.controls_enabled = false
 	var reports: Array[Dictionary] = []
 	var passed: bool = true
-	for node: Node in get_nodes_in_group("planets"):
+	for node: Node in VerificationMetrics.planets(self):
 		var planet: Planet = node as Planet
 		var terrain: PlanetTerrain = planet.get_node("Terrain") as PlanetTerrain
 		var up: Vector3 = planet.site["direction"]

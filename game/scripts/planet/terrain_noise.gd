@@ -18,7 +18,7 @@ var _drainage: FastNoiseLite
 var _geology: FastNoiseLite
 
 
-func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 0) -> void:
+func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 0, include_features: bool = true) -> void:
 	radius = planet_radius
 	profile = terrain_profile
 	planet_seed = planet_seed_value
@@ -31,7 +31,7 @@ func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 
 	_groves = _make(planet_seed_value + 5, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 280.0, FastNoiseLite.FRACTAL_FBM, 2)
 	_drainage = _make(planet_seed_value + 6, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 2100.0, FastNoiseLite.FRACTAL_FBM, 3)
 	_geology = _make(planet_seed_value + 7, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 4800.0, FastNoiseLite.FRACTAL_FBM, 3)
-	if profile == 0:
+	if profile == 0 and include_features:
 		features = TerrainFeatures.for_noise(self)
 
 
@@ -146,12 +146,16 @@ func slope(direction: Vector3, elevation: float) -> float:
 
 
 # 河面或湖面水位；不在样板区的河湖里时返回负无穷。
-func water_surface(direction: Vector3) -> float:
-	return features.water_surface(direction) if features != null else -INF
+func water_surface(direction: Vector3, elevation: float = INF) -> float:
+	var level: float = features.water_surface(direction) if features != null else -INF
+	if level > -INF:
+		var ground: float = height(direction) if elevation == INF else elevation
+		return level if ground < level else -INF
+	return -INF
 
 
 func water_body(direction: Vector3) -> String:
-	return features.water_body(direction) if features != null else ""
+	return features.water_body(direction) if features != null and water_surface(direction) > -INF else ""
 
 
 func river_distance(direction: Vector3) -> float:

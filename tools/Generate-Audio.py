@@ -8,6 +8,7 @@ import math
 import random
 import sys
 import wave
+import argparse
 
 RATE = 22050
 OUTPUT = Path(__file__).resolve().parents[1] / "game" / "audio"
@@ -99,13 +100,78 @@ def footstep(surface: str, variant: int) -> dict:
     return write(f"step_{surface}_{variant}", values, False)
 
 
+def machinery(kind: str) -> dict:
+    """分开模拟旋转谐波、气流、阻尼共振与机械锁扣，避免同一噪声改名复用。"""
+    duration = {"engine": 12.0, "ship_land": 1.6, "ship_hatch": 1.25, "waterfall": 16.0}[kind]
+    rng = random.Random(20261020 + sum(kind.encode()))
+    count = round(duration * RATE)
+    values = array("f")
+    low = [0.0, 0.0]
+    air = [0.0, 0.0]
+    for index in range(count):
+        time = index / RATE
+        for channel in range(2):
+            white = rng.uniform(-1, 1)
+            low[channel] += (white - low[channel]) * 0.025
+            air[channel] += (white - air[channel]) * 0.22
+            if kind == "engine":
+                # 整数周期的谐波与慢速调幅：循环时不发生相位跳变。
+                rotor = sum(math.sin(math.tau * frequency * time + channel * 0.06) * amplitude
+                            for frequency, amplitude in [(48, .28), (96, .08), (144, .045), (288, .025)])
+                value = rotor * (.82 + .06 * math.sin(math.tau * time / 3)) + low[channel] * .7 + air[channel] * .07
+            elif kind == "ship_land":
+                # 三支支架依次接地，低频冲击之后是阻尼振动与减压气声。
+                value = 0.0
+                for delay, weight in [(0.025, 1), (.085, .7), (.14, .55)]:
+                    t = max(time - delay, 0)
+                    attack = min(t / .005, 1)
+                    value += weight * attack * (math.sin(math.tau * 62 * t) * math.exp(-t * 13)
+                                                + .23 * math.sin(math.tau * 173 * t) * math.exp(-t * 30))
+                hiss = max(0, time - .18)
+                value += (air[channel] - low[channel]) * min(hiss * 15, 1) * math.exp(-hiss * 4) * .75
+            elif kind == "ship_hatch":
+                # 锁扣、缓速电机与末端锁止分别占据不同的时间段。
+                drive = math.sin(math.pi * min(max((time - .09) / .95, 0), 1)) ** 2
+                phase = math.tau * (225 * time + 65 * time * time - 32 * time ** 3)
+                value = drive * (.18 * math.sin(phase) + .045 * math.sin(phase * 2) + air[channel] * .3)
+                for delay in (.025, 1.08):
+                    t = max(time - delay, 0)
+                    value += min(t * 600, 1) * math.exp(-t * 70) * (.5 * math.sin(math.tau * 410 * t) + air[channel])
+            else:
+                # 水幕的宽频冲击与低频水潭轰鸣，不使用显著音高。
+                value = low[channel] * 2.8 + air[channel] * .65 + (white - air[channel]) * .10
+                value *= .88 + .06 * math.sin(math.tau * time / 4 + channel * .3)
+            if kind not in ("engine", "waterfall"):
+                value *= min(time / .004, 1) * min((duration - time) / .06, 1)
+            values.append(value)
+    if kind in ("engine", "waterfall"):
+        # 交叠循环保留接缝处的原始相邻样本，既不归零也不产生突跳。
+        overlap = RATE
+        for index in range(overlap):
+            weight = .5 - .5 * math.cos(math.pi * index / (overlap - 1))
+            for channel in range(2):
+                tail_index = (count - overlap + index) * 2 + channel
+                values[tail_index] = values[tail_index] * (1 - weight) + values[index * 2 + channel] * weight
+        values = values[overlap * 2:]
+    return write(kind, values, kind in ("engine", "waterfall"))
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--only", choices=["ship", "waterfall"])
+    args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    records = [ambient(name, duration) for name, duration in
-               [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
-    records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
-                   for variant in range(3))
-    report = OUTPUT.parents[1] / "test-output" / "acceptance" / "audio-generation.json"
+    records = []
+    if not args.only:
+        records = [ambient(name, duration) for name, duration in
+                   [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
+        records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
+                       for variant in range(3))
+    new_names = ["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"]
+    if args.only is None:
+        new_names.append("waterfall")
+    records.extend(machinery(name) for name in new_names)
+    report = OUTPUT.parents[1] / "test-output" / "audio" / "audio-generation.json"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"已生成 {len(records)} 个音频文件。")

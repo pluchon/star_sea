@@ -44,22 +44,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--recordings", type=Path)
     parser.add_argument("--music-recording", type=Path)
+    parser.add_argument("--ship-recordings", type=Path)
+    parser.add_argument("--scope", choices=["dawn", "all"], default="all")
     args = parser.parse_args()
-    if args.music_recording:
+    if args.ship_recordings:
+        records = [inspect(args.ship_recordings / f"{name}.wav", False) for name in ["engine", "ship_land", "ship_hatch"]]
+        count_ok = all(record["duration_s"] > 1.8 for record in records)
+        filename = "ship-audio-mix-checks.json"
+    elif args.music_recording:
         records = [inspect(args.music_recording, False)]
         count_ok = records[0]["duration_s"] >= 4.0
         filename = "music-mix-checks.json"
     elif args.recordings:
-        paths = sorted(args.recordings.glob("s*.wav"))
+        names = ["s6_shore", "s9_woodland", "s1_space"] if args.scope == "dawn" else ["s6_shore", "s9_woodland", "s7_ember", "s8_frost", "s1_space"]
+        paths = [args.recordings / f"{name}.wav" for name in names]
         records = [inspect(path, False) for path in paths]
-        count_ok = len(records) == 5
+        count_ok = len(records) == len(names)
         filename = "audio-mix-checks.json"
     else:
         paths = [ROOT / "game" / "audio" / f"{name}.wav" for name in ["wind", "shore", "rustle", "space", "rain"]]
         paths.extend(sorted((ROOT / "game" / "audio").glob("step_*.wav")))
-        paths.append(ROOT / "game" / "audio" / "dawn_theme.wav")
-        records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space", "rain"]) for path in paths]
-        count_ok = len(records) == 18 and len({record["sha256"] for record in records}) == 18
+        paths.extend(ROOT / "game" / "audio" / f"{name}.wav" for name in ["dawn_theme", "engine", "ship_land", "ship_hatch", "waterfall"])
+        records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space", "rain", "engine", "waterfall"]) for path in paths]
+        count_ok = len(records) == 22 and len({record["sha256"] for record in records}) == 22
         filename = "audio-asset-checks.json"
     report = {"passed": count_ok and all(record["passed"] for record in records), "records": records}
     output = ROOT / "test-output" / "acceptance" / filename

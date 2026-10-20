@@ -182,8 +182,7 @@ static func _music_check(scene: Node3D, output: String) -> Dictionary:
 	StarSeaSettings.music_volume = 0.0
 	sound._update_music(0.016, planet, relative)
 	var muted: bool = sound._music.volume_linear < 0.00001
-	var other: Planet = scene.get_node("Universe/PlanetEmber") as Planet
-	sound._update_music(30.0, other, Vector3.UP * (other.radius + 20.0))
+	sound._update_music(30.0, planet, relative.normalized() * (planet.radius + 5000.0))
 	var faded: bool = not sound._music.playing
 	StarSeaSettings.music_volume = original_volume
 	# 单独录制音乐的实际播放输出，检查其已进入混音且没有削波。
@@ -206,7 +205,7 @@ static func _music_check(scene: Node3D, output: String) -> Dictionary:
 	AudioServer.remove_bus_effect(0, effect_index)
 	sound._music.stop()
 	sound.set_process(true)
-	return {"passed": started and muted and faded and error == OK and recording.data.size() > 22050, "started": started, "independent_mute": muted, "left_dawn_faded": faded, "recorded_seconds": recording.get_length()}
+	return {"passed": started and muted and faded and error == OK and recording.data.size() > 22050, "started": started, "independent_mute": muted, "left_dawn_surface_faded": faded, "recorded_seconds": recording.get_length()}
 
 
 static func _emit(key: Key) -> void:

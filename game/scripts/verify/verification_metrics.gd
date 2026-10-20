@@ -29,3 +29,17 @@ static func write_json(path: String, contents: Dictionary) -> Error:
 	file.store_string(JSON.stringify(contents, "\t"))
 	file.close()
 	return OK
+
+
+# 验收范围由入口指定，不改变正常游戏中的星球和场景。
+static func dawn_only() -> bool:
+	return OS.get_cmdline_user_args().has("--scope=dawn")
+
+
+static func planets(tree: SceneTree) -> Array[Planet]:
+	var result: Array[Planet] = []
+	for node: Node in tree.get_nodes_in_group("planets"):
+		var planet: Planet = node as Planet
+		if not dawn_only() or planet.profile == 0:
+			result.append(planet)
+	return result

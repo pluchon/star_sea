@@ -34,6 +34,8 @@ func _run() -> void:
 			walk_path = argument.trim_prefix("--walk=")
 		elif argument.begins_with("--acceptance="):
 			acceptance = argument.trim_prefix("--acceptance=")
+		elif argument in ["--scope=dawn", "--scope=all"]:
+			continue
 		else:
 			_fail("未知验证参数：" + argument)
 			return
@@ -73,8 +75,13 @@ func _run() -> void:
 			report = await AcceptanceChecks.audio(scene, output_directory)
 		elif acceptance == "earth":
 			report = await EarthChecks.run(scene, output_directory)
+		elif acceptance == "assets":
+			report = await PackagedAssetChecks.run(get_tree())
 		else:
 			_fail("未知完整验收项目：" + acceptance)
+			return
+		if not report.has("passed"):
+			_fail("验收项目没有返回有效报告：" + acceptance)
 			return
 		var error: Error = VerificationMetrics.write_json(output_directory.path_join(acceptance + ".json"), report)
 		if error != OK:
@@ -102,7 +109,9 @@ func _wait_for_terrain() -> bool:
 		var camera_offset: Vector3 = _player.camera.global_position - _planet.global_position
 		var altitude: float = camera_offset.length() - _planet.surface_radius(camera_offset.normalized())
 		var surface_ready: bool = altitude >= 2200.0 or details.is_settled()
-		if _terrain.is_settled() and surface_ready:
+		var waters: InlandWaters = _planet.get_node_or_null("InlandWaters") as InlandWaters
+		var waters_ready: bool = waters == null or waters.is_settled()
+		if _terrain.is_settled() and surface_ready and waters_ready:
 			if stable_since < 0:
 				stable_since = Time.get_ticks_msec()
 			if Time.get_ticks_msec() - stable_since >= 400:

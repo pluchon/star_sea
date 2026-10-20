@@ -225,6 +225,7 @@ func _center_on_player() -> void:
 
 # 最近一面旗的方位：按相机朝向换算到屏幕横向位置，超出视野时贴在屏幕边缘。
 func draw_compass(canvas: Control) -> void:
+	_draw_ship_compass(canvas)
 	if flags.is_empty() or is_open or _player.current_planet() != _planet:
 		return
 	var camera: Camera3D = _player.camera
@@ -254,6 +255,29 @@ func draw_compass(canvas: Control) -> void:
 	var text: String = "%.1f km" % (distance / 1000.0) if distance >= 1000.0 else "%d m" % int(distance)
 	var font: Font = canvas.get_theme_default_font()
 	canvas.draw_string(font, center + Vector2(-24, 24), text, HORIZONTAL_ALIGNMENT_CENTER, 48.0, 13, Color(0.92, 0.94, 0.90, alpha))
+
+
+func _draw_ship_compass(canvas: Control) -> void:
+	var ship: StarSeaShip = _player.ship
+	if is_open or _player.mode != StarSeaPlayer.Mode.WALK or ship.planet != _player.current_planet():
+		return
+	var distance: float = _player.global_position.distance_to(ship.global_position)
+	if distance <= 30.0 or _player.altitude > ship.planet.atmosphere_height:
+		return
+	var up: Vector3 = ship.planet.to_local(_player.global_position).normalized()
+	var toward: Vector3 = ship.global_position - _player.global_position
+	toward -= up * toward.dot(up)
+	var forward: Vector3 = -_player.camera.global_basis.z
+	forward -= up * forward.dot(up)
+	if toward.length_squared() < 0.0001 or forward.length_squared() < 0.0001:
+		return
+	var bearing: float = forward.normalized().signed_angle_to(toward.normalized(), up)
+	var half_view: float = deg_to_rad(_player.camera.fov) * 0.5 * canvas.size.x / canvas.size.y
+	var x: float = clampf(canvas.size.x * (0.5 - bearing / half_view * 0.5), 60.0, canvas.size.x - 60.0)
+	var center: Vector2 = Vector2(x, 90.0)
+	canvas.draw_colored_polygon(PackedVector2Array([center + Vector2(0, -7), center + Vector2(6, 5), center + Vector2(0, 2), center + Vector2(-6, 5)]), Color(1, 1, 1, 0.5))
+	var text: String = "%.1f km" % (distance / 1000.0) if distance >= 1000.0 else "%d m" % int(distance)
+	canvas.draw_string(canvas.get_theme_default_font(), center + Vector2(-30, 24), text, HORIZONTAL_ALIGNMENT_CENTER, 60.0, 13, Color(1, 1, 1, 0.5))
 
 
 func set_open(enabled: bool) -> void:

@@ -6,6 +6,7 @@ var _status: Label
 var _performance: Label
 var _help: PanelContainer
 var _elapsed: float = 0.0
+var _interaction: Label
 
 
 func _ready() -> void:
@@ -34,6 +35,15 @@ func _ready() -> void:
 	_status.offset_bottom = -20.0
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	layout.add_child(_status)
+	_interaction = Label.new()
+	_interaction.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_interaction.offset_left = -240.0
+	_interaction.offset_right = 240.0
+	_interaction.offset_top = -115.0
+	_interaction.offset_bottom = -80.0
+	_interaction.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_interaction.add_theme_font_size_override("font_size", 13)
+	layout.add_child(_interaction)
 	_performance = Label.new()
 	_performance.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_performance.offset_top = 24.0
@@ -56,7 +66,7 @@ func _ready() -> void:
 	background.content_margin_bottom = 18.0
 	_help.add_theme_stylebox_override("panel", background)
 	var text: Label = Label.new()
-	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　切换飞行 / 近地步行\nV　第一 / 第三人称\nM　全球地形图（可切换立体地球、插旗）\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
+	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　降落 / 登船（长按召唤飞船）\nV　第一 / 第三人称\nM　全球地形图（可切换立体地球、插旗）\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
 	_help.add_child(text)
 	_help.visible = false
 	layout.add_child(_help)
@@ -67,6 +77,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_interaction.text = _player.interaction_hint()
+	_interaction.modulate.a = minf(_player._message_time * 3.0, 1.0) if _player._message_time > 0.0 else 0.8
 	_elapsed += delta
 	if _elapsed < 0.2:
 		return

@@ -45,6 +45,8 @@ void vertex() {
 	v_slope = COLOR.g;
 	v_climate = vec2(COLOR.b, clamp(1.05 - abs(normalize(v_position).y) * 0.72 - max(v_height, 0.0) / 2800.0, 0.0, 1.0));
 	v_grove = COLOR.a;
+	// 云影变化尺度约 700 米，沿地形顶点插值，避免每个像素重复计算噪声。
+	v_sunlit = cloud_sunlit(v_position + planet_center);
 }
 
 void fragment() {
@@ -66,12 +68,17 @@ void fragment() {
 	if (volcano_radius > 0.0) {
 		// 火山上半部是深色玄武岩，山腰过渡为灰褐色火山灰，岩面带少量色块。
 		float reach = 1.0 - distance(normalize(v_position) * planet_radius, volcano_center) / volcano_radius;
-		float rock_cover = smoothstep(0.35, 0.62, reach + patch(v_position / 45.0) * 0.06);
-		float ash_cover = smoothstep(0.12, 0.35, reach) * (1.0 - rock_cover);
-		c = mix(c, ash * (0.95 + patch(v_position / 20.0) * 0.08), ash_cover * 0.7);
-		c = mix(c, basalt * (0.9 + patch(v_position / 12.0) * 0.12), rock_cover);
+		if (reach > 0.12) {
+			float rock_cover = smoothstep(0.35, 0.62, reach + patch(v_position / 45.0) * 0.06);
+			float ash_cover = smoothstep(0.12, 0.35, reach) * (1.0 - rock_cover);
+			c = mix(c, ash * (0.95 + patch(v_position / 20.0) * 0.08), ash_cover * 0.7);
+			c = mix(c, basalt * (0.9 + patch(v_position / 12.0) * 0.12), rock_cover);
+		}
 	}
-	float snow_line = smoothstep(snow_height - 80.0, snow_height + 120.0, v_height + patch(v_position / 150.0) * 65.0) * (1.0 - smoothstep(0.30, 0.45, v_slope));
+	float snow_line = 0.0;
+	if (v_height > snow_height - 145.0) {
+		snow_line = smoothstep(snow_height - 80.0, snow_height + 120.0, v_height + patch(v_position / 150.0) * 65.0) * (1.0 - smoothstep(0.30, 0.45, v_slope));
+	}
 	c = mix(c, snow, snow_line);
 	float variation = patch(v_position / 32.0) * 0.07 + patch(v_position / 3.0) * 0.028;
 	float exposed = smoothstep(0.20, 0.40, v_slope);
@@ -80,19 +87,18 @@ void fragment() {
 	float strata = sin(v_height * 0.11 + patch(v_position / 70.0));
 	c *= 1.0 + strata * exposed * 0.045;
 	c *= 1.0 + variation;
-	if (terrestrial) {
+	float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
+	if (terrestrial && near_detail > 0.0) {
 		// 自绘短笔触采用三轴投影，近景补充细节，远景淡出以避免闪烁和规则网格。
 		vec3 weights = pow(abs(normalize(v_position)), vec3(4.0));
 		weights /= weights.x + weights.y + weights.z;
 		float brush = dot(vec3(texture(ground_paint, v_position.yz / 9.0).r, texture(ground_paint, v_position.xz / 9.0).r, texture(ground_paint, v_position.xy / 9.0).r), weights);
-		float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
 		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
 	}
 	// 雨后地面颜色变深，雨停后慢慢变干。
 	c *= 1.0 - wetness * 0.2;
 	float haze = mist_amount(v_position + planet_center, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
 	ALBEDO = c * (1.0 - haze);
-	v_sunlit = cloud_sunlit(v_position + planet_center);
 	ROUGHNESS = 1.0;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
 	EMISSION = ALBEDO * rim * rim_strength + mist_color * haze;

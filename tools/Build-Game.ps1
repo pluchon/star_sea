@@ -15,7 +15,8 @@ Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'game/licenses') -File | Fo
 
 双击 StarSea.exe 开始漂流。首次进入地表时会等待附近碰撞生成。
 WASD 移动，鼠标环顾，Shift 加速，空格上升或跳跃，Ctrl 下降。
-F 切换飞行；陆地上距地面两米以内可以切回步行。
+F 降落／登船；步行时远离飞船，按住 F 1.2 秒召唤。
+驾驶时离地不超过 40 米、速度低于 30 米／秒，可以在平整陆地降落。
 V 切换第一、第三人称；M 展开晨的全球地形图，滚轮缩放、拖动平移。
 T 加速时间，H 帮助，F3 性能，F12 截图，Esc 暂停菜单。
 

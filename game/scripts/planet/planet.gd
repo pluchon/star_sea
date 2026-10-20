@@ -56,6 +56,13 @@ func _ready() -> void:
 		waters.name = "InlandWaters"
 		add_child(waters)
 		waters.build(noise.features)
+		var landmarks: Landmarks = Landmarks.new()
+		landmarks.name = "Landmarks"
+		add_child(landmarks)
+		landmarks.build(noise)
+		var wildlife: Wildlife = Wildlife.new()
+		wildlife.name = "Wildlife"
+		add_child(wildlife)
 	var details: SurfaceDetails = SurfaceDetails.new()
 	details.name = "SurfaceDetails"
 	add_child(details)

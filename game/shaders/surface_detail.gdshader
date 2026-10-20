@@ -17,6 +17,7 @@ varying float v_surface;
 varying float v_distance;
 varying float v_up;
 varying float v_moss;
+varying float v_haze;
 
 void vertex() {
 	float phase = INSTANCE_CUSTOM.r * 6.28318;
@@ -34,6 +35,7 @@ void vertex() {
 	v_up = NORMAL.y;
 	v_moss = INSTANCE_CUSTOM.g;
 	v_distance = distance((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz, CAMERA_POSITION_WORLD);
+	v_haze = mist_amount(root_world, v_distance);
 }
 
 void fragment() {
@@ -56,7 +58,8 @@ void fragment() {
 	if (!FRONT_FACING) {
 		NORMAL = -NORMAL;
 	}
+	ALBEDO *= (1.0 - wetness * 0.15) * (1.0 - v_haze);
 	ROUGHNESS = 1.0;
 	float rim = pow(1.0 - abs(dot(NORMAL, VIEW)), 4.0);
-	EMISSION = ALBEDO * rim * rim_strength * 0.6;
+	EMISSION = ALBEDO * rim * rim_strength * 0.6 + mist_color * v_haze;
 }

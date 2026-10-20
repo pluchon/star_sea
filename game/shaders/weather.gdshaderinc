@@ -8,6 +8,10 @@ global uniform float wind_speed;
 global uniform vec3 cloud_offset;
 global uniform float cloud_cover;
 global uniform float cloud_shadow;
+global uniform float focus_radius;
+global uniform float wetness;
+global uniform float mist;
+global uniform vec3 mist_color;
 
 // 云影系数：1 为全受光，越小表示越处于云影中
 varying float v_sunlit;
@@ -53,4 +57,14 @@ vec3 wind_push(vec3 world_position, float phase) {
 	float gust = 0.5 + 0.5 * wave;
 	float flutter = sin(TIME * 3.4 + phase) * 0.22;
 	return (wind_dir * (0.35 + gust * 0.65) + side * flutter * 0.4) * wind_speed;
+}
+
+// 低地晨雾：海拔越低、离相机越远越浓。返回雾的浓度，调用处用它压暗固有色并补上自发光的雾色，
+// 这样雾不随明暗变化，背光处也是一层亮雾。
+float mist_amount(vec3 world_position, float camera_distance) {
+	if (mist <= 0.001) {
+		return 0.0;
+	}
+	float height = length(world_position - focus_center) - focus_radius;
+	return mist * (1.0 - smoothstep(15.0, 150.0, height)) * smoothstep(25.0, 420.0, camera_distance) * 0.8;
 }

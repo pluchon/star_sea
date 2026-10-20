@@ -53,6 +53,11 @@ def ambient(kind: str, duration: int) -> dict:
                 value = wash * (0.18 + 0.82 * swell)
             elif kind == "rustle":
                 value = (body[channel] - low[channel]) * (0.3 + 0.7 * gust ** 3) + low[channel] * 0.4
+            elif kind == "rain":
+                # 细密的高频沙沙声打底，叠加随机的水滴声和远处低沉的雨幕。
+                hiss = (white - body[channel]) * (0.55 + 0.1 * math.sin(time * 0.37 + channel))
+                drop = (rng.random() < 0.0016) * rng.uniform(0.4, 1.0) * (1.0 if channel == 0 else rng.uniform(0.3, 1.0))
+                value = hiss * 0.8 + low[channel] * 0.9 + drop * 0.6
             else:
                 value = sum(math.sin(math.tau * frequency * time + channel * 0.04) * amplitude
                             for frequency, amplitude in [(49, 0.08), (73.5, 0.025), (98, 0.01)])
@@ -97,7 +102,7 @@ def footstep(surface: str, variant: int) -> dict:
 if __name__ == "__main__":
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records = [ambient(name, duration) for name, duration in
-               [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32)]]
+               [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
     records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
                    for variant in range(3))
     report = OUTPUT.parents[1] / "test-output" / "acceptance" / "audio-generation.json"

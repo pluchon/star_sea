@@ -32,6 +32,8 @@ var volcano_base: float = 0.0
 var rivers: Array[Dictionary] = []
 # 每个湖记录水位和所含格子的编号。
 var lakes: Array[Dictionary] = []
+# 远处可见的地标：种类、平面坐标、朝向和周围不长植被的半径。
+var landmarks: Array[Dictionary] = []
 var _size: int = 0
 var _cos_reach: float = 1.0
 var _seg_a: PackedVector2Array = []
@@ -131,6 +133,22 @@ func river_distance(direction: Vector3) -> float:
 	return nearest.x - nearest.z if nearest.w >= 0.0 else INF
 
 
+# 地标周围留出空地，植被不会长进石柱、塔身或巨环里。
+func in_clearing(direction: Vector3) -> bool:
+	if landmarks.is_empty() or not contains(direction):
+		return false
+	var point: Vector2 = plane(direction)
+	for landmark: Dictionary in landmarks:
+		if point.distance_to(landmark["point"]) < landmark["clearance"]:
+			return true
+	return false
+
+
+func height_at(noise: TerrainNoise, point: Vector2) -> float:
+	var direction: Vector3 = direction_at(point)
+	return apply(direction, noise.base_height(direction))
+
+
 func _cell_index(point: Vector2) -> int:
 	var column: int = clampi(floori((point.x + HALF_SIZE) / CELL), 0, _size - 1)
 	var row: int = clampi(floori((point.y + HALF_SIZE) / CELL), 0, _size - 1)
@@ -204,6 +222,7 @@ func _build(noise: TerrainNoise) -> void:
 	var flood: Dictionary = _flood(heights)
 	_extract_lakes(heights, flood["filled"])
 	_extract_rivers(noise, heights, flood)
+	_place_landmarks(noise)
 
 
 func _place_volcano(noise: TerrainNoise) -> void:
@@ -484,3 +503,56 @@ func _index_segments() -> void:
 					var list: PackedInt32Array = _buckets[key]
 					list.append(segment)
 					_buckets[key] = list
+
+
+func _place_landmarks(noise: TerrainNoise) -> void:
+	var shore: Vector2 = plane(site["shore_direction"])
+	var seaward: Vector2 = Vector2(Vector3(site["shore_forward"]).dot(axis_u), Vector3(site["shore_forward"]).dot(axis_v)).normalized()
+	var along_coast: Vector2 = Vector2(-seaward.y, seaward.x)
+	# 出发地前方海面上的三根海蚀柱和一座海蚀拱门，从出发地就能看见。
+	var stacks: Array[Vector3] = [Vector3(90.0, -40.0, 24.0), Vector3(150.0, 35.0, 34.0), Vector3(240.0, -10.0, 16.0)]
+	for index: int in stacks.size():
+		var offset: Vector3 = stacks[index]
+		var point: Vector2 = shore + seaward * offset.x + along_coast * offset.y
+		if height_at(noise, point) < -2.0:
+			landmarks.append({"kind": "sea_stack", "point": point, "height": offset.z, "radius": 4.0 + offset.z * 0.12, "clearance": 0.0, "facing": float(index) * 1.3})
+	var arch_point: Vector2 = shore + seaward * 190.0 + along_coast * 140.0
+	if height_at(noise, arch_point) < -2.0:
+		landmarks.append({"kind": "sea_arch", "point": arch_point, "height": 22.0, "radius": 30.0, "clearance": 0.0, "facing": seaward.angle()})
+	# 沿海岸找一处临海的高坡放灯塔残骸。
+	var lighthouse: Vector2 = _find_spot(noise, shore, 500.0, 1300.0, func(point: Vector2, ground: float) -> bool:
+		if ground < 8.0 or ground > 60.0 or water_surface(direction_at(point)) > -INF:
+			return false
+		for step: int in 8:
+			if height_at(noise, point + Vector2.from_angle(float(step) * TAU / 8.0) * 70.0) < -1.0:
+				return true
+		return false)
+	if lighthouse != Vector2.INF:
+		landmarks.append({"kind": "lighthouse", "point": lighthouse, "height": 16.0, "radius": 3.4, "clearance": 9.0, "facing": seaward.angle()})
+	# 远山顶上的石塔：在山峰附近找最高点。
+	var peak: Vector2 = plane(site["mountain_direction"])
+	var best: float = height_at(noise, peak)
+	for ring: int in range(1, 5):
+		for step: int in 12:
+			var candidate: Vector2 = plane(site["mountain_direction"]) + Vector2.from_angle(float(step) * TAU / 12.0) * ring * 90.0
+			var ground: float = height_at(noise, candidate)
+			if ground > best:
+				best = ground
+				peak = candidate
+	landmarks.append({"kind": "peak_tower", "point": peak, "height": 34.0, "radius": 3.6, "clearance": 10.0, "facing": 0.3})
+	# 内陆草地上半埋着一个倒下的巨大石环。
+	var ring_point: Vector2 = _find_spot(noise, Vector2.ZERO, 1100.0, 2200.0, func(point: Vector2, ground: float) -> bool:
+		return ground > 25.0 and ground < 400.0 and noise.slope(direction_at(point), ground) < 0.08 and river_distance(direction_at(point)) > 120.0 and _lake_level[_cell_index(point)] == -INF)
+	if ring_point != Vector2.INF:
+		landmarks.append({"kind": "fallen_ring", "point": ring_point, "height": 0.0, "radius": 15.0, "clearance": 19.0, "facing": 0.8})
+
+
+func _find_spot(noise: TerrainNoise, origin: Vector2, near: float, far: float, accept: Callable) -> Vector2:
+	for distance: float in [near, (near + far) * 0.5, far]:
+		for step: int in 24:
+			var point: Vector2 = origin + Vector2.from_angle(float(step) * TAU / 24.0 + 0.4) * distance
+			if absf(point.x) > HALF_SIZE - 200.0 or absf(point.y) > HALF_SIZE - 200.0:
+				continue
+			if accept.call(point, height_at(noise, point)):
+				return point
+	return Vector2.INF

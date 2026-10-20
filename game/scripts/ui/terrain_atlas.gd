@@ -1,9 +1,18 @@
 class_name TerrainAtlas
 extends Control
 
+# 地球仪上最多插几面旗；再插会替换最早的一面。
+const MAX_FLAGS: int = 6
+
 var is_open: bool = false
 var global_view: TerrainMapView
 var local_view: TerrainMapView
+var globe_view: GlobeView
+# 玩家在地球仪上插的旗，存为晨的球面方向。
+var flags: Array[Vector3] = []
+var _flat_frame: AspectRatioContainer
+var _globe_button: Button
+var _compass: Control
 var _player: StarSeaPlayer
 var _planet: Planet
 var _panel: PanelContainer
@@ -92,13 +101,16 @@ func _build() -> void:
 	title.add_theme_font_size_override("font_size", 24)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	for entry: Array in [["－", func() -> void: global_view.change_zoom(0.8)], ["＋", func() -> void: global_view.change_zoom(1.25)], ["当前位置", func() -> void: global_view.center_on_player()], ["关闭  M / Esc", func() -> void: set_open(false)]]:
+	for entry: Array in [["立体地球", _toggle_globe], ["－", func() -> void: global_view.change_zoom(0.8)], ["＋", func() -> void: global_view.change_zoom(1.25)], ["当前位置", _center_on_player], ["关闭  M / Esc", func() -> void: set_open(false)]]:
 		var button: Button = Button.new()
 		button.text = entry[0]
 		button.custom_minimum_size = Vector2(40, 36)
 		button.pressed.connect(entry[1])
 		header.add_child(button)
+		if _globe_button == null:
+			_globe_button = button
 	var hint: Label = Label.new()
+	hint.name = "Hint"
 	hint.text = "滚轮缩放 · 拖动平移 · 点击查看海拔　　等高距 100 m　　N ↑"
 	hint.add_theme_font_size_override("font_size", 14)
 	column.add_child(hint)
@@ -106,9 +118,17 @@ func _build() -> void:
 	aspect.ratio = 2.0
 	aspect.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(aspect)
+	_flat_frame = aspect
 	global_view = TerrainMapView.new()
 	aspect.add_child(global_view)
 	global_view.selected.connect(_select)
+	globe_view = GlobeView.new()
+	globe_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	globe_view.visible = false
+	column.add_child(globe_view)
+	globe_view.selected.connect(_select)
+	globe_view.flag_requested.connect(_add_flag)
+	globe_view.flag_removed.connect(_remove_flag)
 	_information = Label.new()
 	_information.text = "正在绘制全球地形…"
 	column.add_child(_information)
@@ -134,6 +154,106 @@ func _build() -> void:
 		view.planet_radius = _planet.radius
 		view.spawn_direction = _planet.site["direction"]
 		view.ruin_direction = SurfaceSites.ruin_direction(_planet.site, _planet.radius)
+	# 屏幕上方的旗子方位标记：只在地面附近、地图关闭时显示，颜色很淡。
+	_compass = FlagCompass.new()
+	_compass.atlas = self
+	_compass.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_compass)
+
+
+class FlagCompass extends Control:
+	var atlas: TerrainAtlas
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		atlas.draw_compass(self)
+
+
+func set_flags(directions: Array[Vector3]) -> void:
+	flags = directions.duplicate()
+	_sync_flags()
+
+
+func _add_flag(direction: Vector3) -> void:
+	if flags.size() >= MAX_FLAGS:
+		flags.remove_at(0)
+	flags.append(direction.normalized())
+	_sync_flags()
+
+
+func _remove_flag(direction: Vector3) -> void:
+	# 右键拔掉离点击处最近的一面旗，太远的不算。
+	var nearest: int = -1
+	var closest: float = 0.08
+	for index: int in flags.size():
+		var gap: float = flags[index].distance_to(direction)
+		if gap < closest:
+			closest = gap
+			nearest = index
+	if nearest >= 0:
+		flags.remove_at(nearest)
+		_sync_flags()
+
+
+func _sync_flags() -> void:
+	for view: TerrainMapView in [global_view, local_view]:
+		view.flags = flags
+		view.queue_redraw()
+	globe_view.flags = flags
+	globe_view.refresh()
+
+
+func _toggle_globe() -> void:
+	var showing: bool = not globe_view.visible
+	globe_view.visible = showing
+	_flat_frame.visible = not showing
+	_globe_button.text = "平面地图" if showing else "立体地球"
+	var hint: Label = _panel.find_child("Hint", true, false) as Label
+	hint.text = "拖动旋转 · 滚轮缩放 · 单击插旗 · 右键拔旗　　旗子会在屏幕上方显示方位" if showing else "滚轮缩放 · 拖动平移 · 点击查看海拔　　等高距 100 m　　N ↑"
+	if showing:
+		_center_on_player()
+
+
+func _center_on_player() -> void:
+	global_view.center_on_player()
+	var relative: Vector3 = _player.global_position - _planet.global_position
+	globe_view.face(relative.normalized() if _player.current_planet() == _planet else Vector3(_planet.site["direction"]))
+
+
+# 最近一面旗的方位：按相机朝向换算到屏幕横向位置，超出视野时贴在屏幕边缘。
+func draw_compass(canvas: Control) -> void:
+	if flags.is_empty() or is_open or _player.current_planet() != _planet:
+		return
+	var camera: Camera3D = _player.camera
+	var relative: Vector3 = camera.global_position - _planet.global_position
+	var up: Vector3 = relative.normalized()
+	if relative.length() - _planet.radius > 8000.0:
+		return
+	var target: Vector3 = flags[0]
+	for flag: Vector3 in flags:
+		if flag.distance_to(up) < target.distance_to(up):
+			target = flag
+	var distance: float = up.angle_to(target) * _planet.radius
+	var toward: Vector3 = target - up * target.dot(up)
+	var forward: Vector3 = -camera.global_basis.z
+	forward = forward - up * forward.dot(up)
+	if toward.length_squared() < 1e-12 or forward.length_squared() < 1e-8:
+		return
+	var bearing: float = forward.normalized().signed_angle_to(toward.normalized(), up)
+	var half_view: float = deg_to_rad(camera.fov) * 0.5 * canvas.size.x / canvas.size.y
+	var x: float = canvas.size.x * 0.5 - bearing / half_view * canvas.size.x * 0.5
+	var edge: bool = x < 60.0 or x > canvas.size.x - 60.0
+	x = clampf(x, 60.0, canvas.size.x - 60.0)
+	var center: Vector2 = Vector2(x, 54.0)
+	var alpha: float = 0.42 if edge else 0.6
+	var diamond: PackedVector2Array = [center + Vector2(0, -7), center + Vector2(6, 0), center + Vector2(0, 7), center + Vector2(-6, 0)]
+	canvas.draw_colored_polygon(diamond, Color(0.93, 0.42, 0.32, alpha))
+	var text: String = "%.1f km" % (distance / 1000.0) if distance >= 1000.0 else "%d m" % int(distance)
+	var font: Font = canvas.get_theme_default_font()
+	canvas.draw_string(font, center + Vector2(-24, 24), text, HORIZONTAL_ALIGNMENT_CENTER, 48.0, 13, Color(0.92, 0.94, 0.90, alpha))
 
 
 func set_open(enabled: bool) -> void:
@@ -192,6 +312,7 @@ func _collect() -> void:
 		WorkerThreadPool.wait_for_task_completion(_global_task)
 		_global_task = -1
 		global_view.set_map(_global_result)
+		globe_view.set_map(_global_result)
 		_information.text = "全球海拔 %.0f～%.0f m　　金色圆点：出发地　浅色圆点：遗迹" % [_global_result["minimum"], _global_result["maximum"]]
 		_global_result = {}
 	if _local_task != -1 and WorkerThreadPool.is_task_completed(_local_task):

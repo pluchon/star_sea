@@ -19,6 +19,9 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	config.set_value("journey", "mode", int(player.mode))
 	config.set_value("journey", "third_person", player.third_person)
 	config.set_value("journey", "sun", director.sun_direction)
+	var atlas: TerrainAtlas = scene.get_node_or_null("HUD/Layout/TerrainAtlas") as TerrainAtlas
+	if atlas != null:
+		config.set_value("journey", "flags", atlas.flags)
 	var error: Error = config.save(path + ".tmp")
 	if error != OK:
 		return error
@@ -67,6 +70,15 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		return ERR_INVALID_DATA
 	if location.length() < planet.radius - 450.0 or location.length() > 100000000.0 or mode < 0 or mode > 1:
 		return ERR_INVALID_DATA
+	# 旗子是可选字段，旧存档没有；有的话每一项都必须是有限的单位方向。
+	var flags_value: Variant = config.get_value("journey", "flags", [])
+	if not flags_value is Array or (flags_value as Array).size() > TerrainAtlas.MAX_FLAGS:
+		return ERR_INVALID_DATA
+	var flags: Array[Vector3] = []
+	for item: Variant in flags_value as Array:
+		if not item is Vector3 or not (item as Vector3).is_finite() or absf((item as Vector3).length() - 1.0) > 0.01:
+			return ERR_INVALID_DATA
+		flags.append((item as Vector3).normalized())
 	var player: StarSeaPlayer = scene.get_node("Player") as StarSeaPlayer
 	var surface: float = planet.surface_radius(location.normalized())
 	location = location.normalized() * maxf(location.length(), surface + (0.05 if mode == StarSeaPlayer.Mode.WALK else 1.2))
@@ -75,4 +87,7 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	player.set_head_pitch(pitch)
 	player.set_third_person(perspective)
 	(scene.get_node("SkyDirector") as SkyDirector).sun_direction = sun.normalized()
+	var atlas: TerrainAtlas = scene.get_node_or_null("HUD/Layout/TerrainAtlas") as TerrainAtlas
+	if atlas != null:
+		atlas.set_flags(flags)
 	return OK

@@ -77,3 +77,31 @@ shadow_fill={
 "type": "float",
 "value": 0.0
 }
+focus_radius={
+"type": "float",
+"value": 40000.0
+}
+rain={
+"type": "float",
+"value": 0.0
+}
+wetness={
+"type": "float",
+"value": 0.0
+}
+mist={
+"type": "float",
+"value": 0.0
+}
+mist_color={
+"type": "vec3",
+"value": Vector3(0.8, 0.84, 0.9)
+}
+moon_dir={
+"type": "vec3",
+"value": Vector3(0, -1, 0)
+}
+aurora={
+"type": "float",
+"value": 0.0
+}

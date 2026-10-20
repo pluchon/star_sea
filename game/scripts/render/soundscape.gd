@@ -13,6 +13,7 @@ var _environment: Dictionary = {}
 var _sample_elapsed: float = 1.0
 var _music: AudioStreamPlayer
 var _music_wait: float = 8.0
+var _director: SkyDirector
 
 
 func _ready() -> void:
@@ -21,7 +22,7 @@ func _ready() -> void:
 		set_process(false)
 		return
 	_player = get_parent().get_node("Player") as StarSeaPlayer
-	for filename: String in ["wind", "shore", "space", "rustle"]:
+	for filename: String in ["wind", "shore", "space", "rustle", "rain"]:
 		var stream: AudioStreamWAV = (load("res://audio/" + filename + ".wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		stream.loop_end = roundi(stream.get_length() * stream.mix_rate)
@@ -91,6 +92,11 @@ func _process(delta: float) -> void:
 	if _sample_elapsed >= 0.2 or planet != _previous_planet:
 		_environment = environment_at(planet, relative)
 		_sample_elapsed = 0.0
+		if _director == null:
+			_director = get_tree().get_first_node_in_group("sky_director") as SkyDirector
+		# 雨声只在晨的地面附近，越往高处越轻。
+		var altitude: float = relative.length() - planet.surface_radius(relative.normalized())
+		_environment["rain"] = _director.rain * (1.0 - smoothstep(150.0, 1500.0, altitude)) * 0.42 if _director != null and planet.profile == 0 else 0.0
 	for kind: String in _loops:
 		var audio: AudioStreamPlayer = _loops[kind]
 		audio.volume_linear = lerpf(audio.volume_linear, _environment.get(kind, 0.0), 1.0 - exp(-delta * 1.6))

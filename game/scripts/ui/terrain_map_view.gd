@@ -10,6 +10,7 @@ var player_direction: Vector3 = Vector3.ZERO
 var player_forward: Vector3 = Vector3.FORWARD
 var spawn_direction: Vector3 = Vector3.ZERO
 var ruin_direction: Vector3 = Vector3.ZERO
+var flags: Array[Vector3] = []
 var planet_radius: float = 40000.0
 var _dragging: bool = false
 var _symbols: Symbols
@@ -116,6 +117,13 @@ func _draw_symbols(canvas: Control) -> void:
 		var position: Vector2 = _position(marker[0])
 		canvas.draw_circle(position, 4.0, Color(0.05, 0.10, 0.12), true)
 		canvas.draw_circle(position, 2.5, marker[1], true)
+	for flag: Vector3 in flags:
+		# 小旗：细杆加三角旗面，颜色与地球仪上的旗一致。
+		var foot: Vector2 = _position(flag)
+		if not global_map and (foot.x < 0.0 or foot.y < 0.0 or foot.x > size.x or foot.y > size.y):
+			continue
+		canvas.draw_line(foot, foot + Vector2(0, -14), Color(0.92, 0.90, 0.82), 1.5, true)
+		canvas.draw_colored_polygon(PackedVector2Array([foot + Vector2(0, -14), foot + Vector2(9, -10.5), foot + Vector2(0, -7)]), Color(0.93, 0.36, 0.28))
 	if player_direction != Vector3.ZERO:
 		var position: Vector2 = _position(player_direction)
 		var northward: Vector3 = TerrainMapData.north(player_direction)

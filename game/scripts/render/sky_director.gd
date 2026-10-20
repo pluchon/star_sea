@@ -10,6 +10,17 @@ var time_paused: bool = false
 # 当前地面上的风向（世界坐标切向量）与风力，供探索者的围巾等脚本读取。
 var wind_direction: Vector3 = Vector3.RIGHT
 var wind_strength: float = 0.0
+# 天气：0 为晴，0.5 为多云，1 为雨；在几分钟的尺度上缓慢变化。验收机位暂停时间时天气也保持不变。
+var weather: float = 0.0
+var rain: float = 0.0
+var moon_direction: Vector3 = Vector3.DOWN
+var _weather_target: float = 0.0
+var _weather_hold: float = 300.0
+var _weather_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _wetness: float = 0.0
+var _mist: float = 0.0
+var _previous_sun_height: float = 0.0
+var _rain_curtain: MeshInstance3D
 var _weather_time: float = 0.0
 var _cloud_offset: Vector3 = Vector3.ZERO
 var _grade_gradient: Gradient
@@ -36,6 +47,9 @@ func _ready() -> void:
 	lut.width = 64
 	_environment.adjustment_enabled = true
 	_environment.adjustment_color_correction = lut
+	_weather_rng.seed = 20261020
+	_rain_curtain = _build_rain_curtain()
+	get_parent().add_child.call_deferred(_rain_curtain)
 	_update_environment()
 
 
@@ -54,7 +68,21 @@ func _process(delta: float) -> void:
 	if not time_paused and not get_tree().paused:
 		var multiplier: float = 60.0 if Input.is_action_pressed("time_fast") else 1.0
 		sun_direction = sun_direction.rotated(Vector3.UP, delta * TAU / 1200.0 * multiplier)
+		_advance_weather(delta * multiplier)
 	_update_environment()
+
+
+func _advance_weather(delta: float) -> void:
+	# 每段天气持续三到七分钟；一半时间晴，三成多云，两成下雨。转换用一分半钟左右慢慢过渡。
+	_weather_hold -= delta
+	if _weather_hold <= 0.0:
+		var roll: float = _weather_rng.randf()
+		_weather_target = 0.0 if roll < 0.5 else (0.5 if roll < 0.8 else 1.0)
+		_weather_hold = _weather_rng.randf_range(180.0, 420.0)
+	weather = move_toward(weather, _weather_target, delta / 90.0)
+	# 地面雨中逐渐变湿，雨停后用更长时间变干。
+	var wet_target: float = smoothstep(0.7, 1.0, weather)
+	_wetness = move_toward(_wetness, wet_target, delta / (40.0 if wet_target > _wetness else 160.0))
 
 
 func _update_environment() -> void:
@@ -72,12 +100,25 @@ func _update_environment() -> void:
 	RenderingServer.global_shader_parameter_set("sky_up", up)
 	RenderingServer.global_shader_parameter_set("surface_sky", 1.0 - space)
 	RenderingServer.global_shader_parameter_set("star_visibility", maxf(1.0 - day, space))
-	var light_up: Vector3 = Vector3.UP if absf(sun_direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
-	_sun.global_basis = Basis.looking_at(-sun_direction, light_up)
+	# 只有晨会下雨；其他星球的天气只改变云量。
+	rain = smoothstep(0.7, 1.0, weather) if _planet.profile == 0 else 0.0
+	var overcast: float = smoothstep(0.2, 0.9, weather) * (1.0 - space)
+	# 月亮大致在太阳对面，略偏开一些，避免每晚都是月全食的位置。
+	moon_direction = (-sun_direction).rotated(Vector3.UP, 0.35)
+	moon_direction = (moon_direction + Vector3.UP * 0.3).normalized()
+	var moon_height: float = up.dot(moon_direction)
+	# 太阳落下后同一盏平行光改由月亮的方向照射，冷色、很弱，夜里也能看出地形的轮廓。
+	var moonlight: float = smoothstep(-0.08, -0.16, sun_height) * smoothstep(-0.02, 0.15, moon_height) * (1.0 - space) * (1.0 - rain * 0.7)
+	var light_direction: Vector3 = sun_direction if moonlight <= 0.0 else moon_direction
+	var light_up: Vector3 = Vector3.UP if absf(light_direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
+	_sun.global_basis = Basis.looking_at(-light_direction, light_up)
 	var sunset: Color = Color(1.0, 0.62, 0.42)
 	var noon: Color = Color(1.0, 0.97, 0.92)
 	_sun.light_color = sunset.lerp(noon, smoothstep(0.0, 0.35, sun_height)).lerp(noon, space)
-	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height) * 1.25, 1.0, space)
+	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height) * 1.25 * (1.0 - overcast * 0.45), 1.0, space)
+	if moonlight > 0.0:
+		_sun.light_color = Color(0.62, 0.72, 1.0)
+		_sun.light_energy = moonlight * 0.34
 	# 日出日落前后天空最亮最暖，背光的地面也应映出暖淡紫色，而不是沉成黑褐色。
 	# 环境色会与地表固有色相乘，饱和的紫色乘上草绿会发黑，所以这里用低饱和的颜色并提高强度。
 	var golden: float = smoothstep(-0.10, 0.02, sun_height) * (1.0 - smoothstep(0.10, 0.35, sun_height))
@@ -85,8 +126,26 @@ func _update_environment() -> void:
 	_environment.ambient_light_color = ambient.lerp(Color(0.08, 0.08, 0.16), space)
 	# 晨的日间阴影保留蓝色环境光，并适度抬亮林下和背光山坡。
 	var daytime_energy: float = 0.39 if _planet.profile == 0 else 0.32
-	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.55, 0.20, space)
-	RenderingServer.global_shader_parameter_set("shadow_fill", golden * 0.32 * (1.0 - space))
+	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.55 + overcast * day * 0.12, 0.20, space)
+	RenderingServer.global_shader_parameter_set("shadow_fill", golden * 0.32 * (1.0 - space) * (1.0 - overcast))
+	RenderingServer.global_shader_parameter_set("moon_dir", moon_direction)
+	RenderingServer.global_shader_parameter_set("rain", rain * (1.0 - space))
+	RenderingServer.global_shader_parameter_set("wetness", _wetness if _planet.profile == 0 else 0.0)
+	_rain_curtain.visible = rain > 0.01 and altitude < 2000.0
+	# 晨雾：日出前后低地起雾，太阳升高后散去；下雨时也有一层薄雾。只在晨上出现。
+	var rising: bool = sun_height > _previous_sun_height
+	_previous_sun_height = sun_height
+	var dawn: float = smoothstep(-0.12, 0.0, sun_height) * (1.0 - smoothstep(0.12, 0.32, sun_height)) * (1.0 if rising else 0.0)
+	var mist_target: float = (dawn * 0.85 + rain * 0.45) * (1.0 if _planet.profile == 0 else 0.0)
+	_mist = lerpf(_mist, mist_target, 0.02)
+	RenderingServer.global_shader_parameter_set("mist", _mist * (1.0 - space))
+	RenderingServer.global_shader_parameter_set("focus_radius", _planet.radius)
+	var mist_tint: Color = Color(0.86, 0.88, 0.92).lerp(Color(0.98, 0.84, 0.78), golden).lerp(Color(0.22, 0.26, 0.36), 1.0 - day)
+	RenderingServer.global_shader_parameter_set("mist_color", Vector3(mist_tint.r, mist_tint.g, mist_tint.b) * (0.75 + 0.25 * day))
+	# 极光只在晨的晴朗夜里出现，强弱以十几分钟为周期起伏，有的夜里几乎看不见。
+	var aurora_cycle: float = clampf(sin(_weather_time / 700.0) * 0.8 + 0.2, 0.0, 1.0)
+	var aurora_value: float = (1.0 - smoothstep(-0.2, -0.08, sun_height)) * aurora_cycle * (1.0 - overcast) * (1.0 if _planet.profile == 0 else 0.0)
+	RenderingServer.global_shader_parameter_set("aurora", aurora_value)
 	_update_weather(up, altitude, day)
 	_update_grade(sun_height, space)
 	for node: Node in get_tree().get_nodes_in_group("planets"):
@@ -107,8 +166,8 @@ func _update_weather(up: Vector3, altitude: float, day: float) -> void:
 	RenderingServer.global_shader_parameter_set("wind_dir", wind_direction)
 	RenderingServer.global_shader_parameter_set("wind_speed", wind_strength)
 	RenderingServer.global_shader_parameter_set("cloud_offset", _cloud_offset)
-	RenderingServer.global_shader_parameter_set("cloud_cover", CLOUD_COVER[_planet.profile])
-	RenderingServer.global_shader_parameter_set("cloud_shadow", shadow)
+	RenderingServer.global_shader_parameter_set("cloud_cover", CLOUD_COVER[_planet.profile] + weather * 0.42)
+	RenderingServer.global_shader_parameter_set("cloud_shadow", shadow * (1.0 - smoothstep(0.6, 1.0, weather) * 0.6))
 
 
 func _update_grade(sun_height: float, space: float) -> void:
@@ -136,3 +195,43 @@ func _update_grade(sun_height: float, space: float) -> void:
 	_grade_gradient.offsets = points
 	_grade_gradient.colors = colors
 	_environment.adjustment_saturation = lerpf(1.0, 1.05 * noon + 1.14 * golden + 0.86 * night, surface)
+
+
+func _build_rain_curtain() -> MeshInstance3D:
+	# 八百条雨丝合在一个网格里，每条带三个随机数，位置由 rain 着色器计算。
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 4242
+	var vertices: PackedVector3Array = []
+	var uvs: PackedVector2Array = []
+	var uv2s: PackedVector2Array = []
+	var colors: PackedColorArray = []
+	var indices: PackedInt32Array = []
+	for streak: int in 800:
+		var seed_value: Vector3 = Vector3(rng.randf(), rng.randf(), rng.randf())
+		for corner: Vector2 in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:
+			vertices.append(Vector3.ZERO)
+			uvs.append(corner)
+			uv2s.append(Vector2(seed_value.x, seed_value.y))
+			colors.append(Color(seed_value.z, 0.0, 0.0))
+		var base: int = streak * 4
+		indices.append_array(PackedInt32Array([base, base + 1, base + 2, base + 1, base + 3, base + 2]))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh: ArrayMesh = ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var material: ShaderMaterial = ShaderMaterial.new()
+	material.shader = load("res://shaders/rain.gdshader") as Shader
+	var curtain: MeshInstance3D = MeshInstance3D.new()
+	curtain.name = "RainCurtain"
+	curtain.mesh = mesh
+	curtain.material_override = material
+	curtain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# 顶点都在原点，真实位置在着色器里算，所以把剔除范围放得足够大。
+	curtain.extra_cull_margin = 16384.0
+	curtain.visible = false
+	return curtain

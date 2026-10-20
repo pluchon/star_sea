@@ -88,9 +88,12 @@ void fragment() {
 		float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
 		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
 	}
-	ALBEDO = c;
+	// 雨后地面颜色变深，雨停后慢慢变干。
+	c *= 1.0 - wetness * 0.2;
+	float haze = mist_amount(v_position + planet_center, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
+	ALBEDO = c * (1.0 - haze);
 	v_sunlit = cloud_sunlit(v_position + planet_center);
 	ROUGHNESS = 1.0;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-	EMISSION = ALBEDO * rim * rim_strength;
+	EMISSION = ALBEDO * rim * rim_strength + mist_color * haze;
 }

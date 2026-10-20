@@ -4,6 +4,10 @@ global uniform vec3 sun_dir;
 global uniform float star_visibility;
 global uniform vec3 sky_up;
 global uniform float surface_sky;
+global uniform float cloud_cover;
+global uniform float rain;
+global uniform vec3 moon_dir;
+global uniform float aurora;
 
 uniform vec3 nebula_a : source_color = vec3(0.10, 0.06, 0.22);
 uniform vec3 nebula_b : source_color = vec3(0.02, 0.14, 0.24);
@@ -77,16 +81,39 @@ void sky() {
 		vec3 col = space_base + nebula + vec3(stars) * 2.5;
 		float sun = smoothstep(0.9994, 0.9997, dot(dir, sun_dir));
 		float halo = pow(max(dot(dir, sun_dir), 0.0), 600.0) * 0.6;
-		col = col * star_visibility + sun_color * (sun * 8.0 + halo);
+		col = col * star_visibility + sun_color * (sun * 8.0 + halo) * (1.0 - rain * 0.9);
 		float elevation = dot(dir, sky_up);
 		float day = smoothstep(-0.08, 0.18, dot(sky_up, sun_dir));
+		// 月亮：圆盘上有几块暗色月海，周围一圈淡光；白天只剩很淡的影子。
+		float moon_facing = dot(dir, moon_dir);
+		if (moon_facing > 0.99) {
+			float disc = smoothstep(0.99955, 0.99970, moon_facing);
+			float maria = value_noise(dir * 900.0) * 0.6 + value_noise(dir * 2300.0) * 0.4;
+			vec3 moon = vec3(0.95, 0.94, 0.86) * mix(0.72, 1.0, smoothstep(0.35, 0.6, maria));
+			float glow = pow(max(moon_facing, 0.0), 2200.0) * 0.18;
+			float strength = mix(1.0, 0.18, day) * (1.0 - rain * 0.85);
+			col = mix(col, moon * 1.6, disc * strength) + vec3(0.62, 0.70, 0.90) * glow * strength;
+		}
+		// 极光：只在夜里出现在天空较高处，竖直的光幕缓慢流动，下绿上紫。
+		if (aurora > 0.001 && elevation > 0.05) {
+			vec3 flow = dir * vec3(2.6, 0.6, 2.6) + vec3(TIME * 0.012, 0.0, TIME * 0.008);
+			float curtain = smoothstep(0.52, 0.78, fbm(flow + vec3(0.0, fbm(dir * 3.0 + TIME * 0.01) * 1.5, 0.0)));
+			float band = smoothstep(0.08, 0.3, elevation) * (1.0 - smoothstep(0.55, 0.9, elevation));
+			vec3 aurora_color = mix(vec3(0.25, 1.0, 0.62), vec3(0.72, 0.36, 0.95), smoothstep(0.25, 0.7, elevation));
+			col += aurora_color * curtain * band * aurora * star_visibility * surface_sky * 0.55;
+		}
 		// 云层使用球面方向，不随浮动原点偏移；高空逐渐消失。
 		vec3 cloud_point = dir / max(elevation, 0.12) * 3.4 + vec3(TIME * 0.005, 0.0, 0.0);
 		float cloud_shape = fbm(cloud_point);
-		float clouds = smoothstep(0.51, 0.65, cloud_shape) * smoothstep(0.04, 0.20, elevation);
+		// 云量越大，成云的阈值越低；晨的基础云量 0.45 时与原来的天空一致。
+		float threshold = 0.51 + (0.45 - cloud_cover) * 0.32;
+		float clouds = smoothstep(threshold, threshold + 0.14, cloud_shape) * smoothstep(0.04, 0.20, elevation);
 		vec3 cloud_color = mix(vec3(0.17, 0.18, 0.32), mix(vec3(1.0, 0.65, 0.46), vec3(0.83, 0.91, 0.97), day), smoothstep(-0.18, 0.04, dot(sky_up, sun_dir)));
 		cloud_color *= mix(0.78, 1.05, smoothstep(0.50, 0.70, cloud_shape));
+		// 下雨时云变成低沉的灰色，天空整体也褪成灰蓝。
+		cloud_color = mix(cloud_color, vec3(0.52, 0.55, 0.60) * mix(0.25, 1.0, day), rain * 0.75);
 		col = mix(col, cloud_color, clouds * surface_sky * 0.92);
+		col = mix(col, vec3(0.50, 0.54, 0.60) * mix(0.18, 1.0, day), rain * 0.55 * surface_sky * smoothstep(-0.05, 0.1, elevation));
 		COLOR = col;
 	}
 }

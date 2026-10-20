@@ -9,6 +9,7 @@ Godot 4.7.2（GDScript）单人星球漫游游戏。总体方案见 `docs/方案
 - 注释使用中文，一行只写一条语句。
 - 不在代码里留调试残留、临时探针，或者从命令行覆盖画面参数的后门。
 - `test-output/`、`build/` 与 `game/.godot/` 不进入 Git。
+- 分支只有两个：`main`，以及 AI 开发分支 `codex/wanderer`。Claude 和 GPT 都在 `codex/wanderer` 上提交；云端会话即使被分配了别的分支名，也先拉取 `codex/wanderer`，改完推回 `codex/wanderer`，不另建长期分支。合并进 `main` 由用户决定。
 - 创建 Pull Request 后不要订阅关注它的动态，也不要设定时检查。仓库没有 CI，评审由用户本人完成，订阅只会带来消耗 token 的状态通知。
 
 ## 云端会话

@@ -80,11 +80,11 @@ func _update_environment() -> void:
 	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height) * 1.25, 1.0, space)
 	# 日出日落前后天空最亮最暖，背光的地面也应映出紫粉色，而不是沉成黑褐色。
 	var golden: float = smoothstep(-0.10, 0.02, sun_height) * (1.0 - smoothstep(0.10, 0.35, sun_height))
-	var ambient: Color = Color(0.12, 0.16, 0.30).lerp(Color(0.46, 0.56, 0.72), day).lerp(Color(0.66, 0.50, 0.64), golden * 0.7)
+	var ambient: Color = Color(0.12, 0.16, 0.30).lerp(Color(0.46, 0.56, 0.72), day).lerp(Color(0.70, 0.52, 0.70), golden * 0.75)
 	_environment.ambient_light_color = ambient.lerp(Color(0.08, 0.08, 0.16), space)
 	# 晨的日间阴影保留蓝色环境光，并适度抬亮林下和背光山坡。
 	var daytime_energy: float = 0.39 if _planet.profile == 0 else 0.32
-	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.16, 0.20, space)
+	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.30, 0.20, space)
 	_update_weather(up, altitude, day)
 	_update_grade(sun_height, space)
 	for node: Node in get_tree().get_nodes_in_group("planets"):
@@ -120,7 +120,7 @@ func _update_grade(sun_height: float, space: float) -> void:
 	_grade_key = key
 	var surface: float = 1.0 - space
 	# 暗部抬起的颜色与亮部增益，按通道给出；暗部偏紫蓝，黄金时段亮部偏暖。
-	var lift: Vector3 = (Vector3(0.0, 0.004, 0.016) * noon + Vector3(0.022, 0.0, 0.034) * golden + Vector3(0.0, 0.008, 0.03) * night) * surface
+	var lift: Vector3 = (Vector3(0.0, 0.004, 0.016) * noon + Vector3(0.03, 0.004, 0.045) * golden + Vector3(0.0, 0.008, 0.03) * night) * surface
 	var gain: Vector3 = Vector3.ONE.lerp(Vector3(1.0, 1.0, 0.985) * noon + Vector3(1.05, 0.975, 0.87) * golden + Vector3(0.88, 0.94, 1.05) * night, surface)
 	var points: PackedFloat32Array = []
 	var colors: PackedColorArray = []

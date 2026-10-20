@@ -22,6 +22,10 @@ uniform float snow_height = 1580.0;
 uniform float beach_height = 12.0;
 uniform bool terrestrial = true;
 uniform sampler2D ground_paint : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec3 volcano_center = vec3(0.0);
+uniform float volcano_radius = 0.0;
+uniform vec3 basalt : source_color = vec3(0.30, 0.25, 0.25);
+uniform vec3 ash : source_color = vec3(0.55, 0.47, 0.42);
 
 varying float v_height;
 varying float v_slope;
@@ -59,6 +63,14 @@ void fragment() {
 	c = mix(c, c * vec3(1.08, 1.02, 0.88), meadow * 0.45);
 	c = mix(sand * 0.82, sand, smoothstep(-1.0, 3.0, v_height)) * (1.0 - smoothstep(2.0, beach_height, v_height)) + c * smoothstep(2.0, beach_height, v_height);
 	c = mix(c, rock, smoothstep(0.22, 0.34, v_slope));
+	if (volcano_radius > 0.0) {
+		// 火山上半部是深色玄武岩，山腰过渡为灰褐色火山灰，岩面带少量色块。
+		float reach = 1.0 - distance(normalize(v_position) * planet_radius, volcano_center) / volcano_radius;
+		float rock_cover = smoothstep(0.35, 0.62, reach + patch(v_position / 45.0) * 0.06);
+		float ash_cover = smoothstep(0.12, 0.35, reach) * (1.0 - rock_cover);
+		c = mix(c, ash * (0.95 + patch(v_position / 20.0) * 0.08), ash_cover * 0.7);
+		c = mix(c, basalt * (0.9 + patch(v_position / 12.0) * 0.12), rock_cover);
+	}
 	float snow_line = smoothstep(snow_height - 80.0, snow_height + 120.0, v_height + patch(v_position / 150.0) * 65.0) * (1.0 - smoothstep(0.30, 0.45, v_slope));
 	c = mix(c, snow, snow_line);
 	float variation = patch(v_position / 32.0) * 0.07 + patch(v_position / 3.0) * 0.028;

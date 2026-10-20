@@ -22,9 +22,9 @@ var center: Vector3
 var axis_u: Vector3
 var axis_v: Vector3
 var volcano: Vector2 = Vector2.INF
-var volcano_height: float = 650.0
-var volcano_radius: float = 2300.0
-var crater_radius: float = 300.0
+var volcano_height: float = 760.0
+var volcano_radius: float = 2000.0
+var crater_radius: float = 280.0
 var crater_depth: float = 115.0
 # 火山中心处的基础地形高度；山体建在这个高度上，不随周围丘陵起伏而破口。
 var volcano_base: float = 0.0
@@ -93,7 +93,7 @@ func with_volcano(point: Vector2, base: float) -> float:
 		var bowl: float = 1.0 - pow(distance / crater_radius, 2.0)
 		return ground + volcano_height - crater_depth * bowl + 6.0 * smoothstep(0.7, 1.0, distance / crater_radius)
 	var slope: float = (volcano_radius - distance) / (volcano_radius - crater_radius)
-	var cone: float = volcano_height * pow(slope, 1.6) + 6.0 * smoothstep(0.85, 1.0, slope)
+	var cone: float = volcano_height * pow(slope, 1.45) + 6.0 * smoothstep(0.85, 1.0, slope)
 	# 山腰的放射状冲沟，越靠山顶越明显，避免锥体像一个光滑的圆锥。
 	var angle: float = atan2(offset.y, offset.x)
 	var gully: float = 0.5 + 0.5 * sin(angle * 13.0 + sin(angle * 5.0) * 2.2)

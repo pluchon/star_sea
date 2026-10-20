@@ -70,6 +70,11 @@ func _ready() -> void:
 	_water_material.shader = load("res://shaders/water.gdshader") as Shader
 	_water_material.set_shader_parameter("planet_radius", radius)
 	_terrain_material.set_shader_parameter("terrestrial", _planet.profile == 0)
+	var features: TerrainFeatures = _noise.features
+	if features != null and features.volcano != Vector2.INF:
+		# 火山中心以星球中心为原点，着色器据此把山体上部染成深色火山岩。
+		_terrain_material.set_shader_parameter("volcano_center", features.direction_at(features.volcano) * radius)
+		_terrain_material.set_shader_parameter("volcano_radius", features.volcano_radius)
 	if _planet.profile == 1:
 		_terrain_material.set_shader_parameter("snow_height", 9000.0)
 		_terrain_material.set_shader_parameter("sand", Color(0.84, 0.51, 0.32))

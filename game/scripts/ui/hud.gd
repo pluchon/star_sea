@@ -56,7 +56,7 @@ func _ready() -> void:
 	background.content_margin_bottom = 18.0
 	_help.add_theme_stylebox_override("panel", background)
 	var text: Label = Label.new()
-	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　切换飞行 / 近地步行\nV　第一 / 第三人称\nM　全球地形图\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
+	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　切换飞行 / 近地步行\nV　第一 / 第三人称\nM　全球地形图（可切换立体地球、插旗）\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
 	_help.add_child(text)
 	_help.visible = false
 	layout.add_child(_help)

@@ -154,7 +154,7 @@ func _build_deer() -> void:
 		var coat: Color = Color(0.66, 0.46, 0.30).lerp(Color(0.74, 0.58, 0.40), float(index) / DEER)
 		var body: Node3D = Node3D.new()
 		root.add_child(body)
-		_blob(body, Vector3(0.0, 1.0, 0.0), Vector3(0.36, 0.34, 0.75), coat)
+		_blob(body, Vector3(0.0, 1.0, 0.0), Vector3(0.36, 0.34, 0.75), coat, Vector3.ZERO, true)
 		_blob(body, Vector3(0.0, 0.92, 0.0), Vector3(0.30, 0.22, 0.62), coat.lerp(Color(0.92, 0.86, 0.74), 0.6))
 		_blob(body, Vector3(0.0, 1.15, 0.62), Vector3(0.08, 0.10, 0.08), Color(0.94, 0.90, 0.82))
 		var neck: Node3D = Node3D.new()
@@ -181,7 +181,8 @@ func _build_deer() -> void:
 		_deer.append({"node": root, "neck": neck, "legs": legs, "direction": Vector3.ZERO, "heading": 0.0, "state": "graze", "timer": 0.0, "phase": _rng.randf() * TAU, "speed": 0.0})
 
 
-func _blob(parent: Node3D, location: Vector3, size: Vector3, color: Color, angles: Vector3 = Vector3.ZERO) -> void:
+# 只有身体投影；腿、头和角这些细小部件不投影，避免四级阴影成倍增加绘制次数。
+func _blob(parent: Node3D, location: Vector3, size: Vector3, color: Color, angles: Vector3 = Vector3.ZERO, casts_shadow: bool = false) -> void:
 	var mesh: SphereMesh = SphereMesh.new()
 	mesh.radius = 1.0
 	mesh.height = 2.0
@@ -190,6 +191,7 @@ func _blob(parent: Node3D, location: Vector3, size: Vector3, color: Color, angle
 	var part: MeshInstance3D = MeshInstance3D.new()
 	part.mesh = mesh
 	part.material_override = _material
+	part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts_shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	part.position = location
 	part.rotation = angles
 	part.scale = size

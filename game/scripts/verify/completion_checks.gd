@@ -117,7 +117,7 @@ func _begin() -> void:
 		var audio: AudioStreamPlayer = node as AudioStreamPlayer
 		if audio.playing and audio in sound._loops.values():
 			loop_count += 1
-	if DisplayServer.get_name() != "headless" and (audio_players.size() != 6 or loop_count != 4):
+	if DisplayServer.get_name() != "headless" and (audio_players.size() != 7 or loop_count != 5):
 		_failures.append("环境音未能正常开始循环。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
 	VerificationMetrics.write_json(OUTPUT.path_join("completion_checks.json"), report)

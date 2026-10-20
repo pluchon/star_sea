@@ -31,7 +31,7 @@
 | WASD / 鼠标 | 移动 / 环顾 |
 | Shift | 加速 |
 | 空格 / Ctrl | 跳跃或上升 / 下降 |
-| F | 切换飞行；在陆地上离地 2 米以内能切回步行 |
+| F | 降落／登船；远处长按 1.2 秒召唤飞船。降落要求离地不超过 40 米、速度低于 30 m/s，并有合适的落点 |
 | V | 第一、第三人称切换 |
 | M | 打开「晨」的全球地形图：滚轮缩放，拖动平移，点一下能查海拔；可切换立体地球仪，单击插旗、右键拔旗，旗子的方位会显示在屏幕上方 |
 | T | 时间加速 |
@@ -78,20 +78,29 @@
 .\tools\Test-Acceptance.ps1
 ```
 
-它会依次做这些事：源码检查、重新打包、地图和视角专项、沿三颗星球各绕几圈、在多个地点降落、录环境音、22 个固定机位测性能，最后核对打包文件。结果放在 `test-output/acceptance/`。
+它会依次完成源码检查、飞船与全球水系专项、遗迹构件检查、重新打包、打包素材加载、地图与视角专项、整球绕行、多地点降落、实际声音录制、晨的 25 个固定机位性能测量，最后核对打包文件。结果位于 `test-output/acceptance/`。默认只验收晨；保留 `-Scope all` 供明确需要全项目回归时使用。
 
 只想单独跑某一项的话：
 
 ```powershell
 .\tools\Measure-Shots.ps1
-.\tools\Run-Game.ps1 -GameArgs @('--descent=test-output/p1/descent.json')
-.\tools\Run-Game.ps1 -GameArgs @('--walk=test-output/p1/walk.json')
+.\tools\Run-Game.ps1 -GameArgs @('--descent=res://../test-output/p1/descent.json')
+.\tools\Run-Game.ps1 -GameArgs @('--walk=res://../test-output/p1/walk.json')
 .\tools\Check-Godot.ps1 -GodotArgs @('--script','res://scripts/verify/completion_checks.gd','--','--check=completion') -LogPath 'test-output/p2/logs/completion.log'
 .\tools\Check-Godot.ps1 -GodotArgs @('--script','res://scripts/verify/surface_checks.gd','--','--check=surfaces') -LogPath 'test-output/p2/logs/surfaces.log'
 .\tools\Check-Godot.ps1 -GodotArgs @('--headless','--script','res://scripts/verify/ecology_checks.gd') -LogPath 'test-output/p4/logs/ecology.log'
 .\tools\Check-Godot.ps1 -GodotArgs @('--headless','--script','res://scripts/verify/ecology_runtime_checks.gd','--','--check=ecology_runtime') -LogPath 'test-output/p4/logs/ecology-runtime.log'
 .\tools\Build-Game.ps1
 ```
+
+「远行者」第一大阶段增加飞船、全球河湖与遗迹构件库。对应原第 0～3 步，具体结果见[第一阶段验收记录](docs/远行者第一阶段验收记录.md)。模型和水系可重复生成：
+
+```powershell
+.\tools\Build-Models.ps1
+.\tools\Bake-World.ps1
+```
+
+模型工具需要 Blender 4.x；运行游戏不需要 Blender。修改基础地形、火山或水系烘焙规则后，需要重新烘焙水系。
 
 几点注意：
 
@@ -121,6 +130,10 @@
 | [晨样板区方案](docs/晨样板区方案.md) | 把晨做成能玩的类地星球：样板区、分轮计划和验收标准 |
 | [晨的光影与风](docs/晨的光影与风.md) | 按时间调色、云影、统一的风和探索者的围巾 |
 | [晨的样板区：地形、地标与生命](docs/晨的样板区：地形、地标与生命.md) | 火山、河湖、地标、立体地球仪、动物、天气与夜晚 |
+| [飞船与步行](docs/飞船与步行记录.md) | 性能基线、飞船起降与召唤、模型、音效和存档 |
+| [全球水系](docs/全球水系记录.md) | 晨的离线河湖、瀑布、峡谷和按距离加载 |
+| [遗迹构件库](docs/遗迹构件记录.md) | 72 个构件、双路线模型、材质与碰撞 |
+| [远行者第一阶段验收](docs/远行者第一阶段验收记录.md) | 第一大阶段的完整验证、性能比较与交付 |
 
 第二阶段「远行者」的文档在 [`docs/远行者/`](docs/远行者/00-总览与阅读顺序.md)：
 

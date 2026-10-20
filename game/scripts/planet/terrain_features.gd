@@ -544,7 +544,8 @@ func _place_landmarks(noise: TerrainNoise) -> void:
 	var ring_point: Vector2 = _find_spot(noise, Vector2.ZERO, 1100.0, 2200.0, func(point: Vector2, ground: float) -> bool:
 		return ground > 25.0 and ground < 400.0 and noise.slope(direction_at(point), ground) < 0.08 and river_distance(direction_at(point)) > 120.0 and _lake_level[_cell_index(point)] == -INF)
 	if ring_point != Vector2.INF:
-		landmarks.append({"kind": "fallen_ring", "point": ring_point, "height": 0.0, "radius": 15.0, "clearance": 19.0, "facing": 0.8})
+		# 环面正对出发地，从出发地方向望去是一个完整的圆圈。
+		landmarks.append({"kind": "fallen_ring", "point": ring_point, "height": 0.0, "radius": 15.0, "clearance": 19.0, "facing": (-ring_point).angle()})
 
 
 func _find_spot(noise: TerrainNoise, origin: Vector2, near: float, far: float, accept: Callable) -> Vector2:

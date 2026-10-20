@@ -127,7 +127,8 @@ func _update_environment() -> void:
 	# 晨的日间阴影保留蓝色环境光，并适度抬亮林下和背光山坡。
 	var daytime_energy: float = 0.39 if _planet.profile == 0 else 0.32
 	_environment.ambient_light_energy = lerpf(lerpf(0.18, daytime_energy, day) + golden * 0.55 + overcast * day * 0.12, 0.20, space)
-	RenderingServer.global_shader_parameter_set("shadow_fill", golden * 0.32 * (1.0 - space) * (1.0 - overcast))
+	# 阴天没有清晰的投影：云层越厚，投影里保留的光越多，影子越淡。
+	RenderingServer.global_shader_parameter_set("shadow_fill", maxf(golden * 0.32 * (1.0 - overcast), overcast * day * 0.6) * (1.0 - space))
 	RenderingServer.global_shader_parameter_set("moon_dir", moon_direction)
 	RenderingServer.global_shader_parameter_set("rain", rain * (1.0 - space))
 	RenderingServer.global_shader_parameter_set("wetness", _wetness if _planet.profile == 0 else 0.0)

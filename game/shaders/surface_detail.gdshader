@@ -34,8 +34,10 @@ void vertex() {
 	v_surface = UV2.y;
 	v_up = NORMAL.y;
 	v_moss = INSTANCE_CUSTOM.g;
-	v_distance = distance((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz, CAMERA_POSITION_WORLD);
-	v_haze = mist_amount(root_world, v_distance);
+	vec3 vertex_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	v_distance = distance(vertex_world, CAMERA_POSITION_WORLD);
+	// 雾按顶点的实际高度计算，高大的石柱和树冠上部不会整体被雾染白。
+	v_haze = mist_amount(vertex_world, v_distance);
 }
 
 void fragment() {

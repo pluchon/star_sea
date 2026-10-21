@@ -20,6 +20,7 @@ var landmarks: Array[Dictionary] = []
 var hydrology: GlobalHydrology
 var landforms: DawnLandforms
 var protected_spawn: Vector3
+var civilization: CivilizationTerrain
 
 
 static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
@@ -45,6 +46,8 @@ static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
 		features.landmarks.assign(data.metadata["landmarks"])
 		features.landforms = DawnLandforms.new(data.metadata.get("landforms", {}), noise.radius)
 		features.hydrology = GlobalHydrology.new(data, noise.radius)
+		if data.civilization != null:
+			features.civilization = CivilizationTerrain.new(data.civilization, noise.radius)
 		_cache[key] = features
 	_cache_mutex.unlock()
 	return features
@@ -76,7 +79,8 @@ func apply(direction: Vector3, base: float) -> float:
 		var point: Vector2 = plane(direction)
 		if absf(point.x) <= HALF_SIZE and absf(point.y) <= HALF_SIZE:
 			height = with_volcano(point, height)
-	return hydrology.carve(direction, height)
+	height = hydrology.carve(direction, height)
+	return civilization.apply(direction, height, hydrology) if civilization != null else height
 
 
 func ground_height(direction: Vector3, base: float) -> float:
@@ -124,6 +128,8 @@ func river_distance(direction: Vector3) -> float:
 
 
 func in_clearing(direction: Vector3) -> bool:
+	if civilization != null and civilization.in_clearing(direction):
+		return true
 	if not contains(direction):
 		return false
 	var point: Vector2 = plane(direction)

@@ -33,6 +33,7 @@ const PATH: String = "res://data/dawn_world.res"
 @export var karst_sizes: PackedVector2Array
 @export var hot_springs: PackedVector4Array
 @export var statistics: Dictionary
+@export var civilization: CivilizationData
 
 
 static func source_signature() -> String:
@@ -42,6 +43,8 @@ static func source_signature() -> String:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
 	for path: String in ["res://scripts/civilization/dawn_landforms.gd", "res://scripts/civilization/landform_layout.gd"]:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
+	for path: String in ["civilization_data", "civilization_siting", "civilization_terrain", "civilization_paths", "civilization_bake", "civilization_buildings"]:
+		text += FileAccess.get_file_as_string("res://scripts/civilization/" + path + ".gd").replace("\r\n", "\n")
 	return text.md5_text()
 
 

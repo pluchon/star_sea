@@ -6,6 +6,21 @@ static func run() -> Dictionary:
 	var failures: Array[String] = []
 	var counts: Dictionary = {}
 	for kind: String in SurfaceDetails.KINDS:
+		if kind == "field_stalks":
+			var field: ArrayMesh = SurfaceDetails.mesh_for_kind(kind)
+			counts[kind] = [field.get_faces().size() / 3]
+			for surface: int in field.get_surface_count():
+				var arrays: Array = field.surface_get_arrays(surface)
+				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+				var wind: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+				if wind.size() != vertices.size():
+					failures.append("稻秆缺少随高度变化的风权重。")
+					continue
+				for index: int in vertices.size():
+					if absf(wind[index].y) > 0.001 or absf(wind[index].x - vertices[index].y / 0.6) > 0.02:
+						failures.append("稻秆第二组 UV 的风权重或材质分类不正确。")
+						break
+			continue
 		var mesh: ArrayMesh = VegetationMeshes.create(kind)
 		var high: int = mesh.get_meta("triangles")
 		var levels: Array = [high]

@@ -5,9 +5,9 @@ const NEAR_DIVISIONS: int = 1024
 const FOREST_DIVISIONS: int = 128
 const NEAR_DISTANCE: float = 160.0
 const FOREST_DISTANCE: float = 1400.0
-const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers", "fern", "reeds", "mushrooms"]
+const KINDS: Array[String] = ["grass", "stone", "broadleaf", "pine", "shrub", "flowers", "fern", "reeds", "mushrooms", "field_stalks"]
 # 各类物件在阵风最强时的最大摆幅，单位为米；高大树冠摆得多，灌木和蕨类较稳。
-const WIND_SWAY: Dictionary[String, float] = {"grass": 0.17, "stone": 0.0, "broadleaf": 0.32, "pine": 0.26, "shrub": 0.08, "flowers": 0.15, "fern": 0.10, "reeds": 0.24, "mushrooms": 0.0}
+const WIND_SWAY: Dictionary[String, float] = {"grass": 0.17, "stone": 0.0, "broadleaf": 0.32, "pine": 0.26, "shrub": 0.08, "flowers": 0.15, "fern": 0.10, "reeds": 0.24, "mushrooms": 0.0, "field_stalks": 0.08}
 
 var _planet: Planet
 var _tiles: Dictionary[Vector4i, Node3D] = {}
@@ -24,6 +24,7 @@ var _near_enabled: bool = false
 var _task_id: int = -1
 var _pending_key: Vector4i
 var _result: Dictionary = {}
+var _field_time: float = 0.0
 
 
 func _ready() -> void:
@@ -32,14 +33,15 @@ func _ready() -> void:
 	var shader: Shader = load("res://shaders/surface_detail.gdshader") as Shader
 	var solid_shader: Shader = load("res://shaders/surface_solid.gdshader") as Shader
 	for kind: String in KINDS:
-		_meshes[kind] = VegetationMeshes.create(kind)
+		_meshes[kind] = mesh_for_kind(kind)
 		var material: ShaderMaterial = ShaderMaterial.new()
-		material.shader = solid_shader if kind in ["broadleaf", "pine", "stone", "shrub", "mushrooms"] else shader
+		material.shader = load("res://shaders/field_stalks.gdshader") as Shader if kind == "field_stalks" else (solid_shader if kind in ["broadleaf", "pine", "stone", "shrub", "mushrooms"] else shader)
 		material.set_shader_parameter("wind_strength", WIND_SWAY[kind])
-		material.set_shader_parameter("is_grass", kind == "grass" or kind == "flowers")
-		material.set_shader_parameter("bark_color", load("res://textures/painted/bark.svg"))
-		material.set_shader_parameter("rock_color", load("res://textures/painted/stone.svg"))
-		material.set_shader_parameter("leaf_color", load("res://textures/painted/leaves.svg"))
+		if kind != "field_stalks":
+			material.set_shader_parameter("is_grass", kind == "grass" or kind == "flowers")
+			material.set_shader_parameter("bark_color", load("res://textures/painted/bark.svg"))
+			material.set_shader_parameter("rock_color", load("res://textures/painted/stone.svg"))
+			material.set_shader_parameter("leaf_color", load("res://textures/painted/leaves.svg"))
 		_materials[kind] = material
 	_stone_shape = _meshes["stone"].create_convex_shape()
 	# 实际使用的树冠、草叶和投影材质均在首次进入地表前实例化。
@@ -52,6 +54,15 @@ func _ready() -> void:
 	if _planet.profile == 0 and DisplayServer.get_name() != "headless":
 		_warm_draw_variants.call_deferred()
 	_make_ruin()
+
+
+static func mesh_for_kind(kind: String) -> ArrayMesh:
+	if kind != "field_stalks":
+		return VegetationMeshes.create(kind)
+	var scene: Node3D = (load("res://models/vegetation/field_stalks.glb") as PackedScene).instantiate() as Node3D
+	var mesh: ArrayMesh = (scene.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).mesh as ArrayMesh
+	scene.free()
+	return mesh
 
 
 func _warm_draw_variants() -> void:
@@ -91,6 +102,10 @@ func _warm_draw_variants() -> void:
 
 
 func _process(delta: float) -> void:
+	var director: SkyDirector = get_tree().current_scene.get_node_or_null("SkyDirector") as SkyDirector if get_tree().current_scene != null else null
+	if not get_tree().paused:
+		_field_time += delta
+	_materials["field_stalks"].set_shader_parameter("field_time", 0.0 if director != null and director.time_paused else _field_time)
 	_collect_tile()
 	_elapsed += delta
 	_collision_elapsed += delta
@@ -191,6 +206,15 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 	var forest: bool = divisions == FOREST_DIVISIONS
 	for index: int in (440 if forest else 650):
 		var direction: Vector3 = SurfaceGrid.direction(cell, divisions, Vector2(rng.randf(), rng.randf()))
+		var field: Dictionary = noise.features.civilization.terrace_at(direction) if noise.features != null and noise.features.civilization != null else {}
+		var plaza: bool = noise.features != null and noise.features.civilization != null and direction.distance_to(noise.features.civilization.data.town["direction"]) * noise.radius < 32.0
+		if forest and plaza:
+			continue
+		if not field.is_empty():
+			if forest:
+				continue
+			var coordinate: Vector2 = noise.features.civilization.field_point(field, direction)
+			direction = SurfaceSites.offset_direction(direction, field["across"], snappedf(coordinate.y, 0.8) - coordinate.y, noise.radius)
 		var elevation: float = noise.height(direction)
 		if elevation < 3.0:
 			continue
@@ -210,7 +234,13 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		var scale_value: float = rng.randf_range(0.65, 1.30)
 		var tint: Color = Color.WHITE
 		var slope: float = noise.slope(direction, elevation)
-		if forest:
+		if not field.is_empty():
+			kind = "field_stalks"
+			scale_value = rng.randf_range(0.9, 1.05)
+		elif plaza:
+			kind = "grass"
+			scale_value = rng.randf_range(0.7, 1.0)
+		elif forest:
 			if elevation < 16.0 or elevation > 1600.0 or slope > 0.65 or temperature < 0.16 or river_gap < 7.0 or waterside:
 				continue
 			if rng.randf() > 0.035 + forest_cover * 0.82:
@@ -286,6 +316,13 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 		var position_local: Vector3 = surface_position - center
 		(result[kind] as Array[Transform3D]).append(Transform3D(basis, position_local))
 		(result[kind + "_colors"] as Array[Color]).append(tint)
+	if forest and noise.features != null and noise.features.civilization != null:
+		for direction: Vector3 in noise.features.civilization.data.trees:
+			if SurfaceGrid.cell_at(direction, divisions) != cell:
+				continue
+			var basis: Basis = Basis.looking_at(SurfaceSites.tangent_forward(direction), direction)
+			(result["broadleaf"] as Array[Transform3D]).append(Transform3D(basis, direction * (noise.radius + noise.height(direction) - 0.08) - center))
+			(result["broadleaf_colors"] as Array[Color]).append(Color(0.84, 0.94, 0.8))
 	return result
 
 
@@ -330,6 +367,10 @@ func _add_batch(parent: Node3D, kind: String, transforms: Array, colors: Array) 
 	instance.visibility_range_end = 1800.0 if tree else 230.0
 	instance.visibility_range_end_margin = 90.0 if tree else 30.0
 	instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	if kind == "field_stalks":
+		# 干秆都是封闭网格，不用透明渐隐，避免整批稻秆进入透明绘制通道。
+		instance.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+		instance.visibility_range_end_margin = 0.0
 	# 小型薄叶不投影，避免亚像素叶片在草地上形成密集闪点；树木、灌木和岩石保留投影。
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if kind in ["broadleaf", "pine", "stone", "shrub"] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	instance.extra_cull_margin = 0.8

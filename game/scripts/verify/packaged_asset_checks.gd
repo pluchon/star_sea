@@ -4,6 +4,8 @@ extends RefCounted
 
 static func run(tree: SceneTree) -> Dictionary:
 	var failures: Array[String] = []
+	if not ResourceLoader.exists("res://models/vegetation/field_stalks.glb") or not FileAccess.file_exists("res://models/vegetation/field_stalks.json"):
+		failures.append("打包缺少稻秆模型或同源记录。")
 	for piece: String in ["explorer", "climb_rope", "climb_anchor", "climb_peg"]:
 		if not ResourceLoader.exists("res://models/explorer/" + piece + ".glb"):
 			failures.append("打包缺少探索者或攀爬模型：" + piece)

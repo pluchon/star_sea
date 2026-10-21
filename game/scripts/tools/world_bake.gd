@@ -77,6 +77,14 @@ func _bake() -> void:
 	print("烘焙：空间索引")
 	_index()
 	_fine_index()
+	print("烘焙：文明区")
+	_features.hydrology = GlobalHydrology.new(_data, _noise.radius)
+	_features.protected_spawn = _features.site["direction"]
+	_noise.features = _features
+	_data.civilization = CivilizationBake.new().generate(_noise, _data)
+	if _data.civilization == null:
+		quit(1)
+		return
 	_data.signature = HydrologyData.source_signature()
 	var bake_seconds: float = float(Time.get_ticks_msec() - started) / 1000.0
 	_data.statistics["grid_cells"] = COUNT

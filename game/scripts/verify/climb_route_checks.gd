@@ -20,6 +20,8 @@ func _begin() -> void:
 	Engine.time_scale = 6.0
 	var reports: Array[Dictionary] = []
 	for zone: Dictionary in zones.zones:
+		if "--only=town" in OS.get_cmdline_user_args() and not String(zone["id"]).begins_with("town"):
+			continue
 		if "--only=canyon" in OS.get_cmdline_user_args() and zone["kind"] != "climb_route":
 			continue
 		if "--only=boardwalk" in OS.get_cmdline_user_args() and not String(zone["id"]).begins_with("boardwalk"):
@@ -74,7 +76,7 @@ func _begin() -> void:
 			player.traversal.leave_climb(player)
 		player.traversal._reattach_delay = 0.0
 	var bypass: Dictionary = {}
-	if not "--only=canyon" in OS.get_cmdline_user_args():
+	if not "--only=canyon" in OS.get_cmdline_user_args() and not "--only=town" in OS.get_cmdline_user_args():
 		bypass = await _boardwalk_bypass(player, planet, zones)
 		if not bypass["passed"]:
 			_failures.append("栈道断口无法连续完成下降、下层通行和上攀。")

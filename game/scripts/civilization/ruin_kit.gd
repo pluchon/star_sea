@@ -61,7 +61,7 @@ static func material(kind: int, batched: bool = false) -> ShaderMaterial:
 	var key: int = kind + (4 if batched else 0)
 	if not _materials.has(key):
 		var result: ShaderMaterial = ShaderMaterial.new()
-		result.shader = load("res://shaders/ruin.gdshader") as Shader
+		result.shader = load("res://shaders/ruin_solid.gdshader" if kind in [0, 1] else "res://shaders/ruin.gdshader") as Shader
 		result.set_shader_parameter("kind", kind)
 		result.set_shader_parameter("batched", batched)
 		result.set_shader_parameter("stone_texture", load("res://textures/painted/stone.svg"))

@@ -14,6 +14,9 @@ func _ready() -> void:
 	var layout: Resource = load(ClimbLayout.LAYOUT_PATH)
 	var data: Dictionary = layout.get("metadata").get("climbs", {})
 	zones.assign(data.get("zones", []).duplicate(true))
+	var planet: Planet = get_parent() as Planet
+	if planet.noise.features.civilization != null:
+		zones.append_array(planet.noise.features.civilization.data.climbs.duplicate(true))
 	_placements.assign(data.get("placements", []))
 	var builder: RuinBuilder = RuinBuilder.new()
 	add_child(builder)

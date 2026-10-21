@@ -71,6 +71,10 @@ func _ready() -> void:
 	details.name = "SurfaceDetails"
 	add_child(details)
 	if profile == 0:
+		if noise.features.civilization != null:
+			var civilization: CivilizationSites = CivilizationSites.new()
+			civilization.name = "CivilizationSites"
+			add_child(civilization)
 		var climbs: ClimbZones = ClimbZones.new()
 		climbs.name = "ClimbZones"
 		add_child(climbs)

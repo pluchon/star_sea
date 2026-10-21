@@ -198,11 +198,29 @@ func _capture_shot(name: String, output_directory: String) -> void:
 		"site": _site_report(),
 		"performance_passed": float(interval_statistics["mean"]) <= 12.5 and float(interval_statistics["p95"]) <= 16.0,
 	}
+	if name == "s36_beacon_chain_night":
+		var towers: BeaconTowers = _planet.get_node("BeaconTowers") as BeaconTowers
+		var point: Vector2i = Vector2i(_player.camera.unproject_position(towers._flares[0].global_position))
+		var left: int = image.get_width()
+		var right: int = -1
+		var pixels: int = 0
+		for y: int in range(maxi(point.y - 12, 0), mini(point.y + 13, image.get_height())):
+			for x: int in range(maxi(point.x - 12, 0), mini(point.x + 13, image.get_width())):
+				var color: Color = image.get_pixel(x, y)
+				# 色调映射会压低明亮核心的色差，按最终图像的暖色关系判定。
+				if color.r > 0.25 and color.r > color.g * 1.05 and color.g > color.b * 1.1:
+					left = mini(left, x)
+					right = maxi(right, x)
+					pixels += 1
+		report["beacon_visibility"] = {"passed": right - left + 1 >= 6, "core_width_px": maxi(right - left + 1, 0), "amber_pixels": pixels}
 	var save_error: Error = VerificationMetrics.write_json(directory.path_join(name + ".json"), report)
 	if save_error != OK:
 		_fail("无法保存机位报告：" + error_string(save_error))
 		return
 	print(JSON.stringify(report))
+	if report.has("beacon_visibility") and not bool(report["beacon_visibility"]["passed"]):
+		_fail("夜景首塔的实际光点不足六像素。")
+		return
 	await _finish(0)
 
 

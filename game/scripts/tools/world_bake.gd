@@ -85,6 +85,24 @@ func _bake() -> void:
 	if _data.civilization == null:
 		quit(1)
 		return
+	print("烘焙：烽火塔链")
+	_data.civilization.beacons = BeaconBake.new().generate(_noise, _data.civilization)
+	if _data.civilization.beacons.is_empty():
+		quit(1)
+		return
+	_features.civilization = CivilizationTerrain.new(_data.civilization, _noise.radius)
+	var beacon_path: PackedVector3Array = CivilizationPaths.find(_noise, _data.civilization.town["direction"], _data.civilization.beacons[0]["direction"])
+	if beacon_path.is_empty():
+		quit(1)
+		return
+	_data.civilization.roads.append(CivilizationPaths.road(_noise, beacon_path, 2.0, "first_beacon"))
+	_features.civilization = CivilizationTerrain.new(_data.civilization, _noise.radius)
+	# 新道路和塔基也影响地面；构件在最终高度上重新摆放，避免旧基础悬空。
+	_data.civilization.placements.clear()
+	_data.civilization.climbs.clear()
+	_data.civilization.trees.clear()
+	_data.civilization.town["paving_gaps"] = PackedVector3Array()
+	CivilizationBuildings.new(_noise, _data.civilization).build()
 	_data.signature = HydrologyData.source_signature()
 	var bake_seconds: float = float(Time.get_ticks_msec() - started) / 1000.0
 	_data.statistics["grid_cells"] = COUNT

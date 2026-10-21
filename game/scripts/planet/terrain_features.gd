@@ -146,6 +146,10 @@ func height_at(noise: TerrainNoise, point: Vector2) -> float:
 
 func updraft_at(direction: Vector3, altitude: float) -> float:
 	var lift: float = 0.0
+	if civilization != null and altitude >= 18.0 and altitude < 100.0:
+		for tower: Dictionary in civilization.data.beacons:
+			if direction.distance_to(tower["direction"]) * radius < 18.0:
+				lift = maxf(lift, 4.5 * (1.0 - maxf(altitude - 25.0, 0.0) / 75.0))
 	if landforms != null and altitude >= 0.0 and altitude < 150.0:
 		if landforms.nearest(direction).x < 600.0:
 			lift = 4.0 * (1.0 - altitude / 150.0)

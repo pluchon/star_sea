@@ -1,4 +1,4 @@
-param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'all')][string]$Target = 'all', [string]$Only = '')
+param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'all')][string]$Target = 'all', [string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
@@ -34,6 +34,10 @@ try {
     if ($Target -in @('fields','all')) {
         & $blenderPath --background --python-exit-code 1 --python art/blender/build_fields.py -- --out game/models/vegetation
         if ($LASTEXITCODE -ne 0) { throw '稻秆模型生成失败。' }
+    }
+    if ($Target -in @('beacon','all')) {
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_beacon.py
+        if ($LASTEXITCODE -ne 0) { throw '烽火塔远景模型生成失败。' }
     }
 }
 finally { Pop-Location }

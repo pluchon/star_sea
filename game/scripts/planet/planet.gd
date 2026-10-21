@@ -75,6 +75,9 @@ func _ready() -> void:
 			var civilization: CivilizationSites = CivilizationSites.new()
 			civilization.name = "CivilizationSites"
 			add_child(civilization)
+			var beacons: BeaconTowers = BeaconTowers.new()
+			beacons.name = "BeaconTowers"
+			add_child(beacons)
 		var climbs: ClimbZones = ClimbZones.new()
 		climbs.name = "ClimbZones"
 		add_child(climbs)

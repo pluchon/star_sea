@@ -191,9 +191,25 @@ def traversal(kind: str) -> dict:
     return write(kind, samples, looping)
 
 
+def beacon() -> dict:
+    rng = random.Random(20261028)
+    samples = array("f")
+    duration = 1.6
+    for index in range(round(duration * RATE)):
+        time = index / RATE
+        attack = min(time / .025, 1)
+        tail = min((duration - time) / .2, 1)
+        for channel in range(2):
+            resonance = sum(math.sin(math.tau * frequency * time + channel * .04) * amplitude
+                            for frequency, amplitude in [(220, .3), (330, .14), (440, .08)])
+            value = resonance * math.exp(-time * 2.8) + rng.uniform(-1, 1) * math.exp(-time * 12) * .12
+            samples.append(value * attack * tail)
+    return write("beacon_ignite", samples, False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["ship", "waterfall", "traversal"])
+    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon"])
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records = []
@@ -202,12 +218,14 @@ if __name__ == "__main__":
                    [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
         records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
                        for variant in range(3))
-    new_names = [] if args.only == "traversal" else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
+    new_names = [] if args.only in ("traversal", "beacon") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
     if args.only is None:
         new_names.append("waterfall")
     records.extend(machinery(name) for name in new_names)
     if args.only in (None, "traversal"):
         records.extend(traversal(name) for name in ["glide_open", "high_wind"])
+    if args.only in (None, "beacon"):
+        records.append(beacon())
     report = OUTPUT.parents[1] / "test-output" / "audio" / "audio-generation.json"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")

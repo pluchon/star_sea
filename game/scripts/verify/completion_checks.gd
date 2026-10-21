@@ -134,6 +134,11 @@ func _begin() -> void:
 	if DisplayServer.get_name() != "headless" and (audio_players.size() != 7 or loop_count != 5):
 		_failures.append("环境音未能正常开始循环。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
+	var beacons: Dictionary = BeaconChecks.persistence(scene)
+	if not beacons["passed"]:
+		_failures.append("烽火塔存档兼容或非法值检查失败。")
+	report["beacons"] = beacons
+	report["passed"] = _failures.is_empty()
 	VerificationMetrics.write_json(OUTPUT.path_join("completion_checks.json"), report)
 	print(JSON.stringify(report))
 	scene.queue_free()

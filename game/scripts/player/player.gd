@@ -173,7 +173,7 @@ func _physics_process(delta: float) -> void:
 	if not controls_enabled and not simulated_forward:
 		return
 	if mode == Mode.WALK and _waiting_for_ground:
-		var ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(global_position + up * 3.0, global_position - up * 5.0, 1, [get_rid()])
+		var ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(global_position + up * 3.0, global_position - up * 5.0, collision_mask, [get_rid()])
 		if get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
 			velocity = Vector3.ZERO
 			return

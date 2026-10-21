@@ -83,6 +83,12 @@ func _begin() -> void:
 	report["wet_records"] = wet_records
 	report["minimum_catchment_km2"] = data.town["minimum_area_km2"]
 	report["field_stalks"] = field_record
+	if not data.beacons.is_empty():
+		var beacons: Dictionary = await BeaconChecks.run(self, noise)
+		report["beacons"] = beacons
+		if not beacons["passed"]:
+			_failures.append_array(beacons["failures"])
+		report["passed"] = _failures.is_empty()
 	VerificationMetrics.write_json("res://../test-output/wanderer/civilization_checks.json", report)
 	print(JSON.stringify(report))
 	quit(0 if _failures.is_empty() else 1)

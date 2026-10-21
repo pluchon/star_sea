@@ -7,6 +7,7 @@ var radius: float
 var _road_index: Dictionary = {}
 var _trench_index: Dictionary = {}
 var _bounds: AABB
+var _beacon_index: Dictionary = {}
 
 
 func _init(value: CivilizationData, planet_radius: float) -> void:
@@ -21,6 +22,18 @@ func _init(value: CivilizationData, planet_radius: float) -> void:
 			_bounds = _bounds.expand(point * radius - Vector3.ONE * 8.0).expand(point * radius + Vector3.ONE * 8.0)
 	for point: Vector3 in data.aqueduct.get("points", PackedVector3Array()):
 		_bounds = _bounds.expand(point * radius - Vector3.ONE * 8.0).expand(point * radius + Vector3.ONE * 8.0)
+	for tower: Dictionary in data.beacons:
+		_bounds = _bounds.expand(Vector3(tower["direction"]) * radius - Vector3.ONE * 20.0).expand(Vector3(tower["direction"]) * radius + Vector3.ONE * 20.0)
+		var center: Vector3 = Vector3(tower["direction"]) * radius
+		var low: Vector3i = Vector3i(((center - Vector3.ONE * 16) / ROAD_CELL).floor())
+		var high: Vector3i = Vector3i(((center + Vector3.ONE * 16) / ROAD_CELL).floor())
+		for x: int in range(low.x, high.x + 1):
+			for y: int in range(low.y, high.y + 1):
+				for z: int in range(low.z, high.z + 1):
+					var key: Vector3i = Vector3i(x,y,z)
+					if not _beacon_index.has(key):
+						_beacon_index[key] = []
+					_beacon_index[key].append(tower)
 	for road: Dictionary in data.roads:
 		var points: PackedVector3Array = road["points"]
 		for index: int in points.size() - 1:
@@ -57,7 +70,14 @@ func apply(direction: Vector3, base: float, hydro: GlobalHydrology) -> float:
 		return base
 	if direction.distance_to(data.town["direction"]) * radius < 32.0:
 		return data.town["level"]
+	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
+		if direction.distance_to(tower["direction"]) * radius < 7.0:
+			return tower["height"]
 	var height: float = regions(direction, base)
+	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
+		var distance: float = direction.distance_to(tower["direction"]) * radius
+		if distance < 16.0:
+			height = lerpf(height, tower["height"], 1.0 - smoothstep(7.0, 16.0, distance))
 	var road: Vector4 = road_at(direction)
 	if road.x < 6.0:
 		var river: Vector4 = hydro.nearest(direction, true)
@@ -118,6 +138,9 @@ func road_at(direction: Vector3) -> Vector4:
 
 
 func in_clearing(direction: Vector3) -> bool:
+	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
+		if direction.distance_to(tower["direction"]) * radius < 8.0:
+			return true
 	var distance: float = direction.distance_to(data.town["direction"]) * radius
 	if distance < 32.0:
 		for gap: Vector3 in data.town.get("paving_gaps", PackedVector3Array()):

@@ -99,6 +99,7 @@ try {
     $shots += @('s49_range_from_spawn','s50_horn_peak','s51_canyon_rim','s52_canyon_floor','s53_mountain_pass')
     $shots += @('s54_glide_canyon','s55_glide_range','s56_climb_route')
     $shots += @('s30_town_plaza','s31_town_overview','s32_terraces','s33_cemetery','s34_old_road')
+    $shots += @('s35_beacon_top','s36_beacon_chain_night')
     $shotDirectory = Join-Path $releaseDirectory 'shots'
     foreach ($shot in $shots) {
         Invoke-Release "release-$shot" @("--shot=$shot", "--out=$shotDirectory")

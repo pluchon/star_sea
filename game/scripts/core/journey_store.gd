@@ -38,6 +38,8 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	var atlas: TerrainAtlas = scene.get_node_or_null("HUD/Layout/TerrainAtlas") as TerrainAtlas
 	if atlas != null:
 		config.set_value("journey", "flags", atlas.flags)
+	var beacons: BeaconTowers = scene.get_node_or_null("Universe/PlanetDawn/BeaconTowers") as BeaconTowers
+	config.set_value("journey", "beacons_lit", beacons.lit.duplicate() if beacons != null else [])
 	var error: Error = config.save(path + ".tmp")
 	if error != OK:
 		return error
@@ -127,6 +129,10 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	var player: StarSeaPlayer = scene.get_node("Player") as StarSeaPlayer
 	if player.transition_busy:
 		return ERR_BUSY
+	var beacons: BeaconTowers = scene.get_node_or_null("Universe/PlanetDawn/BeaconTowers") as BeaconTowers
+	var beacons_value: Variant = config.get_value("journey", "beacons_lit", [])
+	if not valid_beacons(beacons_value, beacons.towers.size() if beacons != null else 0):
+		return ERR_INVALID_DATA
 	var surface: float = planet.surface_radius(location.normalized())
 	location = location.normalized() * maxf(location.length(), surface + (0.05 if mode == StarSeaPlayer.Mode.WALK else 1.2))
 	player.place_at(planet.global_position + location, forward.normalized(), up.normalized())
@@ -142,4 +148,19 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	var atlas: TerrainAtlas = scene.get_node_or_null("HUD/Layout/TerrainAtlas") as TerrainAtlas
 	if atlas != null:
 		atlas.set_flags(flags)
+	if beacons != null:
+		var values: Array[int] = []
+		values.assign(beacons_value)
+		beacons.set_lit(values)
 	return OK
+
+
+static func valid_beacons(value: Variant, count: int) -> bool:
+	if not value is Array or (value as Array).size() > count:
+		return false
+	var unique: Dictionary = {}
+	for item: Variant in value:
+		if not item is int or item < 0 or item >= count or unique.has(item):
+			return false
+		unique[item] = true
+	return true

@@ -21,6 +21,17 @@ static func find(noise: TerrainNoise, start: Vector3, end: Vector3, bridges: Arr
 				var id: Vector2i = Vector2i(x, y)
 				var direction: Vector3 = (center * noise.radius + right * x * GRID + forward * y * GRID).normalized()
 				var height: float = noise.height(direction)
+				# 后续新增道路避开已经落位的房屋，不能从墙体中间穿过。
+				var blocked: bool = false
+				if noise.features.civilization != null:
+					var town: Dictionary = noise.features.civilization.data.town
+					if direction.distance_to(town["direction"]) * noise.radius < 170:
+						for house: Dictionary in town.get("houses", []):
+							if direction.distance_to(house["direction"]) * noise.radius < 14:
+								blocked = true
+				if blocked:
+					grid.set_point_solid(id)
+					continue
 				var wet: bool = height < 1.0 or noise.water_surface(direction, height) > -INF
 				var planned_crossing: bool = false
 				if wet:
@@ -89,7 +100,14 @@ static func road(noise: TerrainNoise, points: PackedVector3Array, width: float, 
 			count += 1
 		var river: Vector4 = noise.features.hydrology.nearest(points[index])
 		var civil: CivilizationTerrain = noise.features.civilization
-		if civil != null and points[index].distance_to(civil.data.town["direction"]) * noise.radius < 32.0:
+		var beacon_level: float = INF
+		if civil != null:
+			for tower: Dictionary in civil.data.beacons:
+				if points[index].distance_to(tower["direction"]) * noise.radius < 7.0:
+					beacon_level = tower["height"]
+		if beacon_level < INF:
+			levels.append(beacon_level)
+		elif civil != null and points[index].distance_to(civil.data.town["direction"]) * noise.radius < 32.0:
 			levels.append(civil.data.town["level"])
 		else:
 			levels.append(heights[index] if river.w >= 0 and river.x < river.z + 15.0 else clampf(sum / count, heights[index] - 1.5, heights[index] + 1.5))

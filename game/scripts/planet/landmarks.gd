@@ -29,7 +29,8 @@ func build(noise: TerrainNoise) -> void:
 			"lighthouse":
 				_lighthouse(landmark)
 			"peak_tower":
-				_peak_tower(landmark)
+				if _features.civilization == null or _features.civilization.data.beacons.is_empty():
+					_peak_tower(landmark)
 			"fallen_ring":
 				_fallen_ring(landmark)
 		built.append(kind)

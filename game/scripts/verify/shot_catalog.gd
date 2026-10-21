@@ -48,6 +48,8 @@ const NAMES: Array[String] = [
 	"s32_terraces",
 	"s33_cemetery",
 	"s34_old_road",
+	"s35_beacon_top",
+	"s36_beacon_chain_night",
 ]
 
 
@@ -63,7 +65,7 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.set_third_person(false)
 	director.time_paused = true
 	match name:
-		"s30_town_plaza", "s31_town_overview", "s32_terraces", "s33_cemetery", "s34_old_road":
+		"s30_town_plaza", "s31_town_overview", "s32_terraces", "s33_cemetery", "s34_old_road", "s35_beacon_top", "s36_beacon_chain_night":
 			CivilizationShots.place(name, player, planet, director)
 		"s54_glide_canyon", "s54b_glide_first_person", "s55_glide_range", "s56_climb_route", "s56b_boardwalk":
 			TraversalShots.place(name, player, planet, director)

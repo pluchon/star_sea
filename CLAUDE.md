@@ -2,14 +2,14 @@
 
 Godot 4.7.2（GDScript）单人星球漫游游戏。总体方案见 `docs/方案.md`，最新交付状态见 README 文档表中的最后一份记录。Godot 项目位于 `game/`。
 
-第二阶段「远行者」的方案、规格和分步交接在 `docs/远行者/`。分工：Claude 负责写方案和规格，编码由 GPT 在本地按 `docs/远行者/20-分步交接.md` 执行。云端会话里如果被要求改代码，同样先对照这些文档，不和文档冲突。
+第二阶段「远行者」的方案、规格和分步交接在 `docs/远行者/`。分工：Claude 负责方案、规格、调度和验收；编码交给 Grok（Cursor 命令行 `agent -p` 或 xAI 的 Grok Build `grok -p`），按 `docs/远行者/20-分步交接.md` 执行，Claude 也可以直接改。第 0～11 步由 GPT 完成。云端会话里如果被要求改代码，同样先对照这些文档，不和文档冲突。
 
 ## 开发规则
 
 - 注释使用中文，一行只写一条语句。
 - 不在代码里留调试残留、临时探针，或者从命令行覆盖画面参数的后门。
 - `test-output/`、`build/` 与 `game/.godot/` 不进入 Git。
-- 分支只有两个：`main`，以及 AI 开发分支 `codex/wanderer`。Claude 和 GPT 都在 `codex/wanderer` 上提交；云端会话即使被分配了别的分支名，也先拉取 `codex/wanderer`，改完推回 `codex/wanderer`，不另建长期分支。合并进 `main` 由用户决定。
+- 分支只有两个：`main`，以及 AI 开发分支 `ai/wanderer`。所有 AI 都在 `ai/wanderer` 上提交；这个分支不存在时从 `main` 新建。云端会话即使被分配了别的分支名，也先拉取 `ai/wanderer`，改完推回 `ai/wanderer`，不另建长期分支。合并进 `main` 由用户决定。
 - 创建 Pull Request 后不要订阅关注它的动态，也不要设定时检查。仓库没有 CI，评审由用户本人完成，订阅只会带来消耗 token 的状态通知。
 
 ## 云端会话

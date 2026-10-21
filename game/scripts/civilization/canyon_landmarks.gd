@@ -68,7 +68,7 @@ func build(planet: Planet) -> void:
 			continue
 		# 桥段跨度沿局部 X；将其对准路线，而不是让四米桥宽沿路。
 		var placement: Transform3D = anchor(up, -heading.cross(up).normalized())
-		placement.origin -= up * 6.0
+		# 桥墩从地面起立，六米高的桥板必须留在地面之上。
 		layouts.append({"piece": "bridge_span", "transform": placement, "moss": 0.12, "sand": 0.4})
 	var builder: RuinBuilder = RuinBuilder.new()
 	add_child(builder)
@@ -88,10 +88,20 @@ func _place_rock(piece: String, up: Vector3, forward: Vector3, turn: float) -> v
 	for node: Node in scene.find_children("*", "MeshInstance3D", true, false):
 		var mesh: MeshInstance3D = node as MeshInstance3D
 		mesh.visibility_range_end = DETAIL_RANGE
+		var solid: bool = false
 		for surface: int in mesh.mesh.get_surface_count():
 			var source: Material = mesh.mesh.surface_get_material(surface)
 			var material: ShaderMaterial = ShaderMaterial.new()
 			material.shader = load("res://shaders/canyon_rock.gdshader") as Shader
 			material.set_shader_parameter("grass_cap", source.resource_name.to_lower() == "cloth")
+			solid = solid or source.resource_name.to_lower() != "cloth"
 			mesh.set_surface_override_material(surface, material)
+		if solid:
+			# 滑翔和步行都需要接触天然石拱，碰撞直接来自同一份可见石材网格。
+			var body: StaticBody3D = StaticBody3D.new()
+			body.collision_layer = 2
+			var collision: CollisionShape3D = CollisionShape3D.new()
+			collision.shape = mesh.mesh.create_trimesh_shape()
+			body.add_child(collision)
+			mesh.add_child(body)
 	add_child(scene)

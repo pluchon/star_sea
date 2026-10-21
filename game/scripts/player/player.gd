@@ -1,7 +1,7 @@
 class_name StarSeaPlayer
 extends CharacterBody3D
 
-enum Mode { WALK, FLY }
+enum Mode { WALK, FLY, CLIMB, GLIDE }
 
 var mode: Mode = Mode.WALK:
 	set(value):
@@ -9,8 +9,10 @@ var mode: Mode = Mode.WALK:
 		if is_node_ready() and ship != null:
 			if value == Mode.FLY:
 				ship.attach_to(self)
+				explorer.hide_glider()
 			elif ship.state == StarSeaShip.State.CARRIED:
-				park_ship_nearby()
+				if not park_ship_nearby():
+					ship.park(ship.planet, ship.last_park)
 			set_third_person(third_person)
 var controls_enabled: bool = true
 var simulated_forward: bool = false
@@ -30,6 +32,9 @@ var _message: String = ""
 var _message_time: float = 0.0
 var _fade: ColorRect
 var _boarding_hint_seen: bool = false
+var traversal: PlayerTraversal = PlayerTraversal.new()
+var _glide_effect: AudioStreamPlayer
+var _glide_wind: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -37,6 +42,13 @@ func _ready() -> void:
 	explorer = ExplorerAvatar.new()
 	explorer.name = "Explorer"
 	add_child(explorer)
+	explorer.attach_edges(camera)
+	_glide_effect = AudioStreamPlayer.new()
+	_glide_wind = AudioStreamPlayer.new()
+	add_child(_glide_effect)
+	add_child(_glide_wind)
+	_glide_effect.volume_db = -12.0
+	_glide_wind.volume_db = -18.0
 	set_third_person(false)
 	_planet = get_tree().get_first_node_in_group("planets") as Planet
 	var up: Vector3 = _planet.site["direction"]
@@ -61,6 +73,7 @@ func place_at(world_position: Vector3, forward: Vector3, up: Vector3) -> void:
 	up_direction = up
 	var offset: Vector3 = world_position - _planet.global_position
 	altitude = offset.length() - _planet.surface_radius(offset.normalized())
+	traversal.airborne_time = 0.0
 	reset_physics_interpolation()
 
 
@@ -84,7 +97,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _f_held >= 0.0 and _f_held < 0.4 and not _f_consumed:
 			if mode == Mode.FLY:
 				land()
-			elif ship.state == StarSeaShip.State.PARKED and global_position.distance_to(ship.global_position) <= StarSeaShip.BOARD_RANGE:
+			elif mode == Mode.WALK and is_on_floor() and ship.state == StarSeaShip.State.PARKED and global_position.distance_to(ship.global_position) <= StarSeaShip.BOARD_RANGE:
 				board()
 		_f_held = -1.0
 	elif event.is_action_pressed("toggle_perspective"):
@@ -99,13 +112,14 @@ func set_third_person(enabled: bool) -> void:
 	camera_boom.position.y = 2.0 if enabled and riding else 0.0
 	camera.position = Vector3(0, 0, length)
 	explorer.visible = enabled and not riding
+	explorer.set_first_person(not enabled)
 	if ship != null and ship.state == StarSeaShip.State.CARRIED:
 		ship.visual.visible = enabled
 
 
 func _process(delta: float) -> void:
 	_message_time = maxf(0.0, _message_time - delta)
-	var near_ship: bool = ship != null and mode == Mode.WALK and ship.state == StarSeaShip.State.PARKED and global_position.distance_to(ship.global_position) <= StarSeaShip.BOARD_RANGE
+	var near_ship: bool = ship != null and mode == Mode.WALK and is_on_floor() and ship.state == StarSeaShip.State.PARKED and global_position.distance_to(ship.global_position) <= StarSeaShip.BOARD_RANGE
 	if near_ship and not _boarding_hint_seen and controls_enabled:
 		notify("F 登船")
 	_boarding_hint_seen = near_ship
@@ -113,7 +127,7 @@ func _process(delta: float) -> void:
 		_f_held = -1.0
 	elif _f_held >= 0.0:
 		_f_held += delta
-		if not _f_consumed and _f_held >= StarSeaShip.HOLD_TIME and mode == Mode.WALK:
+		if not _f_consumed and _f_held >= StarSeaShip.HOLD_TIME and mode != Mode.FLY:
 			_f_consumed = true
 			if not near_ship:
 				call_ship()
@@ -134,9 +148,12 @@ func _process(delta: float) -> void:
 					low = middle
 			camera.global_position = start + movement * low
 	# 相机受阻收回到头部附近时隐藏身体，避免头盔遮住整个视野。
-	explorer.visible = third_person and mode == Mode.WALK and camera.global_position.distance_to(_head.global_position) > 0.75
-	if explorer.visible:
-		explorer.animate(delta, global_basis.inverse() * velocity, mode == Mode.FLY, is_on_floor())
+	explorer.visible = third_person and mode != Mode.FLY and camera.global_position.distance_to(_head.global_position) > 0.75
+	camera_boom.position.x = 0.65 if third_person and mode == Mode.CLIMB else 0.0
+	if mode != Mode.FLY:
+		explorer.animate(delta, global_basis.inverse() * velocity, false, is_on_floor(), int(mode), traversal.zone.get("kind", "") == "rope", traversal.stumble_left > 0, traversal.mantle_time >= 0)
+	else:
+		explorer.set_first_person(false)
 
 
 func _physics_process(delta: float) -> void:
@@ -150,7 +167,7 @@ func _physics_process(delta: float) -> void:
 	camera.far = 200000.0 if altitude < 5000.0 else 3000000.0
 	if transition_busy:
 		return
-	if mode == Mode.WALK:
+	if mode != Mode.FLY:
 		up_direction = up
 		_align_to_up(up, delta)
 	if not controls_enabled and not simulated_forward:
@@ -166,20 +183,39 @@ func _physics_process(delta: float) -> void:
 		input = Vector2(0.0, 1.0)
 	var forward: Vector3 = -camera.global_basis.z
 	var right: Vector3 = camera.global_basis.x
+	var jump: bool = controls_enabled and Input.is_action_just_pressed("jump_up")
+	if mode == Mode.CLIMB:
+		set_wind_audio(false, false)
+		traversal.step_climb(self, delta, input, jump)
+		return
+	if mode == Mode.GLIDE:
+		if not traversal.try_climb(self, input):
+			traversal.step_glide(self, delta, input, jump)
+		return
 	if mode == Mode.WALK:
+		set_wind_audio(false, false)
+		if traversal.update_walk(self, delta, jump) or traversal.try_climb(self, input):
+			return
 		var was_on_floor: bool = is_on_floor()
-		var jumping: bool = was_on_floor and controls_enabled and Input.is_action_just_pressed("jump_up")
+		var jumping: bool = was_on_floor and jump
 		forward = (forward - up * forward.dot(up)).normalized()
 		right = (right - up * right.dot(up)).normalized()
 		var direction: Vector3 = (forward * input.y + right * input.x).limit_length(1.0)
 		var speed: float = 8.0 if Input.is_action_pressed("run") and controls_enabled else 4.0
+		if traversal.stumble_left > 0:
+			speed *= 0.5
 		var vertical: Vector3 = up * velocity.dot(up)
 		velocity = direction * speed + vertical
 		if not is_on_floor():
 			velocity -= up * _planet.gravity * delta
 		elif jumping:
 			velocity = direction * speed + up * 5.0
+		var impact: float = -velocity.dot(up)
 		move_and_slide()
+		if is_on_floor():
+			if not was_on_floor and impact > 6.0:
+				traversal.stumble_left = 0.4
+			traversal.record_ground(self)
 		# 球面切线不断变化，沿斜坡移动产生的微小上升分量不应解除贴地。
 		if not jumping and (was_on_floor or velocity.dot(up) <= 0.0):
 			apply_floor_snap()
@@ -306,7 +342,7 @@ func land() -> void:
 
 
 func board() -> void:
-	if transition_busy or mode != Mode.WALK or ship.state != StarSeaShip.State.PARKED or global_position.distance_to(ship.global_position) > StarSeaShip.BOARD_RANGE:
+	if transition_busy or mode != Mode.WALK or not is_on_floor() or ship.state != StarSeaShip.State.PARKED or global_position.distance_to(ship.global_position) > StarSeaShip.BOARD_RANGE:
 		return
 	transition_busy = true
 	_f_held = -1.0
@@ -321,16 +357,41 @@ func board() -> void:
 
 
 func call_ship() -> void:
-	if transition_busy or mode != Mode.WALK or ship.state == StarSeaShip.State.CALLED:
+	if transition_busy or mode == Mode.FLY or ship.state == StarSeaShip.State.CALLED:
 		return
 	if ship.planet != _planet:
 		notify("飞船不在这颗星球上")
+		return
+	if altitude > 300.0 and mode in [Mode.WALK, Mode.GLIDE] and not is_on_floor():
+		ship.catch_airborne(self)
+		return
+	if mode != Mode.WALK or not is_on_floor():
 		return
 	var location: Transform3D = StarSeaShip.find_landing(_planet, _planet.to_local(global_position).normalized(), -global_basis.z)
 	if not location.origin.is_finite():
 		notify("附近没有能降落的地方")
 		return
 	ship.call_to(_planet, location.origin.normalized())
+
+
+func play_traversal_effect() -> void:
+	if ResourceLoader.exists("res://audio/glide_open.wav"):
+		_glide_effect.stream = load("res://audio/glide_open.wav") as AudioStream
+		_glide_effect.play()
+
+
+func set_wind_audio(enabled: bool, rising: bool) -> void:
+	if not enabled:
+		_glide_wind.stop()
+		return
+	if not _glide_wind.playing and ResourceLoader.exists("res://audio/high_wind.wav"):
+		var stream: AudioStreamWAV = (load("res://audio/high_wind.wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_end = roundi(stream.get_length() * stream.mix_rate)
+		_glide_wind.stream = stream
+		_glide_wind.play()
+	_glide_wind.pitch_scale = 1.08 if rising else 1.0
+	_glide_wind.volume_db = lerpf(-24.0, -15.0, clampf(velocity.length() / 9.0, 0, 1))
 
 
 func notify(text: String) -> void:

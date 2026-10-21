@@ -259,7 +259,7 @@ func draw_compass(canvas: Control) -> void:
 
 func _draw_ship_compass(canvas: Control) -> void:
 	var ship: StarSeaShip = _player.ship
-	if is_open or _player.mode != StarSeaPlayer.Mode.WALK or ship.planet != _player.current_planet():
+	if is_open or _player.mode == StarSeaPlayer.Mode.FLY or ship.planet != _player.current_planet():
 		return
 	var distance: float = _player.global_position.distance_to(ship.global_position)
 	if distance <= 30.0 or _player.altitude > ship.planet.atmosphere_height:

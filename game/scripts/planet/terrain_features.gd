@@ -136,3 +136,16 @@ func in_clearing(direction: Vector3) -> bool:
 func height_at(noise: TerrainNoise, point: Vector2) -> float:
 	var direction: Vector3 = direction_at(point)
 	return apply(direction, noise.base_height(direction))
+
+
+func updraft_at(direction: Vector3, altitude: float) -> float:
+	var lift: float = 0.0
+	if landforms != null and altitude >= 0.0 and altitude < 150.0:
+		if landforms.nearest(direction).x < 600.0:
+			lift = 4.0 * (1.0 - altitude / 150.0)
+		var canyon: Vector3 = landforms.nearest(direction, true)
+		if canyon.x < DawnLandforms.CANYON_HALF_WIDTH and canyon.x > DawnLandforms.CANYON_HALF_WIDTH - 150.0:
+			lift = maxf(lift, 4.0 * (1.0 - altitude / 150.0))
+	if altitude >= 0.0 and altitude < 200.0 and contains(direction) and plane(direction).distance_to(volcano) < crater_radius:
+		lift = maxf(lift, 5.0 * (1.0 - altitude / 200.0))
+	return lift

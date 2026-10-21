@@ -1,4 +1,4 @@
-param([ValidateSet('ship', 'ruins', 'canyon', 'all')][string]$Target = 'all', [string]$Only = '')
+param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'all')][string]$Target = 'all', [string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
@@ -22,6 +22,10 @@ try {
         if ($Only) { $modelArguments += @('--only', $Only) }
         & $blenderPath --background --python-exit-code 1 --python art/blender/build_canyon.py -- @modelArguments
         if ($LASTEXITCODE -ne 0) { throw '峡谷岩石模型生成失败。' }
+    }
+    if ($Target -in @('explorer','all')) {
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_explorer.py -- --out game/models/explorer
+        if ($LASTEXITCODE -ne 0) { throw '探索者模型生成失败。' }
     }
 }
 finally { Pop-Location }

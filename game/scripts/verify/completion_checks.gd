@@ -81,29 +81,43 @@ func _begin() -> void:
 	var original_volume: float = StarSeaSettings.volume
 	var original_music: float = StarSeaSettings.music_volume
 	var original_sensitivity: float = StarSeaSettings.sensitivity
+	var original_climb_hint: bool = StarSeaSettings.climb_hint_seen
 	StarSeaSettings.volume = 0.37
 	StarSeaSettings.music_volume = 0.21
 	StarSeaSettings.sensitivity = 0.0031
+	StarSeaSettings.climb_hint_seen = true
 	var settings_path: String = "user://verify_settings.cfg"
 	var settings_saved: Error = settings_node.save(settings_path)
 	StarSeaSettings.volume = 0.1
 	StarSeaSettings.music_volume = 0.0
 	StarSeaSettings.sensitivity = 0.001
+	StarSeaSettings.climb_hint_seen = false
 	var settings_loaded: Error = settings_node.load_settings(settings_path)
 	var settings_roundtrip: bool = settings_saved == OK and settings_loaded == OK and is_equal_approx(StarSeaSettings.volume, 0.37) and is_equal_approx(StarSeaSettings.sensitivity, 0.0031)
 	settings_roundtrip = settings_roundtrip and is_equal_approx(StarSeaSettings.music_volume, 0.21)
+	settings_roundtrip = settings_roundtrip and StarSeaSettings.climb_hint_seen
 	if not settings_roundtrip:
 		_failures.append("设置持久化往返失败。")
 	var legacy_settings: ConfigFile = ConfigFile.new()
 	legacy_settings.load(settings_path)
 	legacy_settings.erase_section_key("audio", "music")
+	legacy_settings.erase_section_key("controls", "climb_hint_seen")
 	legacy_settings.save(settings_path)
 	var legacy_music: bool = settings_node.load_settings(settings_path) == OK and is_equal_approx(StarSeaSettings.music_volume, 0.45)
 	if not legacy_music:
 		_failures.append("旧设置缺少音乐字段时没有使用默认音量。")
+	if StarSeaSettings.climb_hint_seen:
+		_failures.append("旧设置缺少攀爬提示字段时没有使用默认值。")
+	legacy_settings.set_value("controls", "climb_hint_seen", "invalid")
+	legacy_settings.set_value("audio", "volume", 0.98)
+	legacy_settings.save(settings_path)
+	var before_volume: float = StarSeaSettings.volume
+	if settings_node.load_settings(settings_path) != ERR_INVALID_DATA or StarSeaSettings.volume != before_volume or StarSeaSettings.climb_hint_seen:
+		_failures.append("非法攀爬提示设置没有整体拒绝。")
 	StarSeaSettings.volume = original_volume
 	StarSeaSettings.music_volume = original_music
 	StarSeaSettings.sensitivity = original_sensitivity
+	StarSeaSettings.climb_hint_seen = original_climb_hint
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(settings_path))
 	menu.resume()
 	if paused or not player.controls_enabled:

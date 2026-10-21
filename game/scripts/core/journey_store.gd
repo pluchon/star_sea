@@ -12,11 +12,19 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	config.set_value("journey", "version", 1)
 	config.set_value("journey", "planet_seed", planet.planet_seed)
 	# 保存相对天体的坐标，避免把浮动原点偏移写入存档。
-	config.set_value("journey", "position", player.global_position - planet.global_position)
-	config.set_value("journey", "forward", -player.global_basis.z)
-	config.set_value("journey", "up", player.global_basis.y)
+	var traversing: bool = player.mode in [StarSeaPlayer.Mode.CLIMB, StarSeaPlayer.Mode.GLIDE]
+	var position: Vector3 = player.global_position - planet.global_position
+	if traversing:
+		position = player.traversal.last_grounded if player.traversal.last_ground_seed == planet.planet_seed else planet.site["direction"] * (planet.surface_radius(planet.site["direction"]) + 0.05)
+	config.set_value("journey", "position", position)
+	var saved_up: Vector3 = position.normalized() if traversing else player.global_basis.y
+	var saved_forward: Vector3 = (-player.global_basis.z).slide(saved_up).normalized() if traversing else -player.global_basis.z
+	if saved_forward.length_squared() < 0.5:
+		saved_forward = SurfaceSites.tangent_forward(saved_up)
+	config.set_value("journey", "forward", saved_forward)
+	config.set_value("journey", "up", saved_up)
 	config.set_value("journey", "pitch", player.head_pitch())
-	config.set_value("journey", "mode", int(player.mode))
+	config.set_value("journey", "mode", int(StarSeaPlayer.Mode.WALK if traversing else player.mode))
 	config.set_value("journey", "third_person", player.third_person)
 	config.set_value("journey", "sun", director.sun_direction)
 	config.set_value("journey", "boarded", player.mode == StarSeaPlayer.Mode.FLY)

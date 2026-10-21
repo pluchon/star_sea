@@ -156,9 +156,44 @@ def machinery(kind: str) -> dict:
     return write(kind, values, kind in ("engine", "waterfall"))
 
 
+def traversal(kind: str) -> dict:
+    rng = random.Random(20261021 + sum(kind.encode()))
+    looping = kind == "high_wind"
+    duration = 14 if looping else .48
+    count = round(duration * RATE)
+    overlap = RATE if looping else 0
+    samples = array("f")
+    low = [0.0, 0.0]
+    body = [0.0, 0.0]
+    for index in range(count + overlap):
+        time = index / RATE
+        for channel in range(2):
+            white = rng.uniform(-1, 1)
+            low[channel] += (white - low[channel]) * .025
+            body[channel] += (white - body[channel]) * .19
+            if looping:
+                gust = .75 + .16 * math.sin(time * .47) + .08 * math.sin(time * 1.31 + channel)
+                value = (low[channel] * 2.3 + body[channel] * .75 + white * .035) * gust
+            else:
+                # 低频布面抖开后留下两次短促的褶皱摩擦。
+                envelope = min(time / .014, 1) * math.exp(-time * 12)
+                pulse = math.exp(-((time - .14) / .025) ** 2) + .6 * math.exp(-((time - .26) / .04) ** 2)
+                value = (low[channel] * 3 + body[channel]) * envelope + (white - body[channel]) * pulse * .15
+                value *= min((duration - time) / .05, 1)
+            samples.append(value)
+    if looping:
+        for index in range(overlap):
+            weight = .5 - .5 * math.cos(math.pi * index / (overlap - 1))
+            for channel in range(2):
+                tail = (count + index) * 2 + channel
+                samples[tail] = samples[tail] * (1 - weight) + samples[index * 2 + channel] * weight
+        samples = samples[overlap * 2:]
+    return write(kind, samples, looping)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["ship", "waterfall"])
+    parser.add_argument("--only", choices=["ship", "waterfall", "traversal"])
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records = []
@@ -167,10 +202,12 @@ if __name__ == "__main__":
                    [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
         records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
                        for variant in range(3))
-    new_names = ["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"]
+    new_names = [] if args.only == "traversal" else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
     if args.only is None:
         new_names.append("waterfall")
     records.extend(machinery(name) for name in new_names)
+    if args.only in (None, "traversal"):
+        records.extend(traversal(name) for name in ["glide_open", "high_wind"])
     report = OUTPUT.parents[1] / "test-output" / "audio" / "audio-generation.json"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")

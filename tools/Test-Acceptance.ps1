@@ -71,6 +71,9 @@ try {
     Invoke-SourceCheck 'landforms' @('--headless', '--script', 'res://scripts/verify/landform_checks.gd', '--', '--check=landforms') 'test-output/wanderer/landform_checks.json'
     Invoke-SourceCheck 'ruin-kit' @('--headless', '--script', 'res://scripts/verify/ruin_kit_checks.gd', '--', '--check=ruins') 'test-output/wanderer/ruin_kit_checks.json'
     Invoke-SourceCheck 'ship' @('--script', 'res://scripts/verify/ship_checks.gd', '--', '--check=ship') 'test-output/wanderer/ship_checks.json'
+    Invoke-SourceCheck 'traversal' @('--headless', '--script', 'res://scripts/verify/traversal_checks.gd', '--', '--check=traversal') 'test-output/wanderer/traversal_checks.json'
+    Invoke-SourceCheck 'climb-routes' @('--headless', '--script', 'res://scripts/verify/climb_route_checks.gd', '--', '--check=climb-routes') 'test-output/wanderer/climb_route_checks.json'
+    Invoke-SourceCheck 'glide-routes' @('--headless', '--script', 'res://scripts/verify/glide_route_checks.gd', '--', '--check=glide-routes') 'test-output/wanderer/glide_route_checks.json'
     python (Join-Path $PSScriptRoot 'Check-Audio.py') --ship-recordings (Join-Path $repoDirectory 'test-output/wanderer/audio')
     if ($LASTEXITCODE -ne 0) { throw '飞船实际混音检查失败。' }
     Invoke-SourceCheck 'ecology' @('--headless', '--script', 'res://scripts/verify/ecology_checks.gd') 'test-output/p4/ecology_checks.json'
@@ -93,6 +96,7 @@ try {
     $shots = @('s1_space','s2_high','s3_ground_day','s4_ground_sunset','s5_ground_night','s6_shore','s7_ember','s8_frost','s9_woodland','s10_highland','s11_orbit','s12_ruin','s13_tree_detail','s14_third_person','s15_relief_map','s16_terrace','s17_valley','s18_meadow','s19_broadleaf','s20_wetland','s21_drygrass','s22_tundra','s23_ship_parked','s24_ship_low','s25_waterfall','s28_canyon','s29_ruin_kit')
     if ($Scope -eq 'dawn') { $shots = @($shots | Where-Object { $_ -notin @('s7_ember', 's8_frost') }) }
     $shots += @('s49_range_from_spawn','s50_horn_peak','s51_canyon_rim','s52_canyon_floor','s53_mountain_pass')
+    $shots += @('s54_glide_canyon','s55_glide_range','s56_climb_route')
     $shotDirectory = Join-Path $releaseDirectory 'shots'
     foreach ($shot in $shots) {
         Invoke-Release "release-$shot" @("--shot=$shot", "--out=$shotDirectory")

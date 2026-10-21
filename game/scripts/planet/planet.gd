@@ -70,6 +70,13 @@ func _ready() -> void:
 	var details: SurfaceDetails = SurfaceDetails.new()
 	details.name = "SurfaceDetails"
 	add_child(details)
+	if profile == 0:
+		var climbs: ClimbZones = ClimbZones.new()
+		climbs.name = "ClimbZones"
+		add_child(climbs)
+		var updrafts: UpdraftVisuals = UpdraftVisuals.new()
+		updrafts.name = "UpdraftVisuals"
+		add_child(updrafts)
 
 
 func surface_radius(direction: Vector3) -> float:

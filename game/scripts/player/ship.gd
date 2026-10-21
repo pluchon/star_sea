@@ -21,6 +21,9 @@ var _call_duration: float = 0.0
 var _ramp: Node3D
 var _exhausts: Array[Node3D] = []
 var _dust: GPUParticles3D
+var _air_catch: bool = false
+var _air_start: Vector3
+var last_park: Transform3D
 
 
 func _ready() -> void:
@@ -114,6 +117,8 @@ func attach_to(player: StarSeaPlayer) -> void:
 
 
 func park(planet_value: Planet, local_transform: Transform3D) -> void:
+	_air_catch = false
+	last_park = local_transform
 	planet = planet_value
 	state = State.PARKED
 	if get_parent() != planet:
@@ -175,6 +180,9 @@ func call_to(planet_value: Planet, target_direction: Vector3) -> void:
 
 
 func _process(delta: float) -> void:
+	if _air_catch:
+		_advance_air_catch(delta)
+		return
 	if state == State.CARRIED and _player != null:
 		engine.pitch_scale = lerpf(0.8, 1.65, smoothstep(0.0, 800.0, _player.velocity.length()))
 	elif state == State.CALLED:
@@ -202,6 +210,37 @@ func play_effect(filename: String) -> void:
 	if filename == "ship_land":
 		_dust.restart()
 		_dust.emitting = true
+
+
+func catch_airborne(player: StarSeaPlayer) -> void:
+	_player = player
+	planet = player.current_planet()
+	if get_parent() != planet:
+		reparent(planet, true)
+	_air_start = position
+	_call_elapsed = 0.0
+	_air_catch = true
+	state = State.CALLED
+	visual.visible = true
+	_refresh()
+
+
+func _advance_air_catch(delta: float) -> void:
+	_call_elapsed += delta
+	if _player.mode == StarSeaPlayer.Mode.FLY:
+		_air_catch = false
+		return
+	var target_position: Vector3 = planet.to_local(_player.global_position)
+	var progress: float = smoothstep(0.0, 8.0, _call_elapsed)
+	var destination: Vector3 = _air_start.lerp(target_position - target_position.normalized() * 1.2, progress)
+	var direction: Vector3 = destination.normalized()
+	destination = direction * maxf(destination.length(), planet.surface_radius(direction) + FOOT_HEIGHT)
+	position = destination
+	basis = Basis.looking_at((-_player.global_basis.z).slide(direction).normalized(), direction)
+	if _call_elapsed >= 8.0:
+		_air_catch = false
+		_player.mode = StarSeaPlayer.Mode.FLY
+		_player.set_wind_audio(false, false)
 
 
 # 飞船在玩家与星球之间重新挂接时会离开场景树，不能在这里清空可复用音频。

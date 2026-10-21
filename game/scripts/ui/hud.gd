@@ -68,6 +68,7 @@ func _ready() -> void:
 	var text: Label = Label.new()
 	text.text = "星海尽头\n\nW A S D　移动\n鼠标　环顾\nShift　加速\n空格　跳跃 / 上升\nCtrl　下降\nF　降落 / 登船（长按召唤飞船）\nV　第一 / 第三人称\nM　全球地形图（可切换立体地球、插旗）\nT　加速时间\nH　显示 / 隐藏帮助\nF3　性能\nF12　截图\nEsc　暂停菜单\n\n晨 · 海岸草原　烬 · 赤色沙丘　霜 · 冰蓝高地"
 	_help.add_child(text)
+	text.text += "\n空中再次按空格　展开 / 收起软翼\nW / S　攀爬（藤蔓、绳索或铜钉路线）\n离地 300 米以上长按 F　召船接住"
 	_help.visible = false
 	layout.add_child(_help)
 	var atlas: TerrainAtlas = TerrainAtlas.new()
@@ -87,7 +88,7 @@ func _process(delta: float) -> void:
 	_terrain = planet.get_node("Terrain") as PlanetTerrain
 	var offset: Vector3 = _player.global_position - planet.global_position
 	var altitude: float = offset.length() - planet.surface_radius(offset.normalized())
-	var mode_name: String = "步行" if _player.mode == StarSeaPlayer.Mode.WALK else "飞行"
+	var mode_name: String = ["步行", "飞行", "攀爬", "滑翔"][int(_player.mode)]
 	_status.text = "%s · %s · %s　离地 %.0f m　%.1f m/s　H 帮助" % [planet.planet_name, mode_name, "第三人称" if _player.third_person else "第一人称", altitude, _player.velocity.length()]
 	if _performance.visible:
 		var cpu: float = (Performance.get_monitor(Performance.TIME_PROCESS) + Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0

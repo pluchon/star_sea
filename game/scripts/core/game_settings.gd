@@ -9,6 +9,7 @@ static var render_scale: float = 1.0
 static var field_of_view: float = 75.0
 static var fullscreen: bool = true
 static var vsync: bool = true
+static var climb_hint_seen: bool = false
 
 
 func _ready() -> void:
@@ -31,6 +32,9 @@ func load_settings(path: String = PATH) -> Error:
 		var fullscreen_value: Variant = config.get_value("video", "fullscreen", true)
 		var vsync_value: Variant = config.get_value("video", "vsync", true)
 		var music_value: Variant = config.get_value("audio", "music", 0.45)
+		var climb_hint: Variant = config.get_value("controls", "climb_hint_seen", false)
+		if not climb_hint is bool:
+			return ERR_INVALID_DATA
 		if (not music_value is float and not music_value is int) or not is_finite(float(music_value)):
 			return ERR_INVALID_DATA
 		if not fullscreen_value is bool or not vsync_value is bool:
@@ -43,6 +47,7 @@ func load_settings(path: String = PATH) -> Error:
 		field_of_view = clampf(values[3], 60.0, 100.0)
 		fullscreen = fullscreen_value
 		vsync = vsync_value
+		climb_hint_seen = climb_hint
 	return error
 
 
@@ -61,6 +66,7 @@ func apply() -> void:
 func save(path: String = PATH) -> Error:
 	var config: ConfigFile = ConfigFile.new()
 	config.set_value("controls", "sensitivity", sensitivity)
+	config.set_value("controls", "climb_hint_seen", climb_hint_seen)
 	config.set_value("audio", "volume", volume)
 	config.set_value("audio", "music", music_volume)
 	config.set_value("video", "scale", render_scale)

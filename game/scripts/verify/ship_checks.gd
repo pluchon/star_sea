@@ -31,6 +31,7 @@ func _begin() -> void:
 	player.place_at(planet.to_global(parked.origin - parked.basis.x * 4.0), -parked.basis.z, up)
 	player.mode = StarSeaPlayer.Mode.WALK
 	player.controls_enabled = true
+	await _wait_for_floor(player)
 	_key(player, true)
 	for frame: int in 4:
 		await physics_frame
@@ -98,6 +99,7 @@ func _begin() -> void:
 		var destination_up: Vector3 = destination.origin.normalized()
 		player.place_at(planet.to_global(destination_up * (planet.surface_radius(destination_up) + 0.05)), SurfaceSites.tangent_forward(destination_up), destination_up)
 		player.controls_enabled = true
+		await _wait_for_floor(player)
 		_key(player, true)
 		player._process(0.8)
 		_check(ship.state == StarSeaShip.State.PARKED, "召唤在长按阈值之前触发。")
@@ -142,6 +144,14 @@ func _begin() -> void:
 	for frame: int in 6:
 		await process_frame
 	quit(0 if _failures.is_empty() else 1)
+
+
+func _wait_for_floor(player: StarSeaPlayer) -> void:
+	var deadline: int = Time.get_ticks_msec() + 30000
+	while not player.is_on_floor() and Time.get_ticks_msec() < deadline:
+		await physics_frame
+		await process_frame
+	_check(player.is_on_floor(), "登船或地面召唤前没有等到实际站立。")
 
 
 func _key(player: StarSeaPlayer, pressed: bool) -> void:

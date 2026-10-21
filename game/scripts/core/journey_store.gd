@@ -4,7 +4,17 @@ extends RefCounted
 const PATH: String = "user://journey.cfg"
 
 
+static func autosave(scene: Node) -> Error:
+	# 验证脚本使用自己的临时存档，不能覆盖玩家正在游玩的旅程。
+	if not OS.get_cmdline_user_args().is_empty():
+		return OK
+	return save(scene)
+
+
 static func save(scene: Node, path: String = PATH) -> Error:
+	var ending: EndingDirector = scene.get_node_or_null("Universe/PlanetDawn/EndingDirector") as EndingDirector
+	if ending != null and ending.busy:
+		return ERR_BUSY
 	var player: StarSeaPlayer = scene.get_node("Player") as StarSeaPlayer
 	var planet: Planet = player.current_planet()
 	var director: SkyDirector = scene.get_node("SkyDirector") as SkyDirector
@@ -44,6 +54,12 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	config.set_value("journey", "caves_seen", caves.seen.duplicate() if caves != null else [])
 	var ladder: SkyLadder = scene.get_node_or_null("Universe/PlanetDawn/SkyLadder") as SkyLadder
 	config.set_value("journey", "ladder_lift", ladder.lift_state() if ladder != null else {})
+	var journal: TravelJournal = scene.get_node_or_null("Universe/PlanetDawn/TravelJournal") as TravelJournal
+	var echoes: EchoSystem = scene.get_node_or_null("Universe/PlanetDawn/EchoSystem") as EchoSystem
+	config.set_value("journey", "discovered", journal.discovered.duplicate() if journal != null else [])
+	config.set_value("journey", "echoes_seen", echoes.seen.duplicate() if echoes != null else [])
+	config.set_value("journey", "ending_seen", ending.ending_seen if ending != null else false)
+	config.set_value("journey", "light_path", ending.light_path if ending != null else Vector3.ZERO)
 	var error: Error = config.save(path + ".tmp")
 	if error != OK:
 		return error
@@ -51,6 +67,9 @@ static func save(scene: Node, path: String = PATH) -> Error:
 
 
 static func restore(scene: Node, path: String = PATH) -> Error:
+	var ending: EndingDirector = scene.get_node_or_null("Universe/PlanetDawn/EndingDirector") as EndingDirector
+	if ending != null and ending.busy:
+		return ERR_BUSY
 	var config: ConfigFile = ConfigFile.new()
 	var error: Error = config.load(path)
 	if error != OK:
@@ -147,6 +166,18 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	var lift_value: Variant = config.get_value("journey", "ladder_lift", {})
 	if not SkyLadder.valid_lift(lift_value) or (ladder == null and not (lift_value as Dictionary).is_empty()):
 		return ERR_INVALID_DATA
+	var journal: TravelJournal = scene.get_node_or_null("Universe/PlanetDawn/TravelJournal") as TravelJournal
+	var echoes: EchoSystem = scene.get_node_or_null("Universe/PlanetDawn/EchoSystem") as EchoSystem
+	var discovered: Variant = config.get_value("journey", "discovered", [])
+	var seen: Variant = config.get_value("journey", "echoes_seen", [])
+	var ending_seen: Variant = config.get_value("journey", "ending_seen", false)
+	var light_path: Variant = config.get_value("journey", "light_path", Vector3.ZERO)
+	if not TravelJournal.valid_ids(discovered, journal.sites.keys() if journal != null else []) or not TravelJournal.valid_ids(seen, EchoScripts.IDS + ["dawn_ending"]):
+		return ERR_INVALID_DATA
+	if not ending_seen is bool or not light_path is Vector3 or not (light_path as Vector3).is_finite():
+		return ERR_INVALID_DATA
+	if not (light_path as Vector3).is_zero_approx() and absf((light_path as Vector3).length() - 1.0) > 0.01:
+		return ERR_INVALID_DATA
 	var surface: float = planet.surface_radius(location.normalized())
 	var in_cave: bool = planet.noise.features != null and planet.noise.features.caves != null and planet.noise.features.caves.cave_at(location) >= 0
 	if not in_cave:
@@ -172,6 +203,13 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		caves.seen.assign(caves_value)
 	if ladder != null:
 		ladder.restore_lift(lift_value)
+	if journal != null:
+		journal.discovered.assign(discovered)
+		journal.backfill()
+	if echoes != null:
+		echoes.restore_seen(seen)
+	if ending != null:
+		ending.restore_state(ending_seen, light_path)
 	return OK
 
 

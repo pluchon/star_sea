@@ -91,6 +91,15 @@ func _ready() -> void:
 		var updrafts: UpdraftVisuals = UpdraftVisuals.new()
 		updrafts.name = "UpdraftVisuals"
 		add_child(updrafts)
+		var echoes: EchoSystem = EchoSystem.new()
+		echoes.name = "EchoSystem"
+		add_child(echoes)
+		var ending: EndingDirector = EndingDirector.new()
+		ending.name = "EndingDirector"
+		add_child(ending)
+		var journal: TravelJournal = TravelJournal.new()
+		journal.name = "TravelJournal"
+		add_child(journal)
 
 
 func surface_radius(direction: Vector3) -> float:

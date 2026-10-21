@@ -220,9 +220,19 @@ def beacon() -> dict:
     return write("beacon_ignite", samples, False)
 
 
+def discover() -> dict:
+    samples = array('f')
+    for index in range(round(RATE * .85)):
+        t = index / RATE
+        envelope = min(t / .02, 1) * math.exp(-t * 7) * min((.85 - t) / .1, 1)
+        for channel in range(2):
+            samples.append(sum(math.sin(math.tau * f * t + channel * .02) * a for f, a in [(660, .7), (990, .22), (1320, .08)]) * envelope)
+    return write('discover', samples, False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon", "cave", "lift"])
+    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon", "cave", "lift", "discover"])
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records = []
@@ -231,12 +241,14 @@ if __name__ == "__main__":
                    [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
         records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
                        for variant in range(3))
-    new_names = [] if args.only in ("traversal", "beacon", "cave", "lift") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
+    new_names = [] if args.only in ("traversal", "beacon", "cave", "lift", "discover") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
     if args.only in (None, "lift"):
         new_names.extend(["lift_start", "lift_hum"])
     if args.only is None:
         new_names.append("waterfall")
     records.extend(machinery(name) for name in new_names)
+    if args.only in (None, "discover"):
+        records.append(discover())
     if args.only in (None, "traversal"):
         records.extend(traversal(name) for name in ["glide_open", "high_wind"])
     if args.only in (None, "beacon"):

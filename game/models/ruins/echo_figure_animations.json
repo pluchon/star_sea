@@ -1,0 +1,15 @@
+{
+  "bones": 17,
+  "animations": [
+    "stand",
+    "walk",
+    "kneel",
+    "sit",
+    "raise",
+    "carry",
+    "paint",
+    "child_run",
+    "old_walk",
+    "place"
+  ]
+}

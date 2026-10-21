@@ -1,4 +1,4 @@
-param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'cave', 'ladder', 'all')][string]$Target = 'all', [string]$Only = '')
+param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'cave', 'ladder', 'echoes', 'all')][string]$Target = 'all', [string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
@@ -51,3 +51,14 @@ try {
     }
 }
 finally { Pop-Location }
+
+if ($Target -in @('echoes','all')) {
+    Push-Location -LiteralPath $repoDirectory
+    try {
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_echoes.py
+        if ($LASTEXITCODE -ne 0) { throw '回声骨骼动画生成失败。' }
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_echo_bundle.py
+        if ($LASTEXITCODE -ne 0) { throw '回声行囊生成失败。' }
+    }
+    finally { Pop-Location }
+}

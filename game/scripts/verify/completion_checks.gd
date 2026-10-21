@@ -20,6 +20,9 @@ func _begin() -> void:
 	director.time_paused = true
 	var path: String = "user://verify_journey.cfg"
 	var records: Array[Dictionary] = []
+	var echo_persistence: Dictionary = EchoPersistenceChecks.run(scene)
+	if not echo_persistence["passed"]:
+		_failures.append("回声与手记存档检查失败。")
 	var cave_persistence: Dictionary = CavePersistenceChecks.run(scene)
 	if not cave_persistence["passed"]:
 		_failures.append("洞穴存档检查失败。")
@@ -136,7 +139,7 @@ func _begin() -> void:
 			loop_count += 1
 	if DisplayServer.get_name() != "headless" and (audio_players.size() != 9 or loop_count != 7):
 		_failures.append("环境音未能正常开始循环。")
-	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
+	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "echo_persistence": echo_persistence, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
 	var beacons: Dictionary = BeaconChecks.persistence(scene)
 	if not beacons["passed"]:
 		_failures.append("烽火塔存档兼容或非法值检查失败。")

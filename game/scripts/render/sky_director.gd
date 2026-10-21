@@ -15,6 +15,7 @@ var weather: float = 0.0
 var rain: float = 0.0
 var moon_direction: Vector3 = Vector3.DOWN
 var cave_blend: float = 0.0
+var echo_blend: float = 0.0
 var _weather_target: float = 0.0
 var _weather_hold: float = 300.0
 var _weather_rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -162,6 +163,8 @@ func _update_environment() -> void:
 	else:
 		_environment.adjustment_color_correction = _surface_correction
 	_environment.adjustment_saturation = lerpf(_surface_saturation, 0.9, cave_blend)
+	_environment.ambient_light_energy *= lerpf(1, 0.75, echo_blend)
+	_environment.adjustment_saturation *= lerpf(1, 0.7, echo_blend)
 	_rain_curtain.visible = _rain_curtain.visible and cave_blend < 0.01
 	RenderingServer.global_shader_parameter_set("mist", _mist * (1.0 - space) * (1 - cave_blend))
 	RenderingServer.global_shader_parameter_set("rain", rain * (1.0 - space) * (1 - cave_blend))

@@ -59,10 +59,19 @@ const NAMES: Array[String] = [
 	"s45_ladder_from_orbit",
 	"s60_ladder_break",
 	"s60b_ladder_view",
+	"s46_echo_plaza",
+	"s46b_echo_departure",
+	"s46c_echo_watcher",
+	"s47_echo_temple",
+	"s48_journal",
+	"s61_light_path",
 ]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
+	if name in ["s46_echo_plaza", "s46b_echo_departure", "s46c_echo_watcher", "s47_echo_temple", "s48_journal", "s61_light_path"]:
+		EchoShots.place(name, player, planet, director)
+		return
 	if name in ["s41_ladder_from_spawn", "s42_ladder_night", "s43_ladder_base", "s44_ladder_balcony", "s45_ladder_from_orbit", "s60_ladder_break", "s60b_ladder_view"]:
 		LadderShots.place(name, player, planet, director)
 		return

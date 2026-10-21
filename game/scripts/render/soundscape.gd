@@ -103,7 +103,8 @@ func _process(delta: float) -> void:
 		_environment["rain"] = _director.rain * (1.0 - smoothstep(150.0, 1500.0, altitude)) * 0.42 if _director != null and planet.profile == 0 and PlayerTraversal.cave_at(_player) == -1 else 0.0
 	for kind: String in _loops:
 		var audio: AudioStreamPlayer = _loops[kind]
-		audio.volume_linear = lerpf(audio.volume_linear, _environment.get(kind, 0.0), 1.0 - exp(-delta * 1.6))
+		var attenuation: float = db_to_linear(-8 * _director.echo_blend) if kind in ["wind", "cave_wind"] else 1.0
+		audio.volume_linear = lerpf(audio.volume_linear, float(_environment.get(kind, 0.0)) * attenuation, 1.0 - exp(-delta * 1.6))
 	var distance: float = relative.distance_to(_previous_relative) if planet == _previous_planet else INF
 	_previous_planet = planet
 	_previous_relative = relative

@@ -7,6 +7,7 @@ const TOP: float = 18.0 # 塔冠与末段石阶齐平的实际行走面高度，
 const NEAR_DISTANCE: float = 2000.0 # 两公里内创建完整模型和碰撞。
 const CROWN_SCALE: float = 0.85 # 塔冠缩至直径六点八米，给最后一圈石阶保留头部净空。
 var lit: Array[int] = []
+var echo_fire: float = 0.0
 var towers: Array[Dictionary] = []
 var _planet: Planet
 var _near: Dictionary = {}
@@ -162,6 +163,7 @@ func _process(delta: float) -> void:
 			(flare.material_override as ShaderMaterial).set_shader_parameter("strength", intensity * lerpf(1.0, 0.35, daylight))
 		if _flames.has(id):
 			var flame: Node3D = _flames[id]
+			flame.scale = Vector3.ONE * (1 + echo_fire * 0.35 if id == towers.size() - 1 else 1.0)
 			flame.visible = lit.has(id)
 			for node: Node in flame.get_children():
 				if node is MeshInstance3D:

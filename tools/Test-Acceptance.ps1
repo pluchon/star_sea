@@ -76,6 +76,7 @@ try {
     Invoke-SourceCheck 'glide-routes' @('--headless', '--script', 'res://scripts/verify/glide_route_checks.gd', '--', '--check=glide-routes') 'test-output/wanderer/glide_route_checks.json'
     Invoke-SourceCheck 'civilization' @('--headless', '--script', 'res://scripts/verify/civilization_checks.gd', '--', '--check=civilization') 'test-output/wanderer/civilization_checks.json'
     Invoke-SourceCheck 'caves' @('--headless', '--script', 'res://scripts/verify/cave_checks.gd', '--', '--check=caves') 'test-output/wanderer/cave_checks.json'
+    Invoke-SourceCheck 'echoes' @('--script', 'res://scripts/verify/echo_checks.gd', '--', '--check=echo') 'test-output/wanderer/echo_checks.json'
     python (Join-Path $PSScriptRoot 'Check-Audio.py') --ship-recordings (Join-Path $repoDirectory 'test-output/wanderer/audio')
     if ($LASTEXITCODE -ne 0) { throw '飞船实际混音检查失败。' }
     Invoke-SourceCheck 'ecology' @('--headless', '--script', 'res://scripts/verify/ecology_checks.gd') 'test-output/p4/ecology_checks.json'
@@ -102,6 +103,7 @@ try {
     $shots += @('s30_town_plaza','s31_town_overview','s32_terraces','s33_cemetery','s34_old_road')
     $shots += @('s35_beacon_top','s36_beacon_chain_night')
     $shots += @('s37_temple_gate','s38_temple_hall')
+    $shots += @('s41_ladder_from_spawn','s42_ladder_night','s43_ladder_base','s44_ladder_balcony','s45_ladder_from_orbit','s60_ladder_break','s46_echo_plaza','s47_echo_temple','s48_journal','s61_light_path')
     $shotDirectory = Join-Path $releaseDirectory 'shots'
     foreach ($shot in $shots) {
         Invoke-Release "release-$shot" @("--shot=$shot", "--out=$shotDirectory")

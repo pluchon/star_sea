@@ -148,6 +148,11 @@ static func run(tree: SceneTree) -> Dictionary:
 	report["balcony_walk_events"] = walk_events
 	report["persistence"] = persistence
 	report["maximum_rider_gap_m"] = maximum_rider_gap
+	var ending: Dictionary = await EndingChecks.run(tree, scene)
+	report["ending"] = ending
+	if not ending["passed"]:
+		failures.append_array(ending["failures"])
+	report["passed"] = failures.is_empty()
 	scene.queue_free()
 	for i: int in 8:
 		await tree.process_frame

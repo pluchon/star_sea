@@ -11,6 +11,7 @@ signal flag_removed(direction: Vector3)
 var player_direction: Vector3 = Vector3.ZERO
 var spawn_direction: Vector3 = Vector3.ZERO
 var flags: Array[Vector3] = []
+var discoveries: Array[Dictionary] = []
 var _viewport: SubViewport
 var _pivot: Node3D
 var _globe: MeshInstance3D
@@ -24,6 +25,7 @@ var _flag_mesh: ArrayMesh
 var _flag_material: StandardMaterial3D
 var _head_mesh: SphereMesh
 var _head_material: StandardMaterial3D
+var _discovery_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -74,6 +76,8 @@ func _ready() -> void:
 	_head_mesh.height = 0.026
 	_head_material = StandardMaterial3D.new()
 	_head_material.albedo_color = Color(0.93, 0.36, 0.28)
+	_discovery_material = _head_material.duplicate() as StandardMaterial3D
+	_discovery_material.albedo_color = Color("f2b45a")
 	_head_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_player_marker = MeshInstance3D.new()
 	var dot: SphereMesh = SphereMesh.new()
@@ -108,6 +112,24 @@ func face(direction: Vector3) -> void:
 func refresh() -> void:
 	for child: Node in _markers.get_children():
 		child.queue_free()
+	for record: Dictionary in discoveries:
+		var dot: MeshInstance3D = MeshInstance3D.new()
+		dot.mesh = _head_mesh
+		dot.material_override = _discovery_material
+		dot.position = Vector3(record["direction"]).normalized() * 1.014
+		_markers.add_child(dot)
+		if record["echo"]:
+			var ring: MeshInstance3D = MeshInstance3D.new()
+			var torus: TorusMesh = TorusMesh.new()
+			torus.inner_radius = 0.023
+			torus.outer_radius = 0.030
+			torus.rings = 16
+			torus.ring_segments = 6
+			ring.mesh = torus
+			ring.material_override = _discovery_material
+			var up: Vector3 = record["direction"]
+			ring.transform = Transform3D(Basis.looking_at(SurfaceSites.tangent_forward(up), up), up * 1.014)
+			_markers.add_child(ring)
 	for flag: Vector3 in flags:
 		var marker: MeshInstance3D = MeshInstance3D.new()
 		marker.mesh = _flag_mesh

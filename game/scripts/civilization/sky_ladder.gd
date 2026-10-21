@@ -12,6 +12,8 @@ var lift_target_top: bool = false
 var dwell: float = 0.0
 var far_triangles: int = 0
 var bridge_direction: Vector3 = Vector3.BACK
+var ending_awake: bool = false
+var echo_rise: float = -1.0
 var _planet: Planet
 var _near: Node3D
 var _platform: Node3D
@@ -29,6 +31,7 @@ var _stone_materials: Dictionary = {}
 var _gate: Node3D
 var _ring_flares: Array[MeshInstance3D] = []
 var _lift_saved: Dictionary = {}
+var _platform_wind: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -208,6 +211,7 @@ func _build_platform() -> void:
 	door.position = Vector3(0, 0, -22)
 	_platform.add_child(door)
 	var wind: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+	_platform_wind = wind
 	var stream: AudioStreamWAV = (load("res://audio/high_wind.wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	stream.loop_end = roundi(stream.get_length() * stream.mix_rate)
@@ -223,12 +227,15 @@ func _process(delta: float) -> void:
 	var player: StarSeaPlayer = get_tree().current_scene.get_node("Player") as StarSeaPlayer
 	var at: Vector3 = to_local(player.camera.global_position)
 	var director: SkyDirector = get_tree().current_scene.get_node("SkyDirector") as SkyDirector
+	if is_instance_valid(_platform_wind):
+		_platform_wind.volume_db = -8 * director.echo_blend
 	if not director.time_paused:
 		_time += delta
 	_tether_material.set_shader_parameter("tether_time", _time)
 	var night: float = 1 - smoothstep(-0.1, 0.2, director.sun_direction.dot(global_basis.y))
 	for material_value: ShaderMaterial in [_far_material, _near_material]:
 		material_value.set_shader_parameter("awake", lerpf(0.15, 0.6, night))
+		material_value.set_shader_parameter("echo_rise", echo_rise)
 	_far_material.set_shader_parameter("hide_base", _near != null)
 	_far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if at.length() < 3000 else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for node: Node in _broken.find_children("*", "MeshInstance3D", true, false):
@@ -252,7 +259,10 @@ func _process(delta: float) -> void:
 	_flare.global_basis = camera.global_basis
 	var size_value: float = BeaconTowers.flare_size(flare_position.distance_to(camera.global_position), camera.fov, get_viewport().get_visible_rect().size.y)
 	_flare.scale = Vector3.ONE * size_value
-	(_flare.material_override as ShaderMaterial).set_shader_parameter("strength", 0.08 * night)
+	(_flare.material_override as ShaderMaterial).set_shader_parameter("strength", (0.55 + 0.25 * sin(_time * TAU / 6)) * lerpf(0.6, 1.0, night) if ending_awake else 0.08 * night)
+	if _platform != null:
+		for node: Node in _platform.find_children("*", "MeshInstance3D", true, false):
+			(node as MeshInstance3D).set_instance_shader_parameter("awake", 1.0 if ending_awake else 0.1)
 	for ring: MeshInstance3D in _ring_flares:
 		var height: float = ring.get_meta("height")
 		var point: Vector3 = Vector3.UP * height
@@ -261,8 +271,9 @@ func _process(delta: float) -> void:
 		ring.global_basis = camera.global_basis
 		var distance: float = ring.global_position.distance_to(camera.global_position)
 		ring.scale = Vector3.ONE * BeaconTowers.flare_size(distance, camera.fov, get_viewport().get_visible_rect().size.y)
-		ring.visible = night > 0.01 and distance > 2000
-		(ring.material_override as ShaderMaterial).set_shader_parameter("strength", 0.5 * night * smoothstep(2000, 3000, distance))
+		var response: float = 1.0 if echo_rise >= height / 6200.0 and echo_rise >= 0 else 0.0
+		ring.visible = (night > 0.01 or response > 0) and distance > 2000
+		(ring.material_override as ShaderMaterial).set_shader_parameter("strength", maxf(0.5 * night, response) * smoothstep(2000, 3000, distance))
 
 
 func _physics_process(delta: float) -> void:

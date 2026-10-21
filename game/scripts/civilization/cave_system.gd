@@ -29,6 +29,7 @@ var _materials: Array[ShaderMaterial] = []
 var _collision_jobs: Dictionary = {}
 var _prop_groups: Array[Dictionary] = []
 var _mural_scenes: Array[PackedScene] = []
+var _mural_progress: float = 0.0
 var _prop_cursor: int = 0
 var _water_materials: Array[ShaderMaterial] = []
 var _dust_materials: Array[ShaderMaterial] = []
@@ -304,13 +305,15 @@ func _update_chunks(eye: Vector3) -> void:
 					placements.append(record)
 					continue
 				var model: Node3D = _mural_scenes[record["mural"]].instantiate() as Node3D
+				model.set_meta("mural", int(record["mural"]))
 				model.transform = record["transform"]
 				for child: Node in model.find_children("*", "MeshInstance3D", true, false):
 					var mesh: MeshInstance3D = child as MeshInstance3D
 					for surface: int in mesh.mesh.get_surface_count():
 						var source: Material = mesh.mesh.surface_get_material(surface)
 						mesh.set_surface_override_material(surface, RuinKit.material(2 if source.resource_name.to_lower().begins_with("glyph") else 0))
-					mesh.set_instance_shader_parameter("awake", 0.15)
+					var mural: int = record["mural"]
+					mesh.set_instance_shader_parameter("awake", lerpf(0.15, 1.0, smoothstep(mural / 6.0, (mural + 1) / 6.0, _mural_progress)))
 				builder.add_child(model)
 			builder.build(placements)
 			_props[id] = builder
@@ -377,3 +380,15 @@ func is_settled() -> bool:
 		if eye.distance_to(_prop_groups[id]["position"]) < DRAW_RANGE + 28 and not _props.has(id):
 			return false
 	return true
+
+
+func set_mural_progress(progress: float) -> void:
+	_mural_progress = progress
+	for builder: Node3D in _props.values():
+		for model: Node in builder.get_children():
+			if not model.has_meta("mural"):
+				continue
+			var index: int = model.get_meta("mural")
+			var awake: float = lerpf(0.15, 1.0, smoothstep(index / 6.0, (index + 1) / 6.0, progress))
+			for node: Node in model.find_children("*", "MeshInstance3D", true, false):
+				(node as MeshInstance3D).set_instance_shader_parameter("awake", awake)

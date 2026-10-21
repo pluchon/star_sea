@@ -12,6 +12,7 @@ var spawn_direction: Vector3 = Vector3.ZERO
 var ruin_direction: Vector3 = Vector3.ZERO
 var flags: Array[Vector3] = []
 var cave_entrances: Array[Vector3] = []
+var discoveries: Array[Dictionary] = []
 var planet_radius: float = 40000.0
 var _dragging: bool = false
 var _symbols: Symbols
@@ -125,6 +126,11 @@ func _draw_symbols(canvas: Control) -> void:
 			continue
 		canvas.draw_line(foot, foot + Vector2(0, -14), Color(0.92, 0.90, 0.82), 1.5, true)
 		canvas.draw_colored_polygon(PackedVector2Array([foot + Vector2(0, -14), foot + Vector2(9, -10.5), foot + Vector2(0, -7)]), Color(0.93, 0.36, 0.28))
+	for marker: Dictionary in discoveries:
+		var at: Vector2 = _position(marker["direction"])
+		canvas.draw_circle(at, 2.5, Color("f2b45a"))
+		if marker["echo"]:
+			canvas.draw_arc(at, 6, 0, TAU, 24, Color("f2b45a"), 1.3, true)
 	for entrance: Vector3 in cave_entrances:
 		var at: Vector2 = _position(entrance)
 		canvas.draw_arc(at, 5, PI, TAU, 16, Color(0.95, 0.77, 0.45), 2, true)

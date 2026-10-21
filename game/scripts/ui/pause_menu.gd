@@ -10,6 +10,7 @@ var _shade: ColorRect
 var _hud: CanvasLayer
 var _hud_was_visible: bool = true
 var _open: bool = false
+var _journal_page: JournalPage
 
 
 func _ready() -> void:
@@ -121,7 +122,8 @@ func resume() -> void:
 	_hud.visible = _hud_was_visible
 	visible = false
 	get_tree().paused = false
-	_player.controls_enabled = true
+	var ending: EndingDirector = get_parent().get_node_or_null("Universe/PlanetDawn/EndingDirector") as EndingDirector
+	_player.controls_enabled = ending == null or not ending.busy
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	(get_node("/root/GameSettings") as StarSeaSettings).apply()
 
@@ -152,6 +154,10 @@ func _button(text: String, callback: Callable, id: String = "") -> Button:
 
 
 func _home() -> void:
+	if _journal_page != null:
+		_journal_page.queue_free()
+		_journal_page = null
+	_panel.visible = true
 	_clear()
 	_label("星 海 尽 头", 42)
 	_label("风掠过群山，星海在头顶。", 16)
@@ -161,7 +167,9 @@ func _home() -> void:
 	_button("继续漂流" if _started else "开始漂流", resume, "Resume")
 	var load_button: Button = _button("读取旅程", _load_journey, "LoadJourney")
 	load_button.disabled = not FileAccess.file_exists(JourneyStore.PATH)
-	_button("保存旅程", _save_journey, "SaveJourney").disabled = not _started
+	var ending: EndingDirector = get_parent().get_node_or_null("Universe/PlanetDawn/EndingDirector") as EndingDirector
+	_button("保存旅程", _save_journey, "SaveJourney").disabled = not _started or (ending != null and ending.busy)
+	_button("手记", _journal, "Journal")
 	_button("设置", _settings, "Settings")
 	_button("操作说明", _controls, "Controls")
 	_button("退出", _quit, "Quit")
@@ -186,12 +194,25 @@ func _load_journey() -> void:
 
 
 func _quit() -> void:
+	var ending: EndingDirector = get_parent().get_node_or_null("Universe/PlanetDawn/EndingDirector") as EndingDirector
+	if ending != null and ending.busy:
+		get_tree().quit()
+		return
 	if _started:
 		var error: Error = JourneyStore.save(get_parent())
 		if error != OK:
 			_message.text = "保存失败，旅程尚未退出：" + error_string(error)
 			return
 	get_tree().quit()
+
+
+func _journal() -> void:
+	_panel.visible = false
+	_journal_page = JournalPage.new()
+	_journal_page.scene = get_parent()
+	_journal_page.journal = get_parent().get_node("Universe/PlanetDawn/TravelJournal") as TravelJournal
+	_journal_page.closed.connect(_home)
+	_panel.get_parent().add_child(_journal_page)
 
 
 func _controls() -> void:

@@ -28,20 +28,6 @@ func _ready() -> void:
 					(node as GeometryInstance3D).visibility_range_end = 8000.0
 	var surface: RoadSurface = RoadSurface.new()
 	add_child(surface)
-	# 第十步替换为完整天梯；本步只有标明选址的细柱，没有碰撞或玩法。
-	var marker: MeshInstance3D = MeshInstance3D.new()
-	marker.name = "LadderSitingMarker"
-	var cylinder: CylinderMesh = CylinderMesh.new()
-	cylinder.top_radius = 2.0
-	cylinder.bottom_radius = 2.0
-	cylinder.height = 6200.0
-	cylinder.radial_segments = 8
-	marker.mesh = cylinder
-	marker.material_override = RuinKit.material(0)
-	var up: Vector3 = _data.ladder["direction"]
-	marker.transform = Transform3D(Basis.looking_at(_data.ladder["forward"], up), up * (_planet.radius + float(_data.ladder["height"]) + 3100.0))
-	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(marker)
 
 
 func _process(delta: float) -> void:

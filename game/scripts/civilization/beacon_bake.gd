@@ -28,6 +28,9 @@ func generate(noise: TerrainNoise, data: CivilizationData) -> Array[Dictionary]:
 		for y: int in range(floori(minimum.y / GRID), ceili(maximum.y / GRID) + 1):
 			var p: Vector2 = Vector2(x, y) * GRID
 			var direction: Vector3 = (town + (forward * p.x + side * p.y) / noise.radius).normalized()
+			# 为天梯二百米基座和过渡地形预留净空，避免末塔落进后续台地。
+			if direction.distance_to(ladder) * noise.radius < 350:
+				continue
 			var height: float = noise.height(direction)
 			if height < 30 or noise.water_surface(direction, height) > -INF or noise.river_distance(direction) < 100 or noise.slope(direction, height) >= 0.6:
 				continue
@@ -49,6 +52,13 @@ func generate(noise: TerrainNoise, data: CivilizationData) -> Array[Dictionary]:
 		push_error("塔链烘焙失败：无法经过山口连通古城与天梯。")
 		return []
 	a.append_array(b.slice(1))
+	# 已交付版本使用九个存档编号；补入通视中继，避免重选末塔后删除旧编号。
+	while a.size() < 9:
+		var insertion: Vector2i = _relay(a)
+		if insertion.x < 0:
+			push_error("塔链烘焙失败：无法保留九个已有存档编号。")
+			return []
+		a.insert(insertion.x, insertion.y)
 	if a.size() < 6 or a.size() > 10:
 		push_error("塔链烘焙失败：塔数不在六至十座之间：" + str(a.size()))
 		return []
@@ -64,6 +74,27 @@ func generate(noise: TerrainNoise, data: CivilizationData) -> Array[Dictionary]:
 		result.append(tower)
 	print("塔链选址：候选 %d，塔 %d，山口旧址偏移 %.1f 米" % [_candidates.size(), result.size(), Vector3(_candidates[peak]["direction"]).angle_to(old_peak) * noise.radius])
 	return result
+
+
+func _relay(path: PackedInt32Array) -> Vector2i:
+	var best: Vector2i = Vector2i(-1, -1)
+	var score: float = INF
+	for at: int in path.size() - 1:
+		var a: Dictionary = _candidates[path[at]]
+		var b: Dictionary = _candidates[path[at + 1]]
+		for id: int in _candidates.size():
+			if id in path:
+				continue
+			var c: Dictionary = _candidates[id]
+			var da: float = Vector3(a["direction"]).angle_to(c["direction"]) * _noise.radius
+			var db: float = Vector3(b["direction"]).angle_to(c["direction"]) * _noise.radius
+			if minf(da, db) < MIN_SPACING or maxf(da, db) > MAX_SPACING or da + db >= score:
+				continue
+			var origin: Vector3 = Vector3(c["direction"]) * (_noise.radius + float(c["height"]) + TOP)
+			if visible(_noise, origin, Vector3(a["direction"]) * (_noise.radius + float(a["height"]) + TOP)) and visible(_noise, origin, Vector3(b["direction"]) * (_noise.radius + float(b["height"]) + TOP)):
+				best = Vector2i(at + 1, id)
+				score = da + db
+	return best
 
 
 func _near(center: Vector3, limit: float, target: Vector3, visible_from: Vector3 = Vector3.ZERO) -> int:

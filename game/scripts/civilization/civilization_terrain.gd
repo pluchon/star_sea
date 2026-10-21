@@ -17,6 +17,8 @@ func _init(value: CivilizationData, planet_radius: float) -> void:
 		return
 	# 全球绝大多数查询不经过文明区，先用包围盒排除道路和明渠索引查询。
 	_bounds = AABB(Vector3(data.town["direction"]) * radius - Vector3.ONE * 700.0, Vector3.ONE * 1400.0)
+	var ladder_center: Vector3 = Vector3(data.ladder["direction"]) * radius
+	_bounds = _bounds.expand(ladder_center - Vector3.ONE * 210).expand(ladder_center + Vector3.ONE * 210)
 	for road: Dictionary in data.roads:
 		for point: Vector3 in road["points"]:
 			_bounds = _bounds.expand(point * radius - Vector3.ONE * 8.0).expand(point * radius + Vector3.ONE * 8.0)
@@ -36,12 +38,13 @@ func _init(value: CivilizationData, planet_radius: float) -> void:
 					_beacon_index[key].append(tower)
 	for road: Dictionary in data.roads:
 		var points: PackedVector3Array = road["points"]
+		var levels: PackedFloat32Array = road.get("terrain_levels", road["levels"])
 		for index: int in points.size() - 1:
 			var a: Vector3 = points[index] * radius
 			var b: Vector3 = points[index + 1] * radius
 			var low: Vector3i = Vector3i(((a.min(b) - Vector3.ONE * 7.0) / ROAD_CELL).floor())
 			var high: Vector3i = Vector3i(((a.max(b) + Vector3.ONE * 7.0) / ROAD_CELL).floor())
-			var segment: Dictionary = {"a": a, "b": b, "h0": road["levels"][index], "h1": road["levels"][index + 1], "width": road["width"], "wear0": road["wear"][index], "wear1": road["wear"][index + 1]}
+			var segment: Dictionary = {"a": a, "b": b, "h0": levels[index], "h1": levels[index + 1], "width": road["width"], "wear0": road["wear"][index], "wear1": road["wear"][index + 1]}
 			for x: int in range(low.x, high.x + 1):
 				for y: int in range(low.y, high.y + 1):
 					for z: int in range(low.z, high.z + 1):
@@ -68,6 +71,9 @@ func _init(value: CivilizationData, planet_radius: float) -> void:
 func apply(direction: Vector3, base: float, hydro: GlobalHydrology) -> float:
 	if not _bounds.has_point(direction * radius):
 		return base
+	var ladder_distance: float = direction.distance_to(data.ladder["direction"]) * radius
+	if ladder_distance < 200:
+		return ladder_height(direction, base)
 	if direction.distance_to(data.town["direction"]) * radius < 32.0:
 		return data.town["level"]
 	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
@@ -95,6 +101,21 @@ func apply(direction: Vector3, base: float, hydro: GlobalHydrology) -> float:
 				carve = maxf(carve, 1.2 * (1.0 - smoothstep(0.7, 1.7, distance)))
 		height -= carve
 	return height
+
+
+func ladder_height(direction: Vector3, base: float) -> float:
+	var up: Vector3 = data.ladder["direction"]
+	var frame: Basis = Basis.looking_at(data.ladder["forward"], up)
+	var point: Vector3 = frame.inverse() * (direction - up) * radius
+	var distance: float = Vector2(point.x, point.z).length()
+	var target: float = float(data.ladder["height"])
+	var stairs: bool = minf(absf(point.x), absf(point.z)) <= 10
+	for boundary: float in [180.0, 120.0, 70.0]:
+		var rise: float = clampf((boundary + 12 - distance) / 12, 0, 1) if stairs else 1 - smoothstep(boundary, boundary + 2, distance)
+		if stairs:
+			rise = floorf(rise * 20 + 0.0001) / 20
+		target += rise * 6
+	return lerpf(base, target, 1 - smoothstep(194, 200, distance))
 
 
 func regions(direction: Vector3, base: float) -> float:
@@ -138,6 +159,8 @@ func road_at(direction: Vector3) -> Vector4:
 
 
 func in_clearing(direction: Vector3) -> bool:
+	if direction.distance_to(data.ladder["direction"]) * radius < 194:
+		return true
 	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
 		if direction.distance_to(tower["direction"]) * radius < 8.0:
 			return true

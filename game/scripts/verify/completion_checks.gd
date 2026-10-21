@@ -141,6 +141,10 @@ func _begin() -> void:
 	if not beacons["passed"]:
 		_failures.append("烽火塔存档兼容或非法值检查失败。")
 	report["beacons"] = beacons
+	var lift: Dictionary = LadderPersistenceChecks.run(scene)
+	report["ladder_lift"] = lift
+	if not lift["passed"]:
+		_failures.append("升降台存档往返、旧存档或非法字段整体拒绝失败。")
 	report["passed"] = _failures.is_empty()
 	VerificationMetrics.write_json(OUTPUT.path_join("completion_checks.json"), report)
 	print(JSON.stringify(report))

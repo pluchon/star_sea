@@ -110,6 +110,15 @@ static func constraints(noise: TerrainNoise, network: Dictionary, data: Civiliza
 
 static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 	var frame: Transform3D = network["frame"]
+	var approach: Dictionary = {}
+	for length_value: int in range(64, 257, 16):
+		var direction: Vector3 = (frame * Vector3(0, 0, -length_value)).normalized()
+		var at: Vector3 = frame.affine_inverse() * (direction * (noise.radius + noise.height(direction)))
+		var slope: float = at.y / (at.z + 8)
+		approach = {"length": float(length_value), "slope": slope}
+		if absf(slope) <= 0.6:
+			break
+	network["approach"] = approach
 	var nodes: Array = network["nodes"]
 	var entrances_local: PackedVector3Array = PackedVector3Array()
 	for pair: Array in [[0, "gate"], [9, "mouth"]]:

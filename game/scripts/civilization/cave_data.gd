@@ -122,14 +122,19 @@ static func field(p: Vector3, primitives: Array, noise: FastNoiseLite) -> float:
 func apply(direction: Vector3, radius: float, height: float) -> float:
 	for network: Dictionary in networks:
 		var frame: Transform3D = network["frame"]
-		if direction.dot(frame.origin.normalized()) < 0.999999:
+		if direction.dot(frame.origin.normalized()) < 0.99997:
 			continue
-		# 入口外侧的狭小台地接上道路；山体内部和顶板不受平整影响。
+		# 外侧缓坡连接真实山坡，避免短台地在门前形成无法步行的陡坎。
 		var p: Vector3 = frame.affine_inverse() * (direction * (radius + height))
-		if p.z > 1 or p.z < -18 or absf(p.x) > 12:
+		var approach: Dictionary = network.get("approach", {"length": 18.0, "slope": 0.0})
+		var length_value: float = approach["length"]
+		if p.z > 1 or p.z < -length_value - 16 or absf(p.x) > 56:
 			continue
-		var weight: float = (1 - smoothstep(5, 12, absf(p.x))) * smoothstep(-18, -8, p.z) * (1 - smoothstep(-1, 1, p.z))
-		var plane_radius: float = frame.origin.dot(frame.basis.y) / direction.dot(frame.basis.y)
+		var weight: float = (1 - smoothstep(32, 56, absf(p.x))) * smoothstep(-length_value - 16, -length_value, p.z) * (1 - smoothstep(-1, 1, p.z))
+		# 平段先覆盖距离场端帽，角色才能从缓坡连续进入零高度洞底。
+		var normal: Vector3 = frame.basis.y - frame.basis.z * float(approach["slope"]) if p.z < -12 else frame.basis.y
+		var origin: Vector3 = frame * Vector3(0, 0, -12)
+		var plane_radius: float = origin.dot(normal) / direction.dot(normal)
 		height = lerpf(height, plane_radius - radius, weight)
 	return height
 

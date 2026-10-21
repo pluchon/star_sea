@@ -18,6 +18,11 @@ func _ready() -> void:
 	var planet: Planet = get_parent() as Planet
 	if planet.noise.features.civilization != null:
 		zones.append_array(planet.noise.features.civilization.data.climbs.duplicate(true))
+		var frame: Transform3D = LandingPads.frame(planet)
+		for sign_value: float in [-1, 1]:
+			var bottom: Vector3 = Vector3(sign_value * 40, -12, -sqrt(122.5 * 122.5 - 40 * 40))
+			var normal: Vector3 = Vector3(bottom.x, 0, bottom.z).normalized()
+			zones.append({"id": "ladder_vine_%d" % int(sign_value), "kind": "vine_wall", "bottom": frame * bottom, "top": frame * (bottom + Vector3.UP * 6), "normal": frame.basis * normal, "width": 5.0, "exit_top": frame * (bottom - normal * 3 + Vector3.UP * 6.15), "support_wall": true})
 	if planet.noise.features.caves != null:
 		for network: Dictionary in planet.noise.features.caves.networks:
 			for source: Dictionary in network["climbs"]:

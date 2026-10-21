@@ -14,6 +14,12 @@ static func sweep(tree: SceneTree, start: Vector3, finish: Vector3) -> Dictionar
 	var result: Dictionary = {}
 	for node: Node in tree.get_nodes_in_group("planets"):
 		var planet: Planet = node as Planet
+		var tower: Dictionary = _tower_sweep(planet, start, finish)
+		if not tower.is_empty():
+			var hit_distance: float = start.distance_to(tower["position"])
+			if hit_distance < earliest:
+				earliest = hit_distance
+				result = tower
 		var relative: Vector3 = start - planet.global_position
 		var bound: float = planet.radius + TerrainNoise.MAX_HEIGHT + CLEARANCE + SAMPLE_DISTANCE
 		var along: float = relative.dot(direction)
@@ -53,6 +59,35 @@ static func sweep(tree: SceneTree, start: Vector3, finish: Vector3) -> Dictionar
 			result = {"position": planet.global_position + up * (planet.surface_radius(up) + CLEARANCE), "up": up}
 			break
 	return result
+
+
+static func _tower_sweep(planet: Planet, start: Vector3, finish: Vector3) -> Dictionary:
+	if planet.profile != 0 or planet.noise.features.civilization == null:
+		return {}
+	var frame: Transform3D = planet.global_transform * LandingPads.frame(planet)
+	var a: Vector3 = frame.affine_inverse() * start
+	var b: Vector3 = frame.affine_inverse() * finish
+	if AABB(Vector3(-50, 0, -50), Vector3(100, 6200, 100)).intersects_segment(a, b) == null:
+		return {}
+	var steps: int = maxi(1, ceili(a.distance_to(b) / SAMPLE_DISTANCE))
+	for index: int in steps + 1:
+		var t: float = float(index) / steps
+		var point: Vector3 = a.lerp(b, t)
+		if point.y < 0 or point.y > 6200 or Vector2(point.x, point.z).length() >= SkyLadderMeshes.radius_at(point.y) + 15:
+			continue
+		var low: float = maxf(0, t - 1.0 / steps)
+		var high: float = t
+		for iteration: int in 14:
+			var mid: float = (low + high) * 0.5
+			var sample: Vector3 = a.lerp(b, mid)
+			if Vector2(sample.x, sample.z).length() < SkyLadderMeshes.radius_at(sample.y) + 15:
+				high = mid
+			else:
+				low = mid
+		var contact: Vector3 = a.lerp(b, low)
+		var normal: Vector3 = frame.basis * Vector3(contact.x, 0, contact.z).normalized()
+		return {"position": frame * contact, "up": frame.basis.y, "normal": normal, "tower": true}
+	return {}
 
 
 static func _height(planet: Planet, point: Vector3) -> float:

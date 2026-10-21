@@ -64,9 +64,9 @@ if __name__ == "__main__":
     else:
         paths = [ROOT / "game" / "audio" / f"{name}.wav" for name in ["wind", "shore", "rustle", "space", "rain", "cave_drip", "cave_wind"]]
         paths.extend(sorted((ROOT / "game" / "audio").glob("step_*.wav")))
-        paths.extend(ROOT / "game" / "audio" / f"{name}.wav" for name in ["dawn_theme", "engine", "ship_land", "ship_hatch", "waterfall", "glide_open", "high_wind", "beacon_ignite"])
-        records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space", "rain", "engine", "waterfall", "high_wind", "cave_drip", "cave_wind"]) for path in paths]
-        count_ok = len(records) == 27 and len({record["sha256"] for record in records}) == 27
+        paths.extend(ROOT / "game" / "audio" / f"{name}.wav" for name in ["dawn_theme", "engine", "ship_land", "ship_hatch", "waterfall", "glide_open", "high_wind", "beacon_ignite", "lift_start", "lift_hum"])
+        records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space", "rain", "engine", "waterfall", "high_wind", "cave_drip", "cave_wind", "lift_hum"]) for path in paths]
+        count_ok = len(records) == 29 and len({record["sha256"] for record in records}) == 29
         filename = "audio-asset-checks.json"
     report = {"passed": count_ok and all(record["passed"] for record in records), "records": records}
     output = ROOT / "test-output" / "acceptance" / filename

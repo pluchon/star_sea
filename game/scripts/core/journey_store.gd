@@ -42,6 +42,8 @@ static func save(scene: Node, path: String = PATH) -> Error:
 	config.set_value("journey", "beacons_lit", beacons.lit.duplicate() if beacons != null else [])
 	var caves: CaveSystem = scene.get_node_or_null("Universe/PlanetDawn/CaveSystem") as CaveSystem
 	config.set_value("journey", "caves_seen", caves.seen.duplicate() if caves != null else [])
+	var ladder: SkyLadder = scene.get_node_or_null("Universe/PlanetDawn/SkyLadder") as SkyLadder
+	config.set_value("journey", "ladder_lift", ladder.lift_state() if ladder != null else {})
 	var error: Error = config.save(path + ".tmp")
 	if error != OK:
 		return error
@@ -141,6 +143,10 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		return ERR_INVALID_DATA
 	if caves == null and (not caves_value is Array or not (caves_value as Array).is_empty()):
 		return ERR_INVALID_DATA
+	var ladder: SkyLadder = scene.get_node_or_null("Universe/PlanetDawn/SkyLadder") as SkyLadder
+	var lift_value: Variant = config.get_value("journey", "ladder_lift", {})
+	if not SkyLadder.valid_lift(lift_value) or (ladder == null and not (lift_value as Dictionary).is_empty()):
+		return ERR_INVALID_DATA
 	var surface: float = planet.surface_radius(location.normalized())
 	var in_cave: bool = planet.noise.features != null and planet.noise.features.caves != null and planet.noise.features.caves.cave_at(location) >= 0
 	if not in_cave:
@@ -164,6 +170,8 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		beacons.set_lit(values)
 	if caves != null:
 		caves.seen.assign(caves_value)
+	if ladder != null:
+		ladder.restore_lift(lift_value)
 	return OK
 
 

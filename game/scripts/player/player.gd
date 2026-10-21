@@ -240,8 +240,8 @@ func advance_flight(target_velocity: Vector3, delta: float) -> void:
 		global_position = destination
 	else:
 		global_position = contact["position"]
-		var contact_up: Vector3 = contact["up"]
-		velocity -= contact_up * minf(velocity.dot(contact_up), 0.0)
+		var contact_normal: Vector3 = contact.get("normal", contact["up"])
+		velocity -= contact_normal * minf(velocity.dot(contact_normal), 0.0)
 	_planet = Planet.nearest(get_tree(), global_position)
 	var new_offset: Vector3 = global_position - _planet.global_position
 	var new_up: Vector3 = new_offset.normalized()
@@ -302,11 +302,12 @@ func land() -> void:
 	if PlayerTraversal.cave_at(self) >= 0:
 		notify("洞穴内无法降落")
 		return
-	if transition_busy or mode != Mode.FLY or altitude > 40.0 or velocity.length() >= 30.0:
-		return
 	var landing_planet: Planet = current_planet()
+	var pad: Dictionary = LandingPads.near(landing_planet, landing_planet.to_local(global_position))
+	if transition_busy or mode != Mode.FLY or (altitude > 40.0 and pad.is_empty()) or velocity.length() >= 30.0:
+		return
 	var direction: Vector3 = landing_planet.to_local(global_position).normalized()
-	var reason: String = StarSeaShip.can_land(landing_planet, direction)
+	var reason: String = StarSeaShip.can_land(landing_planet, direction) if pad.is_empty() else ""
 	if not reason.is_empty():
 		notify(reason)
 		return
@@ -314,13 +315,13 @@ func land() -> void:
 	# 先预测减速后的停留点，避免减速阶段前移、下降阶段又退回原位置。
 	var braking_position: Vector3 = landing_planet.to_local(global_position) + local_velocity * 0.3
 	direction = braking_position.normalized()
-	reason = StarSeaShip.can_land(landing_planet, direction)
+	reason = StarSeaShip.can_land(landing_planet, direction) if pad.is_empty() else ""
 	if not reason.is_empty():
 		notify(reason)
 		return
 	transition_busy = true
 	_f_held = -1.0
-	var destination: Transform3D = StarSeaShip.landing_transform(landing_planet, direction, -global_basis.z)
+	var destination: Transform3D = StarSeaShip.landing_transform(landing_planet, direction, -global_basis.z) if pad.is_empty() else LandingPads.landing(pad)
 	var initial: Transform3D = Transform3D(global_basis, landing_planet.to_local(global_position))
 	var elapsed: float = 0.0
 	while elapsed < 2.6:
@@ -342,7 +343,8 @@ func land() -> void:
 	ship.play_effect("ship_land")
 	var exit_position: Vector3 = destination.origin - destination.basis.x * 4.0
 	var exit_up: Vector3 = exit_position.normalized()
-	place_at(landing_planet.to_global(exit_up * (landing_planet.surface_radius(exit_up) + 0.05)), -destination.basis.z, exit_up)
+	var exit_floor: Vector3 = exit_up * (landing_planet.surface_radius(exit_up) + 0.05) if pad.is_empty() else exit_position - Vector3(pad["up"]) * (StarSeaShip.FOOT_HEIGHT - 0.05)
+	place_at(landing_planet.to_global(exit_floor), -destination.basis.z, exit_up)
 	mode = Mode.WALK
 	velocity = Vector3.ZERO
 	transition_busy = false
@@ -376,6 +378,10 @@ func call_ship() -> void:
 		ship.catch_airborne(self)
 		return
 	if mode != Mode.WALK or not is_on_floor():
+		return
+	var pad: Dictionary = LandingPads.near(_planet, _planet.to_local(global_position), 4)
+	if not pad.is_empty():
+		ship.call_to_pad(_planet, LandingPads.landing(pad))
 		return
 	var location: Transform3D = StarSeaShip.find_landing(_planet, _planet.to_local(global_position).normalized(), -global_basis.z)
 	if not location.origin.is_finite():

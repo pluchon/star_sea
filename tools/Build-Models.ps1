@@ -1,4 +1,4 @@
-param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'cave', 'all')][string]$Target = 'all', [string]$Only = '')
+param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'cave', 'ladder', 'all')][string]$Target = 'all', [string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
@@ -7,6 +7,10 @@ $blenderPath = if ($blenderCommand) { $blenderCommand.Source } else { 'D:\Godot\
 if (-not (Test-Path -LiteralPath $blenderPath)) { throw '找不到 Blender 4.x，请添加到 PATH。' }
 Push-Location -LiteralPath $repoDirectory
 try {
+    if ($Target -in @('ladder','all')) {
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_sky_ladder.py
+        if ($LASTEXITCODE -ne 0) { throw '天梯模型生成失败。' }
+    }
     if ($Target -in @('ship','all')) {
         & $blenderPath --background --python-exit-code 1 --python art/blender/build_ship.py -- --out game/models/ship
         if ($LASTEXITCODE -ne 0) { throw '飞船模型生成失败。' }

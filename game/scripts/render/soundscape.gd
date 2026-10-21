@@ -54,6 +54,8 @@ func _ready() -> void:
 
 
 static func environment_at(planet: Planet, relative: Vector3) -> Dictionary:
+	if LandingPads.on_platform(planet, relative):
+		return {"wind": 0.0, "shore": 0.0, "space": 0.0, "rustle": 0.0, "surface": "rock"}
 	if planet.noise.features != null and planet.noise.features.caves != null and planet.noise.features.caves.cave_at(relative) >= 0:
 		return {"wind": 0.05, "shore": 0.0, "space": 0.0, "rustle": 0.0, "cave_drip": 0.2, "cave_wind": 0.12, "surface": "rock"}
 	var up: Vector3 = relative.normalized()

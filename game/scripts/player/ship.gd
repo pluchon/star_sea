@@ -24,6 +24,8 @@ var _dust: GPUParticles3D
 var _air_catch: bool = false
 var _air_start: Vector3
 var last_park: Transform3D
+var _pad_call: bool = false
+var _pad_start: Vector3
 
 
 func _ready() -> void:
@@ -117,6 +119,7 @@ func attach_to(player: StarSeaPlayer) -> void:
 
 
 func park(planet_value: Planet, local_transform: Transform3D) -> void:
+	_pad_call = false
 	_air_catch = false
 	last_park = local_transform
 	planet = planet_value
@@ -169,6 +172,7 @@ static func find_landing(planet_value: Planet, direction: Vector3, forward: Vect
 
 
 func call_to(planet_value: Planet, target_direction: Vector3) -> void:
+	_pad_call = false
 	planet = planet_value
 	target = landing_transform(planet, target_direction, -basis.z)
 	_call_start = position.normalized()
@@ -179,7 +183,31 @@ func call_to(planet_value: Planet, target_direction: Vector3) -> void:
 	_refresh()
 
 
+func call_to_pad(planet_value: Planet, destination: Transform3D) -> void:
+	planet = planet_value
+	if get_parent() != planet:
+		reparent(planet, true)
+	_pad_call = true
+	_pad_start = position
+	target = destination
+	_call_elapsed = 0
+	_call_duration = clampf(position.distance_to(target.origin) / 300, 3, 22)
+	state = State.CALLED
+	_refresh()
+
+
 func _process(delta: float) -> void:
+	if _pad_call:
+		_call_elapsed += delta
+		var weight: float = smoothstep(0, _call_duration, _call_elapsed)
+		var up: Vector3 = target.basis.y
+		# 先升至塔顶外侧再靠近停泊台，避免召回路线贯穿塔身。
+		var summit: Vector3 = up * maxf(_pad_start.length(), target.origin.length() + 120) - target.basis.z * 100
+		position = _pad_start.lerp(summit, smoothstep(0, 0.55, weight)) if weight < 0.55 else summit.lerp(target.origin, smoothstep(0.55, 1, weight))
+		basis = target.basis
+		if _call_elapsed >= _call_duration:
+			park(planet, target)
+		return
 	if _air_catch:
 		_advance_air_catch(delta)
 		return

@@ -52,10 +52,20 @@ const NAMES: Array[String] = [
 	"s36_beacon_chain_night",
 	"s37_temple_gate",
 	"s38_temple_hall",
+	"s41_ladder_from_spawn",
+	"s42_ladder_night",
+	"s43_ladder_base",
+	"s44_ladder_balcony",
+	"s45_ladder_from_orbit",
+	"s60_ladder_break",
+	"s60b_ladder_view",
 ]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
+	if name in ["s41_ladder_from_spawn", "s42_ladder_night", "s43_ladder_base", "s44_ladder_balcony", "s45_ladder_from_orbit", "s60_ladder_break", "s60b_ladder_view"]:
+		LadderShots.place(name, player, planet, director)
+		return
 	if name == "s7_ember" or name == "s8_frost":
 		planet = planet.get_parent().get_node("PlanetEmber" if name == "s7_ember" else "PlanetFrost") as Planet
 	var up: Vector3 = planet.site["direction"]

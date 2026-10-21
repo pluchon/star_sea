@@ -109,7 +109,7 @@ def footstep(surface: str, variant: int) -> dict:
 
 def machinery(kind: str) -> dict:
     """分开模拟旋转谐波、气流、阻尼共振与机械锁扣，避免同一噪声改名复用。"""
-    duration = {"engine": 12.0, "ship_land": 1.6, "ship_hatch": 1.25, "waterfall": 16.0}[kind]
+    duration = {"engine": 12.0, "ship_land": 1.6, "ship_hatch": 1.25, "waterfall": 16.0, "lift_start": 2.4, "lift_hum": 12.0}[kind]
     rng = random.Random(20261020 + sum(kind.encode()))
     count = round(duration * RATE)
     values = array("f")
@@ -121,7 +121,13 @@ def machinery(kind: str) -> dict:
             white = rng.uniform(-1, 1)
             low[channel] += (white - low[channel]) * 0.025
             air[channel] += (white - air[channel]) * 0.22
-            if kind == "engine":
+            if kind in ("lift_start", "lift_hum"):
+                phase = math.tau * (39 * time + (10 * (1-math.exp(-time*2)) if kind == "lift_start" else 0))
+                value = .27*math.sin(phase) + .07*math.sin(phase*2) + .035*math.sin(phase*5) + low[channel]*.3
+                if kind == "lift_start":
+                    value *= min(time/.6,1)*min((duration-time)/.7,1)
+                    value += air[channel]*.12*math.exp(-time*6)
+            elif kind == "engine":
                 # 整数周期的谐波与慢速调幅：循环时不发生相位跳变。
                 rotor = sum(math.sin(math.tau * frequency * time + channel * 0.06) * amplitude
                             for frequency, amplitude in [(48, .28), (96, .08), (144, .045), (288, .025)])
@@ -148,10 +154,10 @@ def machinery(kind: str) -> dict:
                 # 水幕的宽频冲击与低频水潭轰鸣，不使用显著音高。
                 value = low[channel] * 2.8 + air[channel] * .65 + (white - air[channel]) * .10
                 value *= .88 + .06 * math.sin(math.tau * time / 4 + channel * .3)
-            if kind not in ("engine", "waterfall"):
+            if kind not in ("engine", "waterfall", "lift_hum"):
                 value *= min(time / .004, 1) * min((duration - time) / .06, 1)
             values.append(value)
-    if kind in ("engine", "waterfall"):
+    if kind in ("engine", "waterfall", "lift_hum"):
         # 交叠循环保留接缝处的原始相邻样本，既不归零也不产生突跳。
         overlap = RATE
         for index in range(overlap):
@@ -160,7 +166,7 @@ def machinery(kind: str) -> dict:
                 tail_index = (count - overlap + index) * 2 + channel
                 values[tail_index] = values[tail_index] * (1 - weight) + values[index * 2 + channel] * weight
         values = values[overlap * 2:]
-    return write(kind, values, kind in ("engine", "waterfall"))
+    return write(kind, values, kind in ("engine", "waterfall", "lift_hum"))
 
 
 def traversal(kind: str) -> dict:
@@ -216,7 +222,7 @@ def beacon() -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon", "cave"])
+    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon", "cave", "lift"])
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records = []
@@ -225,7 +231,9 @@ if __name__ == "__main__":
                    [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
         records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
                        for variant in range(3))
-    new_names = [] if args.only in ("traversal", "beacon", "cave") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
+    new_names = [] if args.only in ("traversal", "beacon", "cave", "lift") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
+    if args.only in (None, "lift"):
+        new_names.extend(["lift_start", "lift_hum"])
     if args.only is None:
         new_names.append("waterfall")
     records.extend(machinery(name) for name in new_names)

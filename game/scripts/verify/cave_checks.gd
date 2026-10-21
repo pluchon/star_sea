@@ -75,11 +75,17 @@ func _begin() -> void:
 	if "--skip-walk" not in OS.get_cmdline_user_args():
 		Engine.time_scale = 6
 		var walk_network: Dictionary = network.duplicate(true)
-		var approach: Vector3 = frame * Vector3(0, 0, -7)
-		var approach_id: int = walk_network["nodes"].size()
-		walk_network["nodes"].append({"position": approach, "local": Vector3(0, 0, -7), "id": "approach", "kind": "bend"})
-		for route: Array in [[approach_id,0,1,2,3,4,5,6,7,6,8,9], [approach_id,0,1,10,11,8,9]]:
-			walks.append(await _walk(walk_network, route))
+		var approach_ids: Array[int] = []
+		for road: Dictionary in _planet.noise.features.civilization.data.roads:
+			if road["name"] != "temple":
+				continue
+			var points: PackedVector3Array = road["points"]
+			for index: int in range(maxi(0, points.size() - 8), points.size()):
+				var at: Vector3 = points[index] * _planet.surface_radius(points[index])
+				approach_ids.append(walk_network["nodes"].size())
+				walk_network["nodes"].append({"position": at, "local": frame.affine_inverse() * at, "id": "approach_%d" % index, "kind": "bend"})
+		for route: Array in [[0,1,2,3,4,5,6,7,6,8,9], [0,1,10,11,8,9]]:
+			walks.append(await _walk(walk_network, approach_ids + route))
 		Engine.time_scale = 1
 		for walk: Dictionary in walks:
 			_check(walk["passed"], "回声洞实际行走卡住或偏离路线。")
@@ -128,8 +134,19 @@ func _walk(network: Dictionary, route: Array) -> Dictionary:
 	_player.set_third_person(false)
 	_player.place_at(_planet.to_global(Vector3(nodes[route[0]]["position"]) + frame.basis.y * 0.15), frame.basis.z, frame.basis.y)
 	var deadline: int = Time.get_ticks_msec() + 20000
-	while not _caves.is_settled() and Time.get_ticks_msec() < deadline:
+	var stable_since: int = -1
+	while Time.get_ticks_msec() < deadline:
 		await process_frame
+		var up: Vector3 = _player.global_position.direction_to(_planet.global_position) * -1
+		var ray: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(_player.global_position + up * 3, _player.global_position - up * 5, _player.collision_mask, [_player.get_rid()])
+		var ground: Dictionary = _player.get_world_3d().direct_space_state.intersect_ray(ray)
+		if _caves.is_settled() and (_planet.get_node("Terrain") as PlanetTerrain).is_settled() and not ground.is_empty():
+			if stable_since < 0:
+				stable_since = Time.get_ticks_msec()
+			if Time.get_ticks_msec() - stable_since >= 400:
+				break
+		else:
+			stable_since = -1
 	_player.controls_enabled = true
 	Input.action_press("move_forward")
 	var target: int = 1

@@ -89,6 +89,12 @@ func _begin() -> void:
 		if not beacons["passed"]:
 			_failures.append_array(beacons["failures"])
 		report["passed"] = _failures.is_empty()
+	if "--skip-ladder" not in OS.get_cmdline_user_args():
+		var ladder: Dictionary = await LadderChecks.run(self)
+		report["ladder"] = ladder
+		if not ladder["passed"]:
+			_failures.append_array(ladder["failures"])
+	report["passed"] = _failures.is_empty()
 	VerificationMetrics.write_json("res://../test-output/wanderer/civilization_checks.json", report)
 	print(JSON.stringify(report))
 	quit(0 if _failures.is_empty() else 1)

@@ -110,13 +110,27 @@ func _bake() -> void:
 	_features.caves = caves
 	var gate: Transform3D = network["frame"]
 	var gate_approach: Vector3 = (gate * Vector3(0, 0, -8)).normalized()
-	var temple_path: PackedVector3Array = CivilizationPaths.find(_noise, _data.civilization.town["direction"], gate_approach)
-	if temple_path.is_empty():
+	# 沿已验收的出城道路离开台地，再分岔去神殿，避免新寻路横切古城挡墙。
+	var temple_path: PackedVector3Array = []
+	for point: Vector3 in beacon_path:
+		temple_path.append(point)
+		if point.distance_to(_data.civilization.town["direction"]) * _noise.radius >= 220:
+			break
+	var temple_branch: PackedVector3Array = CivilizationPaths.find(_noise, temple_path[-1], gate_approach)
+	if temple_branch.is_empty():
 		quit(1)
 		return
+	temple_path.append_array(temple_branch.slice(1))
 	_data.civilization.roads.append(CivilizationPaths.road(_noise, temple_path, 2.0, "temple"))
 	_data.civilization.town["cave_gate"] = gate.origin
 	_features.civilization = CivilizationTerrain.new(_data.civilization, _noise.radius)
+	# 地形塑造目标与最终路面高度分开保存；洞口随后叠加的平整仍以唯一高度函数为准。
+	for road: Dictionary in _data.civilization.roads:
+		road["terrain_levels"] = (road["levels"] as PackedFloat32Array).duplicate()
+		var final_levels: PackedFloat32Array = []
+		for point: Vector3 in road["points"]:
+			final_levels.append(_noise.height(point))
+		road["levels"] = final_levels
 	# 新道路和塔基也影响地面；构件在最终高度上重新摆放，避免旧基础悬空。
 	_data.civilization.placements.clear()
 	_data.civilization.climbs.clear()

@@ -9,11 +9,17 @@ static func run(tree: SceneTree) -> Dictionary:
 	for piece: String in ["explorer", "climb_rope", "climb_anchor", "climb_peg"]:
 		if not ResourceLoader.exists("res://models/explorer/" + piece + ".glb"):
 			failures.append("打包缺少探索者或攀爬模型：" + piece)
-	for sound: String in ["glide_open", "high_wind", "beacon_ignite"]:
+	for sound: String in ["glide_open", "high_wind", "beacon_ignite", "cave_drip", "cave_wind"]:
 		if not ResourceLoader.exists("res://audio/" + sound + ".wav"):
 			failures.append("打包缺少滑翔声音：" + sound)
 	if not ResourceLoader.exists("res://models/beacons/tower_far.glb"):
 		failures.append("打包缺少烽火塔远景模型。")
+	for path: String in [CaveData.PATH, "res://models/cave/lantern.glb"]:
+		if not ResourceLoader.exists(path):
+			failures.append("打包缺少洞穴数据或提灯：" + path)
+	for index: int in 6:
+		if not ResourceLoader.exists("res://models/cave/mural_%d.glb" % index):
+			failures.append("打包缺少洞穴壁画：%d" % index)
 	for path: String in ["res://models/ruins/geometry.json", "res://models/ship/ship_geometry.json", "res://models/landforms/geometry.json"]:
 		if not FileAccess.file_exists(path):
 			failures.append("打包缺少备用网格数据：" + path)

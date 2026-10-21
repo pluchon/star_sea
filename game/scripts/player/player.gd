@@ -73,6 +73,8 @@ func place_at(world_position: Vector3, forward: Vector3, up: Vector3) -> void:
 	up_direction = up
 	var offset: Vector3 = world_position - _planet.global_position
 	altitude = offset.length() - _planet.surface_radius(offset.normalized())
+	if PlayerTraversal.cave_at(self) >= 0:
+		altitude = 0.0
 	traversal.airborne_time = 0.0
 	reset_physics_interpolation()
 
@@ -131,7 +133,7 @@ func _process(delta: float) -> void:
 			_f_consumed = true
 			if not near_ship:
 				call_ship()
-	if third_person and _planet != null:
+	if third_person and _planet != null and PlayerTraversal.cave_at(self) == -1:
 		var offset: Vector3 = camera.global_position - _planet.global_position
 		if offset.length() < _planet.surface_radius(offset.normalized()) + 0.3:
 			# 快速降落时物理地形可能尚未就绪，仍按共享高度函数缩短相机距离。
@@ -162,6 +164,8 @@ func _physics_process(delta: float) -> void:
 	var distance: float = offset.length()
 	var up: Vector3 = offset / maxf(distance, 0.001)
 	altitude = distance - _planet.surface_radius(up)
+	if PlayerTraversal.cave_at(self) >= 0:
+		altitude = 0.0
 	# 近地缩短裁剪范围，使近物可见；太空保留足够的近裁剪距离，避免超大远近比使视锥退化。
 	camera.near = 0.15 if altitude < 5000.0 else 0.5
 	camera.far = 200000.0 if altitude < 5000.0 else 3000000.0
@@ -295,6 +299,9 @@ func park_ship_nearby() -> bool:
 
 
 func land() -> void:
+	if PlayerTraversal.cave_at(self) >= 0:
+		notify("洞穴内无法降落")
+		return
 	if transition_busy or mode != Mode.FLY or altitude > 40.0 or velocity.length() >= 30.0:
 		return
 	var landing_planet: Planet = current_planet()
@@ -357,6 +364,9 @@ func board() -> void:
 
 
 func call_ship() -> void:
+	if PlayerTraversal.cave_at(self) >= 0:
+		notify("洞穴内无法召唤飞船")
+		return
 	if transition_busy or mode == Mode.FLY or ship.state == StarSeaShip.State.CALLED:
 		return
 	if ship.planet != _planet:

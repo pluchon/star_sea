@@ -1,4 +1,4 @@
-param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'all')][string]$Target = 'all', [string]$Only = '')
+param([ValidateSet('ship', 'ruins', 'canyon', 'explorer', 'fields', 'town_bridge', 'beacon', 'cave', 'all')][string]$Target = 'all', [string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
@@ -38,6 +38,12 @@ try {
     if ($Target -in @('beacon','all')) {
         & $blenderPath --background --python-exit-code 1 --python art/blender/build_beacon.py
         if ($LASTEXITCODE -ne 0) { throw '烽火塔远景模型生成失败。' }
+    }
+    if ($Target -in @('cave','all')) {
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_cave_props.py
+        if ($LASTEXITCODE -ne 0) { throw '洞穴提灯模型生成失败。' }
+        & $blenderPath --background --python-exit-code 1 --python art/blender/build_murals.py
+        if ($LASTEXITCODE -ne 0) { throw '神殿壁画模型生成失败。' }
     }
 }
 finally { Pop-Location }

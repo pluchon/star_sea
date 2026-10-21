@@ -111,7 +111,9 @@ func _wait_for_terrain() -> bool:
 		var surface_ready: bool = altitude >= 2200.0 or details.is_settled()
 		var waters: InlandWaters = _planet.get_node_or_null("InlandWaters") as InlandWaters
 		var waters_ready: bool = waters == null or waters.is_settled()
-		if _terrain.is_settled() and surface_ready and waters_ready:
+		var caves: CaveSystem = _planet.get_node_or_null("CaveSystem") as CaveSystem
+		var caves_ready: bool = caves == null or caves.is_settled()
+		if _terrain.is_settled() and surface_ready and waters_ready and caves_ready:
 			if stable_since < 0:
 				stable_since = Time.get_ticks_msec()
 			if Time.get_ticks_msec() - stable_since >= 400:

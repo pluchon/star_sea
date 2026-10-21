@@ -40,6 +40,8 @@ static func save(scene: Node, path: String = PATH) -> Error:
 		config.set_value("journey", "flags", atlas.flags)
 	var beacons: BeaconTowers = scene.get_node_or_null("Universe/PlanetDawn/BeaconTowers") as BeaconTowers
 	config.set_value("journey", "beacons_lit", beacons.lit.duplicate() if beacons != null else [])
+	var caves: CaveSystem = scene.get_node_or_null("Universe/PlanetDawn/CaveSystem") as CaveSystem
+	config.set_value("journey", "caves_seen", caves.seen.duplicate() if caves != null else [])
 	var error: Error = config.save(path + ".tmp")
 	if error != OK:
 		return error
@@ -133,8 +135,16 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	var beacons_value: Variant = config.get_value("journey", "beacons_lit", [])
 	if not valid_beacons(beacons_value, beacons.towers.size() if beacons != null else 0):
 		return ERR_INVALID_DATA
+	var caves: CaveSystem = scene.get_node_or_null("Universe/PlanetDawn/CaveSystem") as CaveSystem
+	var caves_value: Variant = config.get_value("journey", "caves_seen", [])
+	if caves != null and not caves.data.valid_seen(caves_value):
+		return ERR_INVALID_DATA
+	if caves == null and (not caves_value is Array or not (caves_value as Array).is_empty()):
+		return ERR_INVALID_DATA
 	var surface: float = planet.surface_radius(location.normalized())
-	location = location.normalized() * maxf(location.length(), surface + (0.05 if mode == StarSeaPlayer.Mode.WALK else 1.2))
+	var in_cave: bool = planet.noise.features != null and planet.noise.features.caves != null and planet.noise.features.caves.cave_at(location) >= 0
+	if not in_cave:
+		location = location.normalized() * maxf(location.length(), surface + (0.05 if mode == StarSeaPlayer.Mode.WALK else 1.2))
 	player.place_at(planet.global_position + location, forward.normalized(), up.normalized())
 	player.mode = mode as StarSeaPlayer.Mode
 	if not boarded:
@@ -152,6 +162,8 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 		var values: Array[int] = []
 		values.assign(beacons_value)
 		beacons.set_lit(values)
+	if caves != null:
+		caves.seen.assign(caves_value)
 	return OK
 
 

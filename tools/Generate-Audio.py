@@ -46,7 +46,14 @@ def ambient(kind: str, duration: int) -> dict:
             low[channel] += (white - low[channel]) * 0.018
             body[channel] += (white - body[channel]) * 0.16
             gust = 0.65 + 0.18 * math.sin(time * 0.71) + 0.12 * math.sin(time * 0.23 + channel * 0.4)
-            if kind == "wind":
+            if kind == "cave_wind":
+                value = low[channel] * 3.2 * (0.6 + 0.25 * math.sin(time * .38)) + math.sin(math.tau * 83 * time + channel * .08) * .035
+            elif kind == "cave_drip":
+                phase = time % 1.73
+                drop = math.sin(math.tau * (970 - phase * 280) * phase) * math.exp(-phase * 25)
+                echo = math.sin(math.tau * 650 * max(phase - .23, 0)) * math.exp(-max(phase - .23, 0) * 18) * .25 if phase > .23 else 0
+                value = (drop + echo) * .1 + low[channel] * .11
+            elif kind == "wind":
                 value = (low[channel] * 2.8 + body[channel] * 0.18) * gust
             elif kind == "shore":
                 swell = (0.5 + 0.5 * math.sin(time * 0.83 + 0.45 * math.sin(time * 0.19))) ** 2
@@ -209,7 +216,7 @@ def beacon() -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon"])
+    parser.add_argument("--only", choices=["ship", "waterfall", "traversal", "beacon", "cave"])
     args = parser.parse_args()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records = []
@@ -218,7 +225,7 @@ if __name__ == "__main__":
                    [("wind", 24), ("shore", 28), ("rustle", 24), ("space", 32), ("rain", 26)]]
         records.extend(footstep(surface, variant) for surface in ["grass", "sand", "rock", "snow"]
                        for variant in range(3))
-    new_names = [] if args.only in ("traversal", "beacon") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
+    new_names = [] if args.only in ("traversal", "beacon", "cave") else (["waterfall"] if args.only == "waterfall" else ["engine", "ship_land", "ship_hatch"])
     if args.only is None:
         new_names.append("waterfall")
     records.extend(machinery(name) for name in new_names)
@@ -226,6 +233,8 @@ if __name__ == "__main__":
         records.extend(traversal(name) for name in ["glide_open", "high_wind"])
     if args.only in (None, "beacon"):
         records.append(beacon())
+    if args.only in (None, "cave"):
+        records.extend(ambient(name, 18) for name in ["cave_drip", "cave_wind"])
     report = OUTPUT.parents[1] / "test-output" / "audio" / "audio-generation.json"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -57,19 +57,28 @@ static func build(noise: TerrainNoise, normal: Vector3, axis_a: Vector3, axis_b:
 	var indices: PackedInt32Array = PackedInt32Array()
 	indices.resize(grid * grid * 6)
 	var cursor: int = 0
+	var holes: PackedByteArray = PackedByteArray()
+	holes.resize(vertex_count)
+	if noise.features != null and noise.features.caves != null and size * noise.radius / grid < 3:
+		for index: int in vertex_count:
+			holes[index] = int(noise.features.in_hole(vertices[index] + center))
 	for row: int in grid:
 		for column: int in grid:
 			var v00: int = row * (grid + 1) + column
 			var v10: int = v00 + 1
 			var v01: int = v00 + grid + 1
 			var v11: int = v01 + 1
-			indices[cursor] = v00
-			indices[cursor + 1] = v01
-			indices[cursor + 2] = v10
-			indices[cursor + 3] = v10
-			indices[cursor + 4] = v01
-			indices[cursor + 5] = v11
-			cursor += 6
+			if not (holes[v00] and holes[v01] and holes[v10]):
+				indices[cursor] = v00
+				indices[cursor + 1] = v01
+				indices[cursor + 2] = v10
+				cursor += 3
+			if not (holes[v10] and holes[v01] and holes[v11]):
+				indices[cursor] = v10
+				indices[cursor + 1] = v01
+				indices[cursor + 2] = v11
+				cursor += 3
+	indices.resize(cursor)
 	if with_faces:
 		var faces: PackedVector3Array = PackedVector3Array()
 		faces.resize(indices.size())

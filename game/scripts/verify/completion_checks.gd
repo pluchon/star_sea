@@ -20,6 +20,9 @@ func _begin() -> void:
 	director.time_paused = true
 	var path: String = "user://verify_journey.cfg"
 	var records: Array[Dictionary] = []
+	var cave_persistence: Dictionary = CavePersistenceChecks.run(scene)
+	if not cave_persistence["passed"]:
+		_failures.append("洞穴存档检查失败。")
 	for node: Node in VerificationMetrics.planets(self):
 		var planet: Planet = node as Planet
 		var up: Vector3 = planet.site["direction"]
@@ -131,7 +134,7 @@ func _begin() -> void:
 		var audio: AudioStreamPlayer = node as AudioStreamPlayer
 		if audio.playing and audio in sound._loops.values():
 			loop_count += 1
-	if DisplayServer.get_name() != "headless" and (audio_players.size() != 7 or loop_count != 5):
+	if DisplayServer.get_name() != "headless" and (audio_players.size() != 9 or loop_count != 7):
 		_failures.append("环境音未能正常开始循环。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "journey_roundtrips": records, "invalid_save_rejected": rejected, "settings_roundtrip": settings_roundtrip, "audio_players": audio_players.size(), "ambient_loops_playing": loop_count}
 	var beacons: Dictionary = BeaconChecks.persistence(scene)

@@ -12,6 +12,7 @@ $shots = @('s1_space', 's2_high', 's3_ground_day', 's4_ground_sunset', 's5_groun
 $shots += @('s49_range_from_spawn','s50_horn_peak','s51_canyon_rim','s52_canyon_floor','s53_mountain_pass','s54_glide_canyon','s55_glide_range','s56_climb_route')
 $shots += @('s30_town_plaza','s31_town_overview','s32_terraces','s33_cemetery','s34_old_road')
 $shots += @('s35_beacon_top','s36_beacon_chain_night')
+$shots += @('s37_temple_gate','s38_temple_hall')
 if ($ShotNames.Count -gt 0) { $shots = @($ShotNames) }
 if ($Scope -eq 'dawn') { $shots = @($shots | Where-Object { $_ -notin @('s7_ember','s8_frost') }) }
 $rows = [Collections.Generic.List[string]]::new()

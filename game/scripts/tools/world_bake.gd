@@ -97,12 +97,43 @@ func _bake() -> void:
 		return
 	_data.civilization.roads.append(CivilizationPaths.road(_noise, beacon_path, 2.0, "first_beacon"))
 	_features.civilization = CivilizationTerrain.new(_data.civilization, _noise.radius)
+	print("烘焙：回声洞选址与神殿道路")
+	var cave_started: int = Time.get_ticks_msec()
+	var network: Dictionary = CaveBake.fit(_noise, _data.civilization)
+	if network.is_empty():
+		quit(1)
+		return
+	CaveBake.complete(_noise, network)
+	var caves: CaveData = CaveData.new()
+	caves.networks.append(network)
+	caves.prepare()
+	_features.caves = caves
+	var gate: Transform3D = network["frame"]
+	var gate_approach: Vector3 = (gate * Vector3(0, 0, -8)).normalized()
+	var temple_path: PackedVector3Array = CivilizationPaths.find(_noise, _data.civilization.town["direction"], gate_approach)
+	if temple_path.is_empty():
+		quit(1)
+		return
+	_data.civilization.roads.append(CivilizationPaths.road(_noise, temple_path, 2.0, "temple"))
+	_data.civilization.town["cave_gate"] = gate.origin
+	_features.civilization = CivilizationTerrain.new(_data.civilization, _noise.radius)
 	# 新道路和塔基也影响地面；构件在最终高度上重新摆放，避免旧基础悬空。
 	_data.civilization.placements.clear()
 	_data.civilization.climbs.clear()
 	_data.civilization.trees.clear()
 	_data.civilization.town["paving_gaps"] = PackedVector3Array()
 	CivilizationBuildings.new(_noise, _data.civilization).build()
+	print("烘焙：洞穴距离场与分块网格")
+	CaveMesher.new().generate(caves, _noise)
+	caves.statistics["bake_seconds"] = float(Time.get_ticks_msec() - cave_started) / 1000.0
+	caves.signature = CaveData.source_signature()
+	var cave_error: Error = ResourceSaver.save(caves, CaveData.PATH, ResourceSaver.FLAG_COMPRESS)
+	if cave_error != OK:
+		push_error("洞穴资源保存失败。")
+		quit(1)
+		return
+	caves.statistics["bytes"] = FileAccess.get_file_as_bytes(CaveData.PATH).size()
+	VerificationMetrics.write_json("res://../test-output/wanderer/cave_bake.json", caves.statistics)
 	_data.signature = HydrologyData.source_signature()
 	var bake_seconds: float = float(Time.get_ticks_msec() - started) / 1000.0
 	_data.statistics["grid_cells"] = COUNT

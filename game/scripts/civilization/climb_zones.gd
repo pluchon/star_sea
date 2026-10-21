@@ -2,6 +2,7 @@ class_name ClimbZones
 extends Node3D
 
 const BUILD_DISTANCE: float = 300.0 # 仅在玩家三百米内生成攀爬外形。
+const CAVE_MANTLE_HEIGHT: float = 1.5 # 天井出口越过岩石边缘时，脚底弧线的额外净空，米。
 var zones: Array[Dictionary] = []
 var _placements: Array[Dictionary] = []
 var _visuals: Dictionary[String, Node3D] = {}
@@ -17,6 +18,12 @@ func _ready() -> void:
 	var planet: Planet = get_parent() as Planet
 	if planet.noise.features.civilization != null:
 		zones.append_array(planet.noise.features.civilization.data.climbs.duplicate(true))
+	if planet.noise.features.caves != null:
+		for network: Dictionary in planet.noise.features.caves.networks:
+			for source: Dictionary in network["climbs"]:
+				var zone: Dictionary = source.duplicate(true)
+				zone["mantle_height"] = CAVE_MANTLE_HEIGHT
+				zones.append(zone)
 	_placements.assign(data.get("placements", []))
 	var builder: RuinBuilder = RuinBuilder.new()
 	add_child(builder)

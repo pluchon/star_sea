@@ -22,7 +22,7 @@ func _ready() -> void:
 		set_process(false)
 		return
 	_player = get_parent().get_node("Player") as StarSeaPlayer
-	for filename: String in ["wind", "shore", "space", "rustle", "rain"]:
+	for filename: String in ["wind", "shore", "space", "rustle", "rain", "cave_drip", "cave_wind"]:
 		var stream: AudioStreamWAV = (load("res://audio/" + filename + ".wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		stream.loop_end = roundi(stream.get_length() * stream.mix_rate)
@@ -54,6 +54,8 @@ func _ready() -> void:
 
 
 static func environment_at(planet: Planet, relative: Vector3) -> Dictionary:
+	if planet.noise.features != null and planet.noise.features.caves != null and planet.noise.features.caves.cave_at(relative) >= 0:
+		return {"wind": 0.05, "shore": 0.0, "space": 0.0, "rustle": 0.0, "cave_drip": 0.2, "cave_wind": 0.12, "surface": "rock"}
 	var up: Vector3 = relative.normalized()
 	var height: float = planet.noise.height(up)
 	var altitude: float = maxf(relative.length() - planet.surface_radius(up), 0.0)
@@ -96,7 +98,7 @@ func _process(delta: float) -> void:
 			_director = get_tree().get_first_node_in_group("sky_director") as SkyDirector
 		# 雨声只在晨的地面附近，越往高处越轻。
 		var altitude: float = relative.length() - planet.surface_radius(relative.normalized())
-		_environment["rain"] = _director.rain * (1.0 - smoothstep(150.0, 1500.0, altitude)) * 0.42 if _director != null and planet.profile == 0 else 0.0
+		_environment["rain"] = _director.rain * (1.0 - smoothstep(150.0, 1500.0, altitude)) * 0.42 if _director != null and planet.profile == 0 and PlayerTraversal.cave_at(_player) == -1 else 0.0
 	for kind: String in _loops:
 		var audio: AudioStreamPlayer = _loops[kind]
 		audio.volume_linear = lerpf(audio.volume_linear, _environment.get(kind, 0.0), 1.0 - exp(-delta * 1.6))

@@ -224,6 +224,8 @@ static func generate(noise: TerrainNoise, key: Vector4i, planet_seed: int, spawn
 			continue
 		if noise.features != null and noise.features.in_clearing(direction):
 			continue
+		if noise.features != null and noise.features.in_hole(direction * (noise.radius + elevation)):
+			continue
 		var river_gap: float = noise.river_distance(direction)
 		var waterside: bool = river_gap < 9.0 or elevation < water_level + 1.5
 		var moisture: float = noise.moisture(direction)

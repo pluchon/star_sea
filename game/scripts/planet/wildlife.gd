@@ -54,6 +54,7 @@ func _process(delta: float) -> void:
 	var up: Vector3 = eye.normalized()
 	var altitude: float = eye.length() - _planet.surface_radius(up)
 	var near_ground: bool = Planet.nearest(get_tree(), camera.global_position) == _planet and altitude < 1500.0
+	near_ground = near_ground and (_noise.features.caves == null or _noise.features.caves.cave_at(eye) == -1)
 	var sun_height: float = up.dot(_director.sun_direction)
 	_update_birds(delta, eye, up, near_ground and sun_height > 0.02)
 	_update_deer(delta, eye, up, near_ground and altitude < 400.0 and sun_height > -0.05)

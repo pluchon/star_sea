@@ -7,6 +7,7 @@ const GLIDE_FALL: float = 2.5 # 稳定下落速度，米每秒。
 const GLIDE_BLEND: float = 0.6 # 下落速度过渡时间，秒。
 const TURN_RATE: float = PI * 0.5 # 水平转向上限，弧度每秒。
 const MANTLE_TIME: float = 0.6 # 翻越顶端的时间，秒。
+const MANTLE_ARC_HEIGHT: float = 0.65 # 普通翻越的脚底抬升，米；洞穴岩缘可由攀爬区增加净空。
 var airborne_time: float = 0.0
 var glide_time: float = 0.0
 var stumble_left: float = 0.0
@@ -137,7 +138,7 @@ func step_climb(player: StarSeaPlayer, delta: float, input: Vector2, jump: bool)
 	if mantle_time >= 0.0:
 		mantle_time += delta
 		var weight: float = clampf(mantle_time / MANTLE_TIME, 0, 1)
-		var target: Vector3 = _mantle_start.lerp(zone["exit_top"], smoothstep(0, 1, weight)) + up * sin(weight * PI) * 0.65
+		var target: Vector3 = _mantle_start.lerp(zone["exit_top"], smoothstep(0, 1, weight)) + up * sin(weight * PI) * float(zone.get("mantle_height", MANTLE_ARC_HEIGHT))
 		player.move_and_collide(planet.to_global(target) - player.global_position)
 		if weight >= 1.0:
 			leave_climb(player)
@@ -195,6 +196,7 @@ func leave_climb(player: StarSeaPlayer) -> void:
 	player.mode = StarSeaPlayer.Mode.WALK
 
 
-static func cave_at(_player: StarSeaPlayer) -> int:
-	# 第 9a 步接入 CaveSystem，当前没有洞穴网络。
-	return -1
+static func cave_at(player: StarSeaPlayer) -> int:
+	var planet: Planet = player.current_planet()
+	var features: TerrainFeatures = planet.noise.features
+	return features.caves.cave_at(planet.to_local(player.global_position)) if features != null and features.caves != null else -1

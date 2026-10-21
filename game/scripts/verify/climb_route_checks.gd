@@ -20,6 +20,8 @@ func _begin() -> void:
 	Engine.time_scale = 6.0
 	var reports: Array[Dictionary] = []
 	for zone: Dictionary in zones.zones:
+		if "--only=cave" in OS.get_cmdline_user_args() and not String(zone["id"]).begins_with("cave_"):
+			continue
 		if "--only=town" in OS.get_cmdline_user_args() and not String(zone["id"]).begins_with("town"):
 			continue
 		if "--only=canyon" in OS.get_cmdline_user_args() and zone["kind"] != "climb_route":

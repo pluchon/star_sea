@@ -14,6 +14,7 @@ var wind_strength: float = 0.0
 var weather: float = 0.0
 var rain: float = 0.0
 var moon_direction: Vector3 = Vector3.DOWN
+var cave_blend: float = 0.0
 var _weather_target: float = 0.0
 var _weather_hold: float = 300.0
 var _weather_rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -24,6 +25,8 @@ var _rain_curtain: MeshInstance3D
 var _weather_time: float = 0.0
 var _cloud_offset: Vector3 = Vector3.ZERO
 var _grade_gradient: Gradient
+var _surface_correction: GradientTexture1D
+var _surface_saturation: float = 1.0
 var _grade_key: Vector4 = Vector4(-1.0, -1.0, -1.0, -1.0)
 var _planet: Planet
 var _sun: DirectionalLight3D
@@ -45,6 +48,7 @@ func _ready() -> void:
 	var lut: GradientTexture1D = GradientTexture1D.new()
 	lut.gradient = _grade_gradient
 	lut.width = 64
+	_surface_correction = lut
 	_environment.adjustment_enabled = true
 	_environment.adjustment_color_correction = lut
 	_weather_rng.seed = 20261020
@@ -149,6 +153,18 @@ func _update_environment() -> void:
 	RenderingServer.global_shader_parameter_set("aurora", aurora_value)
 	_update_weather(up, altitude, day)
 	_update_grade(sun_height, space)
+	var caves: CaveSystem = _planet.get_node_or_null("CaveSystem") as CaveSystem
+	cave_blend = caves.cave_blend if caves != null else 0.0
+	_sun.light_energy *= 1 - cave_blend
+	_environment.ambient_light_energy *= lerpf(1.0, 0.08, cave_blend)
+	if cave_blend > 0:
+		_environment.adjustment_color_correction = null
+	else:
+		_environment.adjustment_color_correction = _surface_correction
+	_environment.adjustment_saturation = lerpf(_surface_saturation, 0.9, cave_blend)
+	_rain_curtain.visible = _rain_curtain.visible and cave_blend < 0.01
+	RenderingServer.global_shader_parameter_set("mist", _mist * (1.0 - space) * (1 - cave_blend))
+	RenderingServer.global_shader_parameter_set("rain", rain * (1.0 - space) * (1 - cave_blend))
 	for node: Node in get_tree().get_nodes_in_group("planets"):
 		var planet: Planet = node as Planet
 		if planet.atmosphere_material != null:
@@ -195,7 +211,7 @@ func _update_grade(sun_height: float, space: float) -> void:
 		colors.append(Color(channel.x, channel.y, channel.z))
 	_grade_gradient.offsets = points
 	_grade_gradient.colors = colors
-	_environment.adjustment_saturation = lerpf(1.0, 1.05 * noon + 1.14 * golden + 0.86 * night, surface)
+	_surface_saturation = lerpf(1.0, 1.05 * noon + 1.14 * golden + 0.86 * night, surface)
 
 
 func _build_rain_curtain() -> MeshInstance3D:

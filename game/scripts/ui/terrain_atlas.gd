@@ -19,6 +19,7 @@ var _panel: PanelContainer
 var _mini: PanelContainer
 var _information: Label
 var _mini_title: Label
+var _map_title: Label
 var _local_information: Label
 var _global_task: int = -1
 var _local_task: int = -1
@@ -27,6 +28,9 @@ var _local_result: Dictionary = {}
 var _last_local_center: Vector3 = Vector3.ZERO
 var _old_mouse_mode: Input.MouseMode
 var _elapsed: float = 0.0
+var _cave_views: Array[CaveMapView] = []
+var _surface_local_information: String = "正在绘制附近地形…"
+var _surface_global_information: String = "正在绘制全球地形…"
 
 
 func _ready() -> void:
@@ -37,6 +41,15 @@ func _ready() -> void:
 	_player = scene.get_node("Player") as StarSeaPlayer
 	_planet = scene.get_node("Universe/PlanetDawn") as Planet
 	_build()
+	var caves: CaveSystem = _planet.get_node_or_null("CaveSystem") as CaveSystem
+	if caves != null:
+		for view: TerrainMapView in [local_view, global_view]:
+			var layer: CaveMapView = CaveMapView.new()
+			layer.system = caves
+			layer.player = _player
+			layer.large = view.global_map
+			view.add_child(layer)
+			_cave_views.append(layer)
 	var noise: TerrainNoise = TerrainNoise.new(_planet.planet_seed, _planet.radius, 0)
 	_global_task = WorkerThreadPool.add_task(func() -> void:
 		_global_result = TerrainMapData.generate(noise, Vector2i(1024, 512)))
@@ -97,6 +110,7 @@ func _build() -> void:
 	header.add_theme_constant_override("separation", 12)
 	column.add_child(header)
 	var title: Label = Label.new()
+	_map_title = title
 	title.text = "晨 / 全球地形图"
 	title.add_theme_font_size_override("font_size", 24)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -316,10 +330,31 @@ func _process(delta: float) -> void:
 	var relative: Vector3 = _player.global_position - _planet.global_position
 	var up: Vector3 = relative.normalized()
 	var on_dawn: bool = _player.current_planet() == _planet
+	var cave: int = PlayerTraversal.cave_at(_player)
+	_map_title.text = "回声洞 / 洞穴地图" if cave >= 0 else "晨 / 全球地形图"
+	for view: CaveMapView in _cave_views:
+		view.visible = cave >= 0
+	_globe_button.disabled = cave >= 0
+	if cave >= 0 and globe_view.visible:
+		_toggle_globe()
+	_information.text = "回声洞　已探索的通道与厅室" if cave >= 0 else _surface_global_information
+	_local_information.text = "已到达的通道与厅室" if cave >= 0 else _surface_local_information
 	if on_dawn:
 		var water: String = _planet.noise.water_body(up)
 		_mini_title.text = "晨 · %s　 N ↑　 M" % (water if not water.is_empty() else _planet.noise.biome(up))
+		if cave >= 0:
+			_mini_title.text = "回声洞　洞穴地图　 M"
 	for view: TerrainMapView in [global_view, local_view]:
+		view._symbols.visible = cave < 0
+		view.cave_entrances.clear()
+		if not _cave_views.is_empty():
+			var caves: CaveSystem = _cave_views[0].system
+			for id: int in caves.data.networks.size():
+				var network: Dictionary = caves.data.networks[id]
+				for entrance: Dictionary in network["entrances"]:
+					var node: Dictionary = network["nodes"][entrance["node"]]
+					if caves.seen.has("%d:%s" % [id, node["id"]]):
+						view.cave_entrances.append(Vector3(entrance["position"]).normalized())
 		view.player_direction = up if on_dawn else Vector3.ZERO
 		view.player_forward = -_player.camera.global_basis.z
 		view.queue_redraw()
@@ -339,19 +374,19 @@ func _collect() -> void:
 		_global_task = -1
 		global_view.set_map(_global_result)
 		globe_view.set_map(_global_result)
-		_information.text = "全球海拔 %.0f～%.0f m　　金色圆点：出发地　浅色圆点：遗迹" % [_global_result["minimum"], _global_result["maximum"]]
+		_surface_global_information = "全球海拔 %.0f～%.0f m　　金色圆点：出发地　浅色圆点：遗迹" % [_global_result["minimum"], _global_result["maximum"]]
 		_global_result = {}
 	if _local_task != -1 and WorkerThreadPool.is_task_completed(_local_task):
 		WorkerThreadPool.wait_for_task_completion(_local_task)
 		_local_task = -1
 		local_view.set_map(_local_result)
-		_local_information.text = "范围 1.6 km　等高距 20 m　%.0f～%.0f m" % [_local_result["minimum"], _local_result["maximum"]]
+		_surface_local_information = "范围 1.6 km　等高距 20 m　%.0f～%.0f m" % [_local_result["minimum"], _local_result["maximum"]]
 		_local_result = {}
 
 
 func _select(direction: Vector3) -> void:
 	var uv: Vector2 = TerrainMapData.coordinates(direction)
-	_information.text = "海拔 %.0f m　　纬度 %.1f°　经度 %.1f°　　%s · %s" % [_planet.noise.height(direction), (0.5 - uv.y) * 180.0, (uv.x - 0.5) * 360.0, _planet.noise.landform(direction), _planet.noise.biome(direction)]
+	_surface_global_information = "海拔 %.0f m　　纬度 %.1f°　经度 %.1f°　　%s · %s" % [_planet.noise.height(direction), (0.5 - uv.y) * 180.0, (uv.x - 0.5) * 360.0, _planet.noise.landform(direction), _planet.noise.biome(direction)]
 
 
 func _exit_tree() -> void:

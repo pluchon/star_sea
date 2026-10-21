@@ -78,6 +78,10 @@ func _ready() -> void:
 			var beacons: BeaconTowers = BeaconTowers.new()
 			beacons.name = "BeaconTowers"
 			add_child(beacons)
+		if noise.features.caves != null:
+			var caves: CaveSystem = CaveSystem.new()
+			caves.name = "CaveSystem"
+			add_child(caves)
 		var climbs: ClimbZones = ClimbZones.new()
 		climbs.name = "ClimbZones"
 		add_child(climbs)

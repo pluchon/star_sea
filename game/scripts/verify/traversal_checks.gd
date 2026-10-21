@@ -70,6 +70,16 @@ func _begin() -> void:
 	current_scene = _scene
 	_player = _scene.get_node("Player") as StarSeaPlayer
 	_planet = _player.current_planet()
+	if "--only=cave" in OS.get_cmdline_user_args():
+		var cave: Dictionary = await CaveTraversalChecks.run(_scene)
+		var result: Dictionary = {"passed": cave["passed"], "checks": {"cave": cave}}
+		VerificationMetrics.write_json(REPORT, result)
+		print(JSON.stringify(result))
+		_scene.queue_free()
+		for i: int in 6:
+			await process_frame
+		quit(0 if result["passed"] else 1)
+		return
 	_player.controls_enabled = true
 	(_scene.get_node("SkyDirector") as SkyDirector).time_paused = true
 	# 物理检查使用真实碰撞和 CharacterBody3D；大平面只隔离随机地形对滑翔比的影响。
@@ -222,7 +232,8 @@ func _begin() -> void:
 	_check(int(model["triangles"]) <= 8000 and _player.explorer.skeleton.get_bone_count() >= 27, "探索者骨架或三角面预算不符合约定。")
 	for name: String in model["animations"]:
 		_check(_player.explorer.animation_player.has_animation(name), "探索者缺少动画：" + name)
-	_records["cave"] = {"status": "未运行，依赖第 9a 步"}
+	_records["cave"] = await CaveTraversalChecks.run(_scene)
+	_check(_records["cave"]["passed"], "洞内实际展开限制、相机、海拔或召唤飞船检查失败。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "checks": _records}
 	VerificationMetrics.write_json(REPORT, report)
 	print(JSON.stringify(report))

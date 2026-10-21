@@ -21,6 +21,7 @@ var hydrology: GlobalHydrology
 var landforms: DawnLandforms
 var protected_spawn: Vector3
 var civilization: CivilizationTerrain
+var caves: CaveData
 
 
 static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
@@ -48,6 +49,9 @@ static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
 		features.hydrology = GlobalHydrology.new(data, noise.radius)
 		if data.civilization != null:
 			features.civilization = CivilizationTerrain.new(data.civilization, noise.radius)
+		if ResourceLoader.exists(CaveData.PATH):
+			features.caves = load(CaveData.PATH) as CaveData
+			features.caves.prepare()
 		_cache[key] = features
 	_cache_mutex.unlock()
 	return features
@@ -80,7 +84,13 @@ func apply(direction: Vector3, base: float) -> float:
 		if absf(point.x) <= HALF_SIZE and absf(point.y) <= HALF_SIZE:
 			height = with_volcano(point, height)
 	height = hydrology.carve(direction, height)
-	return civilization.apply(direction, height, hydrology) if civilization != null else height
+	if civilization != null:
+		height = civilization.apply(direction, height, hydrology)
+	return caves.apply(direction, radius, height) if caves != null else height
+
+
+func in_hole(position: Vector3) -> bool:
+	return caves != null and caves.in_hole(position)
 
 
 func ground_height(direction: Vector3, base: float) -> float:

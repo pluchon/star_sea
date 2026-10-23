@@ -13,7 +13,7 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 		id = "dawn_departure"
 	elif name == "s46c_echo_watcher":
 		id = "dawn_watcher"
-	if name == "s61_light_path":
+	if name in ["s61_light_path", "s61b_echo_ending"]:
 		id = "dawn_ending"
 	var frame: Transform3D = echoes.anchors[id]
 	var eye: Vector3 = frame * Vector3(7, 1.9, 9)
@@ -27,8 +27,11 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 		var towers: BeaconTowers = planet.get_node("BeaconTowers") as BeaconTowers
 		towers.set_lit([towers.towers.size() - 1])
 	if name == "s47_echo_temple":
-		eye = frame * Vector3(-7, 2.2, -5)
-		target = frame * Vector3(3, 2, 10)
+		eye = frame * Vector3(-10, 2.2, 5)
+		target = frame * Vector3(0, 2, 8)
+	if name == "s61b_echo_ending":
+		eye = frame * Vector3(3.4, 1.7, 5)
+		target = frame * Vector3(0, 0.8, 1)
 	elif name == "s61_light_path":
 		eye = frame * Vector3(8, 3, 12)
 		target = frame * Vector3(0, 20, -30)
@@ -43,7 +46,11 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	if name == "s47_echo_temple":
 		echoes.frozen = true
 		echoes.begin(id)
-		echoes.show_time(13)
+		echoes.show_time(10)
+	if name == "s61b_echo_ending":
+		echoes.frozen = true
+		echoes.begin(id)
+		echoes.show_time(22.5)
 	player.place_at(planet.to_global(eye - frame.basis.y * 1.62), -frame.basis.z, frame.basis.y)
 	player.camera.global_basis = Basis.looking_at(player.camera.global_position.direction_to(planet.to_global(target)), frame.basis.y)
 	director.set_sun_altitude(frame.basis.y, -frame.basis.z, -18 if name == "s61_light_path" else (75 if name == "s47_echo_temple" else 6))

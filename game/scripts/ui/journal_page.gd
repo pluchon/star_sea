@@ -5,9 +5,12 @@ signal closed
 var journal: TravelJournal
 var scene: Node
 var _column: VBoxContainer
+var _world_render_disabled: bool = false
 
 
 func _ready() -> void:
+	_world_render_disabled = get_viewport().disable_3d
+	get_viewport().disable_3d = true
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	offset_left = 120
 	offset_right = -120
@@ -21,6 +24,10 @@ func _ready() -> void:
 	_column.add_theme_constant_override("separation", 18)
 	add_child(_column)
 	show_cards()
+
+
+func _exit_tree() -> void:
+	get_viewport().disable_3d = _world_render_disabled
 
 
 func clear() -> void:

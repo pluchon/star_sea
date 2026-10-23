@@ -62,6 +62,9 @@ static func catalog(planet: Planet) -> Dictionary:
 
 
 static func anchors(planet: Planet, sites: Dictionary) -> Dictionary:
+	var baked: Dictionary = planet.noise.features.civilization.data.echo_anchors
+	if baked.size() == 5:
+		return baked.duplicate()
 	var result: Dictionary = {}
 	for id: String in sites:
 		var site: Dictionary = sites[id]
@@ -73,6 +76,9 @@ static func anchors(planet: Planet, sites: Dictionary) -> Dictionary:
 		if site["echo"] == "dawn_departure":
 			frame = LandingPads.frame(planet).translated_local(Vector3(0, 0.05, -35))
 			frame.basis *= Basis(Vector3.UP, PI)
+		if site["echo"] == "dawn_faith":
+			# 第二幅壁画才是环与径；朝向与离线壁画的顺时针角度一致。
+			frame.basis *= Basis(Vector3.UP, TAU / 6 + 0.2)
 		result[site["echo"]] = frame
 	var ladder: SkyLadder = planet.get_node("SkyLadder") as SkyLadder
 	var end: Vector3 = ladder.bridge_direction * 74 + Vector3.UP * LandingPads.HEIGHT

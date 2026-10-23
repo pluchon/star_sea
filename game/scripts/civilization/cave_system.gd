@@ -59,6 +59,10 @@ func _ready() -> void:
 			var record: Dictionary = original.duplicate()
 			if record["piece"] == "mural_panel":
 				record["mural"] = mural
+				# 刻纹降到站立人影能够伸手触及的位置，保留墙上的嵌板。
+				var panel_frame: Transform3D = record["transform"]
+				panel_frame.origin -= frame.basis.y * 1.7
+				record["transform"] = panel_frame
 				mural += 1
 			var at: Vector3 = frame.affine_inverse() * Transform3D(record["transform"]).origin
 			var key: Vector3i = Vector3i((at / CaveData.BLOCK).floor())
@@ -312,8 +316,14 @@ func _update_chunks(eye: Vector3) -> void:
 					for surface: int in mesh.mesh.get_surface_count():
 						var source: Material = mesh.mesh.surface_get_material(surface)
 						mesh.set_surface_override_material(surface, RuinKit.material(2 if source.resource_name.to_lower().begins_with("glyph") else 0))
+						if int(record["mural"]) == 1 and source.resource_name.to_lower().begins_with("glyph"):
+							var stroke: ShaderMaterial = ShaderMaterial.new()
+							stroke.shader = load("res://shaders/mural_stroke.gdshader") as Shader
+							mesh.set_surface_override_material(surface, stroke)
 					var mural: int = record["mural"]
 					mesh.set_instance_shader_parameter("awake", lerpf(0.15, 1.0, smoothstep(mural / 6.0, (mural + 1) / 6.0, _mural_progress)))
+					if mural == 1:
+						mesh.set_instance_shader_parameter("stroke_progress", _mural_progress)
 				builder.add_child(model)
 			builder.build(placements)
 			_props[id] = builder
@@ -392,3 +402,5 @@ func set_mural_progress(progress: float) -> void:
 			var awake: float = lerpf(0.15, 1.0, smoothstep(index / 6.0, (index + 1) / 6.0, progress))
 			for node: Node in model.find_children("*", "MeshInstance3D", true, false):
 				(node as MeshInstance3D).set_instance_shader_parameter("awake", awake)
+				if index == 1:
+					(node as MeshInstance3D).set_instance_shader_parameter("stroke_progress", progress)

@@ -151,8 +151,8 @@ func illuminate(amount: float) -> void:
 		(_flares[i].material_override as ShaderMaterial).set_shader_parameter("strength", smoothstep(float(i) / PATH_COUNT, float(i + 1) / PATH_COUNT, amount) * 0.6)
 	if _lamp == null:
 		var ladder: SkyLadder = _planet.get_node("SkyLadder") as SkyLadder
-		_lamp = ladder.model("watcher_lamp", _path_root, frame.origin + frame.basis.z * -2, false)
-		_lamp.basis = frame.basis
+		_lamp = ladder.model("watcher_lamp", _path_root, frame.origin + frame.basis.z * 0.3, false)
+		_lamp.basis = frame.basis.scaled(Vector3.ONE * 0.6)
 		var light: OmniLight3D = OmniLight3D.new()
 		light.omni_range = 4
 		light.light_color = Color("f2b45a")

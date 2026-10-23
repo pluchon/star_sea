@@ -133,6 +133,8 @@ func begin(id: String) -> void:
 		figure.build(record["child"])
 		if record["pose"] == "carry":
 			figure.add_bundle()
+		if id == "dawn_ending":
+			figure.add_lamp()
 		_actors.append(figure)
 	var music: Node = _planet.get_parent().get_parent().get_node_or_null("MusicDirector")
 	if music != null:
@@ -150,30 +152,40 @@ func show_time(time: float) -> void:
 		var record: Dictionary = script["actors"][i]
 		var sample: Dictionary = EchoScripts.sample(record, story_time)
 		var figure: EchoFigure = _actors[i]
-		var at: Vector3 = sample["position"]
-		# 地表站位逐点投影；洞底、塔冠和断口使用各自真实建筑面。
-		if active in ["dawn_daily", "dawn_departure"]:
-			var frame: Transform3D = anchors[active]
-			var ground: Vector3 = frame * at
-			ground = ground.normalized() * (_planet.surface_radius(ground.normalized()) + 0.04)
-			at = frame.affine_inverse() * ground
+		var at: Vector3 = actor_position(active, sample["position"])
 		figure.position = at
 		figure.basis = Basis.looking_at(sample["forward"], Vector3.UP)
 		figure.set_pose(sample["pose"], sample["pose_time"] if frozen else -1)
+		figure.update_lamp(_stage.global_basis)
 		if figure.bundle != null:
-			figure.bundle.visible = sample["pose"] == "carry"
+			if active == "dawn_daily" and story_time >= 10 and figure.bundle.get_parent() == figure:
+				figure.bundle.reparent(_stage)
+				figure.bundle.transform = Transform3D(figure.basis, at + Vector3(0.65, 0.03, 0.45))
+			figure.bundle.visible = active == "dawn_daily" or sample["pose"] == "carry"
 		if frozen and figure.animation != null:
 			figure.animation.pause()
 		figure.particles.speed_scale = 0 if frozen else 1
 		var visible_amount: float = smoothstep(float(record["start"]), float(record["start"]) + 1.5, story_time) * (1 - smoothstep(float(record["end"]), float(record["end"]) + 2, story_time))
+		if figure.lamp != null:
+			figure.lamp.visible = story_time < 21 and visible_amount > 0.05
 		figure.presence(visible_amount * (1 - clampf(_abort_elapsed / 2, 0, 1)), time)
 	if active == "dawn_faith":
-		(_planet.get_node("CaveSystem") as CaveSystem).set_mural_progress(clampf(story_time / 18, 0, 1))
+		(_planet.get_node("CaveSystem") as CaveSystem).set_mural_progress(clampf(story_time / 12, 0, 1))
 	if active == "dawn_watcher":
 		(_planet.get_node("SkyLadder") as SkyLadder).echo_rise = clampf(story_time / 15, 0, 1)
 		(_planet.get_node("BeaconTowers") as BeaconTowers).echo_fire = sin(clampf((story_time - 11) / 3, 0, 1) * PI)
-	if active == "dawn_ending" and story_time >= 19:
-		(_planet.get_node("EndingDirector") as EndingDirector).illuminate(clampf((story_time - 19) / 6, 0, 1))
+	if active == "dawn_ending" and story_time >= 21:
+		(_planet.get_node("EndingDirector") as EndingDirector).illuminate(clampf((story_time - 21) / 4, 0, 1))
+
+
+func actor_position(id: String, at: Vector3) -> Vector3:
+	# 地表站位逐点投影；洞底、塔冠和断口使用各自真实建筑面。
+	if id in ["dawn_daily", "dawn_departure"]:
+		var frame: Transform3D = anchors[id]
+		var ground: Vector3 = frame * at
+		ground = ground.normalized() * (_planet.surface_radius(ground.normalized()) + 0.04)
+		return frame.affine_inverse() * ground
+	return at
 
 
 func finish() -> void:

@@ -66,7 +66,7 @@ for index in range(6):
             parts.append(line([(x-.3,1),(x-.3,1.35),(x,1.6),(x+.3,1.35),(x+.3,1)]))
         parts+=person(-.6,1.8,.8)+person(.65,1.8,.8)
     elif index==1:
-        parts += [ring(0,2.2,.42),line([(0,.5),(0,1.8)])]
+        parts += [ring(0,1.65,.42),line([(0,.45),(0,1.23)])]
         for x in [-1.2,-.65,.65,1.2]:parts+=person(x,.65)
     elif index==2:
         parts.append(line([(-.5,.5),(-.35,2.5),(.35,2.5),(.5,.5)]))

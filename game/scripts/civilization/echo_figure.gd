@@ -8,11 +8,16 @@ var material_value: ShaderMaterial
 var particles: GPUParticles3D
 var pose: String = ""
 var bundle: Node3D
+var lamp: Node3D
+var _skeleton: Skeleton3D
 
 
 func build(child: bool = false) -> void:
 	var model: Node3D = (load("res://models/ruins/echo_child.glb" if child else "res://models/ruins/echo_figure.glb") as PackedScene).instantiate() as Node3D
 	add_child(model)
+	var skeletons: Array[Node] = model.find_children("*", "Skeleton3D", true, false)
+	if not skeletons.is_empty():
+		_skeleton = skeletons[0] as Skeleton3D
 	var players: Array[Node] = model.find_children("*", "AnimationPlayer", true, false)
 	if not players.is_empty():
 		animation = players[0] as AnimationPlayer
@@ -66,11 +71,14 @@ func set_pose(value: String, seek: float = -1) -> void:
 	if key.is_empty():
 		return
 	if pose != value:
-		animation.play(key, BLEND)
+		animation.play(key, 0.0 if seek >= 0 else BLEND)
 		pose = value
+	animation.speed_scale = 1.0 / 6.0 if value == "paint" else 1.0
 	if seek >= 0:
+		seek *= animation.speed_scale
 		var length_value: float = animation.get_animation(key).length
 		animation.seek(fposmod(seek, length_value) if value in LOOPS else minf(seek, length_value), true)
+		animation.advance(0)
 
 
 func presence(value: float, time: float) -> void:
@@ -86,3 +94,37 @@ func add_bundle() -> void:
 	for node: Node in bundle.find_children("*", "MeshInstance3D", true, false):
 		(node as MeshInstance3D).material_override = material_value
 		(node as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func add_lamp() -> void:
+	if _skeleton == null:
+		return
+	var grip: BoneAttachment3D = BoneAttachment3D.new()
+	_skeleton.add_child(grip)
+	for index: int in _skeleton.get_bone_count():
+		var bone_name: String = _skeleton.get_bone_name(index)
+		if bone_name.replace("_", ".") == "Hand.R":
+			grip.bone_name = bone_name
+			break
+	lamp = (load("res://models/sky_ladder/watcher_lamp.glb") as PackedScene).instantiate() as Node3D
+	grip.add_child(lamp)
+	lamp.top_level = true
+	lamp.position.y = -0.35
+	lamp.scale = Vector3.ONE * 0.6
+	for node: Node in lamp.find_children("*", "MeshInstance3D", true, false):
+		var mesh: MeshInstance3D = node as MeshInstance3D
+		for surface: int in mesh.mesh.get_surface_count():
+			var source: Material = mesh.mesh.surface_get_material(surface)
+			mesh.set_surface_override_material(surface, RuinKit.material(2 if source.resource_name.to_lower().begins_with("glyph") else 1))
+		(node as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func update_lamp(world_basis: Basis) -> void:
+	if lamp == null:
+		return
+	var grip: BoneAttachment3D = lamp.get_parent() as BoneAttachment3D
+	if grip.bone_idx < 0:
+		return
+	var hand: Transform3D = _skeleton.global_transform * _skeleton.get_bone_global_pose(grip.bone_idx)
+	# 提灯保持竖直，握点仍由手骨动画驱动，不随手腕翻成横躺。
+	lamp.global_transform = Transform3D(world_basis.scaled(Vector3.ONE * 0.6), hand.origin - world_basis.y * 0.50)

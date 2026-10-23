@@ -16,7 +16,7 @@ static func script_for(id: String) -> Dictionary:
 	match id:
 		"dawn_daily":
 			for i: int in 4:
-				actors.append(actor("sit", [Vector3(-3 + i * 1.7, 0, -2 - sin(i) * 1.3)], 0, 16, false, [[10.0, "raise"]] if i == 1 else []))
+				actors.append(actor("sit", [Vector3(-3 + i * 1.7, 0, -2 - sin(i) * 1.3)], 0, 16, false, [[10.0, "raise"]] if i == 1 else [[11.0 + i * 0.2, "look_up"]]))
 			for i: int in 2:
 				actors.append(actor("child_run", [Vector3(4, 0, 2), Vector3(-4, 0, 3), Vector3(-2, 0, -4), Vector3(4, 0, 2)], 1 + i * 0.8, 14 + i, true))
 			actors.append(actor("carry", [Vector3(1, 0, 11), Vector3(2, 0, 4), Vector3(2, 0, -1)], 0, 16, false, [[8.0, "place"], [11.0, "sit"]]))
@@ -24,9 +24,9 @@ static func script_for(id: String) -> Dictionary:
 			duration = 15
 			radius = 18
 			music = "echo_faith"
-			actors.append(actor("paint", [Vector3(3.16, 0, 14.9)], 0, 15, false, [[12.0, "raise"]]))
+			actors.append(actor("paint", [Vector3(0.21, 0, 15.05)], 0, 15, false, [[12.0, "look_up"]]))
 			for i: int in 7:
-				actors.append(actor("kneel", [Vector3((i % 4 - 1.5) * 2.3, 0, 1 + floori(i / 4.0) * 3)], 0, 15, false, [[12.0, "raise"]]))
+				actors.append(actor("kneel", [Vector3((i % 4 - 1.5) * 2.3, 0, 1 + floori(i / 4.0) * 3)], 0, 15, false, [[12.0, "kneel_look"]]))
 		"dawn_departure":
 			duration = 18
 			music = "echo_departure"
@@ -43,7 +43,7 @@ static func script_for(id: String) -> Dictionary:
 			radius = 6
 			music = "echo_ending"
 			# 桥上十七米的慢走保留约二十五秒总长，不用高速移动表现老人。
-			actors.append(actor("old_walk", [Vector3(0, 0, 17), Vector3(0, 0, 1)], 0, 25, false, [[16.0, "raise"], [18.0, "place"], [22.0, "sit"]]))
+			actors.append(actor("old_walk", [Vector3(0, 0, 17), Vector3(0, 0, 1)], 0, 25, false, [[16.0, "lamp_raise"], [18.0, "lamp_place"], [22.0, "sit"]]))
 	return {"duration": duration, "radius": radius, "music": music, "actors": actors}
 
 
@@ -57,7 +57,14 @@ static func sample(actor_data: Dictionary, time: float) -> Dictionary:
 			pose = change[1]
 			pose_start = change[0]
 	var path: Array = actor_data["path"]
-	var amount: float = clampf((time - float(actor_data["start"])) / maxf(stop - float(actor_data["start"]), 0.01), 0, 1) * (path.size() - 1)
+	var travel_time: float = time - float(actor_data["start"])
+	var travel_duration: float = stop - float(actor_data["start"])
+	if actor_data["pose"] == "old_walk":
+		travel_time -= clampf(time - 5, 0, 0.8) + clampf(time - 10, 0, 1)
+		travel_duration -= 1.8
+		if (time >= 5 and time < 5.8) or (time >= 10 and time < 11):
+			pose = "lamp_carry"
+	var amount: float = clampf(travel_time / maxf(travel_duration, 0.01), 0, 1) * (path.size() - 1)
 	var segment: int = mini(floori(amount), path.size() - 1)
 	var at: Vector3 = path[segment]
 	var forward: Vector3 = Vector3.FORWARD

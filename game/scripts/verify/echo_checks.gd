@@ -20,6 +20,7 @@ func _begin() -> void:
 	var echoes: EchoSystem = planet.get_node("EchoSystem") as EchoSystem
 	var journal: TravelJournal = planet.get_node("TravelJournal") as TravelJournal
 	var ending: EndingDirector = planet.get_node("EndingDirector") as EndingDirector
+	check(planet.noise.features.civilization.data.echo_anchors.size() == 5, "文明资源没有保存五个回声锚点。")
 	var persistence: Dictionary = EchoPersistenceChecks.run(scene)
 	check(persistence["passed"], "新增存档字段校验或往返失败。")
 	var animation_records: Array[Dictionary] = []
@@ -28,7 +29,7 @@ func _begin() -> void:
 		planet.add_child(figure)
 		figure.build(child)
 		var missing: Array[String] = []
-		for pose: String in ["stand", "walk", "kneel", "sit", "raise", "carry", "paint", "child_run", "old_walk", "place"]:
+		for pose: String in ["stand", "walk", "kneel", "sit", "raise", "carry", "paint", "child_run", "old_walk", "place", "look_up", "kneel_look", "lamp_carry", "lamp_raise", "lamp_place"]:
 			figure.set_pose(pose, 1)
 			if figure.pose != pose:
 				missing.append(pose)
@@ -67,7 +68,9 @@ func _begin() -> void:
 	check(triggered, "静止两秒未触发广场回声。")
 	if triggered:
 		echoes.frozen = true
-		echoes.show_time(11)
+		echoes.show_time(14)
+		var carrier: EchoFigure = echoes._actors[-1]
+		check(carrier.bundle != null and carrier.bundle.get_parent() == echoes._stage and carrier.bundle.position.y < 0.2, "行囊放下后没有留在真实地面。")
 		echoes.finish()
 	check(echoes.seen.has("dawn_daily"), "回声结束后未记录。")
 	var towers: BeaconTowers = planet.get_node("BeaconTowers") as BeaconTowers
@@ -107,7 +110,12 @@ func _begin() -> void:
 	check(ending.awakened, "四个回声完成后断口未唤醒。")
 	echoes.frozen = true
 	echoes.begin("dawn_ending")
-	echoes.show_time(23)
+	echoes.show_time(8)
+	var elder: EchoFigure = echoes._actors[0]
+	var lamp_attachment: BoneAttachment3D = elder.lamp.get_parent() as BoneAttachment3D
+	check(lamp_attachment != null and lamp_attachment.bone_idx >= 0 and elder.lamp.visible, "终章没有绑定到有效手部骨骼的铜灯。")
+	echoes.show_time(25)
+	check(not elder.lamp.visible and ending._lamp != null, "放灯后没有从手部铜灯交接到留存铜灯。")
 	echoes.finish()
 	check(ending.points.size() == 40 and ending.light_path.length() > 0.99, "终章未建立光之路。")
 	if ending.points.is_empty():

@@ -10,6 +10,11 @@
     "paint",
     "child_run",
     "old_walk",
-    "place"
+    "place",
+    "look_up",
+    "kneel_look",
+    "lamp_carry",
+    "lamp_raise",
+    "lamp_place"
   ]
 }

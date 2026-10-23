@@ -137,6 +137,7 @@ func _bake() -> void:
 	_data.civilization.trees.clear()
 	_data.civilization.town["paving_gaps"] = PackedVector3Array()
 	CivilizationBuildings.new(_noise, _data.civilization).build()
+	_data.civilization.echo_anchors = EchoAnchors.bake(_noise, _data.civilization, caves)
 	print("烘焙：洞穴距离场与分块网格")
 	CaveMesher.new().generate(caves, _noise)
 	caves.statistics["bake_seconds"] = float(Time.get_ticks_msec() - cave_started) / 1000.0

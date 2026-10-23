@@ -16,3 +16,4 @@ extends Resource
 @export var trees: PackedVector3Array = []
 @export var sites: Dictionary = {}
 @export var beacons: Array[Dictionary] = []
+@export var echo_anchors: Dictionary = {}

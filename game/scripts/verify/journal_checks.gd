@@ -61,7 +61,7 @@ func _begin() -> void:
 		await process_frame
 		var atlas: TerrainAtlas = hud.get_node("Layout/TerrainAtlas") as TerrainAtlas
 		var expected: Vector2 = TerrainMapData.coordinates(Transform3D(journal.sites["town"]["frame"]).origin.normalized())
-		check(atlas.is_open and atlas.global_view.center_uv.distance_to(expected) < 0.0001 and not paused, "详情未打开地图并定位地点。")
+		check(atlas.is_open and atlas.global_view.center_uv.distance_to(expected) < 0.0001 and not paused and not root.disable_3d, "详情未打开地图并恢复世界绘制。")
 		atlas.set_open(false)
 	if paused:
 		menu.resume()

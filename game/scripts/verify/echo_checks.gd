@@ -94,7 +94,7 @@ func _begin() -> void:
 	check(journal.discovered.has("town"), "地点未发现。")
 	if DisplayServer.get_name() != "headless":
 		await journal.capture("town")
-		var image: Image = Image.load_from_file("user://journal/town.png")
+		var image: Image = Image.load_from_file(journal.image_path("town"))
 		check(image != null and image.get_size() == Vector2i(384, 216), "旅行截图未生成。")
 	for missing: String in EchoScripts.IDS:
 		echoes.seen.assign(EchoScripts.IDS)

@@ -204,6 +204,7 @@ static func restore(scene: Node, path: String = PATH) -> Error:
 	if ladder != null:
 		ladder.restore_lift(lift_value)
 	if journal != null:
+		journal.cancel_captures()
 		journal.discovered.assign(discovered)
 		journal.backfill()
 	if echoes != null:

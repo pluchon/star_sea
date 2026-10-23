@@ -9,6 +9,8 @@ var _player: StarSeaPlayer
 var _elapsed: float = 0.0
 var _capture_queue: Array[Dictionary] = []
 var _capturing: bool = false
+var _capture_generation: int = 0
+var _capture_hud_visible: bool = true
 var _notice: CanvasLayer
 var _title: Label
 var _notice_age: float = 10.0
@@ -93,21 +95,44 @@ func backfill() -> void:
 
 
 func capture(id: String) -> void:
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or not sites.has(id) or _capturing or get_tree().paused:
 		return
 	_capturing = true
+	var generation: int = _capture_generation
 	var hud: CanvasLayer = _planet.get_parent().get_parent().get_node("HUD") as CanvasLayer
-	var was_visible: bool = hud.visible
+	_capture_hud_visible = hud.visible
+	var notice_visible: bool = _notice.visible
 	hud.visible = false
 	_notice.visible = false
 	await RenderingServer.frame_post_draw
-	var image: Image = get_viewport().get_texture().get_image()
-	image.resize(384, 216, Image.INTERPOLATE_LANCZOS)
-	DirAccess.make_dir_recursive_absolute("user://journal")
-	image.save_png("user://journal/" + id + ".png")
-	hud.visible = was_visible
-	_notice.visible = true
+	# 暂停或读档可能发生在等待绘制期间，旧任务不能写入新旅程或恢复过期界面。
+	if generation == _capture_generation and not get_tree().paused:
+		var image: Image = get_viewport().get_texture().get_image()
+		image.resize(384, 216, Image.INTERPOLATE_LANCZOS)
+		var path: String = image_path(id)
+		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+		image.save_png(path)
+	var menu: VoyageMenu = _planet.get_parent().get_parent().get_node("VoyageMenu") as VoyageMenu
+	var ending: EndingDirector = _planet.get_node("EndingDirector") as EndingDirector
+	hud.visible = _capture_hud_visible and not menu._open and not ending.busy
+	_notice.visible = notice_visible
 	_capturing = false
+
+
+func hud_visibility() -> bool:
+	return _capture_hud_visible if _capturing else (_planet.get_parent().get_parent().get_node("HUD") as CanvasLayer).visible
+
+
+func image_path(id: String) -> String:
+	# 验证图片与真实游玩的手记分开，正常发现流程也不能覆盖玩家截图。
+	var directory: String = "user://journal/" if OS.get_cmdline_user_args().is_empty() else "user://verification/journal/"
+	return directory + id + ".png"
+
+
+func cancel_captures() -> void:
+	_capture_generation += 1
+	_capture_queue.clear()
+	_notice_age = 10
 
 
 func refresh_map() -> void:

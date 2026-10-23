@@ -188,7 +188,7 @@ func begin_credits() -> void:
 	_player.velocity = Vector3.ZERO
 	_stars.visible = true
 	var hud: CanvasLayer = _planet.get_parent().get_parent().get_node("HUD") as CanvasLayer
-	_hud_visible = hud.visible
+	_hud_visible = (_planet.get_node("TravelJournal") as TravelJournal).hud_visibility()
 	hud.visible = false
 
 

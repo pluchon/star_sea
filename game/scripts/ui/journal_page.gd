@@ -38,7 +38,7 @@ func button(title: String, action: Callable, parent: Node) -> Button:
 
 
 func image_for(id: String) -> Texture2D:
-	var path: String = "user://journal/" + id + ".png"
+	var path: String = journal.image_path(id)
 	if FileAccess.file_exists(path):
 		var image: Image = Image.load_from_file(path)
 		if image != null:
@@ -91,6 +91,10 @@ func show_cards() -> void:
 		image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		image.custom_minimum_size = Vector2(260, 146)
 		image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		image.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		image.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
+				show_detail(id))
 		card.add_child(image)
 		button(journal.sites[id]["name"], func() -> void: show_detail(id), card)
 
@@ -113,6 +117,8 @@ func show_detail(id: String) -> void:
 		(scene.get_node("VoyageMenu") as VoyageMenu).resume()
 		var atlas: TerrainAtlas = scene.get_node("HUD/Layout/TerrainAtlas") as TerrainAtlas
 		atlas.set_open(true)
+		# 全图缩放为一时纬度中心固定，先放大才能真正定位到选中的地点。
+		atlas.global_view.zoom = maxf(atlas.global_view.zoom, 4)
 		atlas.global_view.center_uv = TerrainMapData.coordinates(direction)
 		atlas.global_view._sync_view()
 		atlas.globe_view.face(direction), _column)

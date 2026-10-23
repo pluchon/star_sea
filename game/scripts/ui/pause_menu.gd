@@ -106,7 +106,8 @@ func open() -> void:
 	if atlas.is_open:
 		atlas.set_open(false)
 	if not _open:
-		_hud_was_visible = _hud.visible
+		var journal: TravelJournal = get_parent().get_node_or_null("Universe/PlanetDawn/TravelJournal") as TravelJournal
+		_hud_was_visible = journal.hud_visibility() if journal != null else _hud.visible
 	_open = true
 	_hud.visible = false
 	visible = true
@@ -166,8 +167,8 @@ func _home() -> void:
 	_pages.add_child(space)
 	_button("继续漂流" if _started else "开始漂流", resume, "Resume")
 	var load_button: Button = _button("读取旅程", _load_journey, "LoadJourney")
-	load_button.disabled = not FileAccess.file_exists(JourneyStore.PATH)
 	var ending: EndingDirector = get_parent().get_node_or_null("Universe/PlanetDawn/EndingDirector") as EndingDirector
+	load_button.disabled = not FileAccess.file_exists(JourneyStore.PATH) or (ending != null and ending.busy)
 	_button("保存旅程", _save_journey, "SaveJourney").disabled = not _started or (ending != null and ending.busy)
 	_button("手记", _journal, "Journal")
 	_button("设置", _settings, "Settings")

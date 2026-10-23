@@ -7,6 +7,8 @@ import math
 import runpy
 
 helpers = runpy.run_path(str(Path(__file__).with_name("Generate-Audio.py")))
+helpers["write"].__globals__["OUTPUT"] = Path(__file__).resolve().parents[1] / "game/audio/music/fallback"
+helpers["write"].__globals__["OUTPUT"].mkdir(parents=True, exist_ok=True)
 rate = helpers["RATE"]
 duration = 52
 samples = array("f", [0.0]) * (rate * duration * 2)

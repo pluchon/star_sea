@@ -194,6 +194,9 @@ func finish() -> void:
 		return
 	if not seen.has(id):
 		seen.append(id)
+	var music: MusicDirector = _planet.get_parent().get_parent().get_node_or_null("MusicDirector") as MusicDirector
+	if music != null:
+		music.end_echo()
 	active = ""
 	_stage.queue_free()
 	_stage = null

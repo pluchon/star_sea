@@ -33,6 +33,17 @@ static func run(tree: SceneTree) -> Dictionary:
 			failures.append("打包缺少备用网格数据：" + path)
 	if not failures.is_empty():
 		return {"passed": false, "failures": failures}
+	var music: Dictionary = MusicDirector.scan()
+	var music_count: int = 0
+	for group: String in music:
+		for path: String in music[group]:
+			music_count += 1
+			if not ResourceLoader.exists(path) or load(path) == null:
+				failures.append("打包无法读取音乐：" + path)
+	if music_count != 27:
+		failures.append("打包音乐数量不等于 27：%d" % music_count)
+	if not ResourceLoader.exists("res://audio/music/fallback/dawn_theme.wav"):
+		failures.append("打包缺少后备音乐。")
 	var pieces: int = 0
 	for piece: String in RuinMeshes.recipes():
 		var model: Mesh = RuinKit.mesh(piece)
@@ -69,4 +80,4 @@ static func run(tree: SceneTree) -> Dictionary:
 			if mesh.get_faces().size() / 3 != int(record["triangles"]) or mesh.get_aabb().size.distance_to(RuinMeshes.vector(record["bounds_size"])) > 0.01:
 				failures.append("打包峡谷岩石与同源记录不一致：" + piece)
 		scene.free()
-	return {"passed": failures.is_empty(), "failures": failures, "ruin_pieces": pieces, "ship_triangles": ship_triangles, "hydrology_loaded": world != null, "canyon_models": rocks.size()}
+	return {"passed": failures.is_empty(), "failures": failures, "ruin_pieces": pieces, "ship_triangles": ship_triangles, "hydrology_loaded": world != null, "canyon_models": rocks.size(), "music_tracks": music_count}

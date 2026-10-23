@@ -257,6 +257,7 @@ func _add_waterfalls(container: Node3D, bucket: int) -> void:
 			continue
 		previous = position_value
 		var sound: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+		sound.bus = "World"
 		var loop: AudioStreamWAV = (load("res://audio/waterfall.wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 		loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		loop.loop_end = roundi(loop.get_length() * loop.mix_rate)

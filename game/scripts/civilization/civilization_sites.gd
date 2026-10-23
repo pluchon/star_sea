@@ -6,11 +6,19 @@ var _data: CivilizationData
 var _near: RuinBuilder
 var _near_placements: Array[Dictionary] = []
 var _elapsed: float = 1.0
+var _rooms: Array[Dictionary] = []
 
 
 func _ready() -> void:
 	_planet = get_parent() as Planet
 	_data = _planet.noise.features.civilization.data
+	for house: Dictionary in _data.town.get("houses", []):
+		if float(house["state"]) < 0.7:
+			continue
+		var up: Vector3 = house["direction"]
+		var forward: Vector3 = up.direction_to(_data.town["direction"]).slide(up).normalized()
+		var frame: Transform3D = Transform3D(Basis.looking_at(forward, up), up * _planet.surface_radius(up))
+		_rooms.append({"frame": frame.affine_inverse(), "half": Vector3(3, 4, 5) if int(house["style"]) == 1 else Vector3(4.5, 5, 4.5)})
 	var far: Array[Dictionary] = []
 	var roads: Array[Dictionary] = []
 	for placement: Dictionary in _data.placements:
@@ -48,3 +56,24 @@ func _process(delta: float) -> void:
 	elif distance > 4000.0 and _near != null:
 		_near.queue_free()
 		_near = null
+
+
+func indoors(local: Vector3) -> bool:
+	for room: Dictionary in _rooms:
+		var at: Vector3 = Transform3D(room["frame"]) * local
+		var half: Vector3 = room["half"]
+		if absf(at.x) < half.x and absf(at.z) < half.z and at.y > 0 and at.y < half.y:
+			return true
+	var ladder: Vector3 = LandingPads.frame(_planet).affine_inverse() * local
+	return (absf(ladder.x) < 14 and absf(ladder.z + 30) < 15 and ladder.y > 0 and ladder.y < 32) or (absf(ladder.y - SkyLadder.LIFT_HEIGHT) < 4 and Vector2(ladder.x, ladder.z).length() < 42)
+
+
+func ruin_proximity(local: Vector3) -> float:
+	var distance: float = INF
+	for site: Dictionary in [_data.town, _data.ladder]:
+		var up: Vector3 = site["direction"]
+		distance = minf(distance, local.distance_to(up * _planet.surface_radius(up)))
+	if _planet.noise.features.caves != null:
+		for entrance: Dictionary in _planet.noise.features.caves.networks[0]["entrances"]:
+			distance = minf(distance, local.distance_to(entrance["position"]))
+	return 1 - smoothstep(80, 260, distance)

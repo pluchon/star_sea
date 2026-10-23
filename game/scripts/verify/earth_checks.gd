@@ -172,19 +172,23 @@ static func run(scene: Node3D, output: String) -> Dictionary:
 
 static func _music_check(scene: Node3D, output: String) -> Dictionary:
 	var sound: Soundscape = scene.get_node("Soundscape") as Soundscape
-	var planet: Planet = scene.get_node("Universe/PlanetDawn") as Planet
-	var relative: Vector3 = (scene.get_node("Player") as StarSeaPlayer).global_position - planet.global_position
+	var music: MusicDirector = scene.get_node("MusicDirector") as MusicDirector
+	music.auto_context = false
 	var original_volume: float = StarSeaSettings.music_volume
-	sound._music.stop()
-	sound._music_wait = 0.0
-	sound._update_music(1.0, planet, relative)
-	var started: bool = sound._music.playing
+	music.audio.stop()
+	music.current = ""
+	music.context = "dawn_day"
+	music.quiet = 0
+	music.tick(1)
+	var started: bool = music.audio.playing
 	StarSeaSettings.music_volume = 0.0
-	sound._update_music(0.016, planet, relative)
-	var muted: bool = sound._music.volume_linear < 0.00001
-	sound._update_music(30.0, planet, relative.normalized() * (planet.radius + 5000.0))
-	var faded: bool = not sound._music.playing
+	StarSeaSettings.apply_music_volume()
+	var muted: bool = AudioServer.is_bus_mute(AudioServer.get_bus_index("Music"))
+	music.update_context("space")
+	music.tick(4)
+	var faded: bool = not music.audio.playing
 	StarSeaSettings.music_volume = original_volume
+	StarSeaSettings.apply_music_volume()
 	# 单独录制音乐的实际播放输出，检查其已进入混音且没有削波。
 	sound.set_process(false)
 	for audio: AudioStreamPlayer in sound._loops.values():
@@ -195,16 +199,19 @@ static func _music_check(scene: Node3D, output: String) -> Dictionary:
 	var effect_index: int = AudioServer.get_bus_effect_count(0)
 	AudioServer.add_bus_effect(0, effect)
 	effect.set_recording_active(true)
-	sound._music.volume_linear = 0.108
-	sound._music.play()
+	music._start("dawn_day")
+	music.audio.volume_linear = 1
+	music.set_process(false)
 	await scene.get_tree().create_timer(5.0).timeout
 	effect.set_recording_active(false)
 	var recording: AudioStreamWAV = effect.get_recording()
 	var path: String = ProjectSettings.globalize_path(output.path_join("dawn_music_mix.wav"))
 	var error: Error = recording.save_to_wav(path)
 	AudioServer.remove_bus_effect(0, effect_index)
-	sound._music.stop()
+	music.audio.stop()
 	sound.set_process(true)
+	music.set_process(true)
+	music.auto_context = true
 	return {"passed": started and muted and faded and error == OK and recording.data.size() > 22050, "started": started, "independent_mute": muted, "left_dawn_surface_faded": faded, "recorded_seconds": recording.get_length()}
 
 

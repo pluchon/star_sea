@@ -8,6 +8,9 @@ import json
 import math
 import sys
 import wave
+import re
+import shutil
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,6 +43,19 @@ def inspect(path: Path, loop: bool) -> dict:
             "head_rms": head, "tail_rms": tail, "sha256": hashlib.sha256(data).hexdigest()}
 
 
+def inspect_music(path: Path) -> dict:
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        raise RuntimeError("缺少 ffmpeg 或 ffprobe，无法检查音乐响度和格式。")
+    result = subprocess.run(["ffmpeg", "-nostdin", "-i", str(path), "-af", "astats=metadata=0:reset=0", "-f", "null", "-"], capture_output=True, check=True)
+    stats = result.stderr.decode("utf-8", errors="replace")
+    rms = float(re.findall(r"RMS level dB: ([-\d.]+)", stats)[-1])
+    peak = float(re.findall(r"Peak level dB: ([-\d.]+)", stats)[-1])
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(path)], capture_output=True, check=True)
+    stream = json.loads(probe.stdout)["streams"][0]
+    return {"file": path.name, "rms_dbfs": rms, "peak_dbfs": peak, "duration_s": float(stream["duration"]),
+            "passed": -26 <= rms <= -18 and peak <= -1 and stream["codec_name"] == "vorbis" and int(stream["sample_rate"]) == 44100 and stream["channels"] == 2}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--recordings", type=Path)
@@ -62,11 +78,16 @@ if __name__ == "__main__":
         count_ok = len(records) == len(names)
         filename = "audio-mix-checks.json"
     else:
-        paths = [ROOT / "game" / "audio" / f"{name}.wav" for name in ["wind", "shore", "rustle", "space", "rain", "cave_drip", "cave_wind"]]
+        paths = [ROOT / "game" / "audio" / f"{name}.wav" for name in ["wind", "shore", "rustle", "space", "rain", "cave_drip", "cave_wind", "ruin_wind", "night_insects"]]
         paths.extend(sorted((ROOT / "game" / "audio").glob("step_*.wav")))
-        paths.extend(ROOT / "game" / "audio" / f"{name}.wav" for name in ["dawn_theme", "engine", "ship_land", "ship_hatch", "waterfall", "glide_open", "high_wind", "beacon_ignite", "lift_start", "lift_hum", "discover"])
-        records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space", "rain", "engine", "waterfall", "high_wind", "cave_drip", "cave_wind", "lift_hum"]) for path in paths]
-        count_ok = len(records) == 30 and len({record["sha256"] for record in records}) == 30
+        paths.extend(ROOT / "game" / "audio" / f"{name}.wav" for name in ["engine", "ship_land", "ship_hatch", "waterfall", "glide_open", "high_wind", "beacon_ignite", "lift_start", "lift_hum", "discover"])
+        paths.append(ROOT / "game/audio/music/fallback/dawn_theme.wav")
+        records = [inspect(path, path.stem in ["wind", "shore", "rustle", "space", "rain", "engine", "waterfall", "high_wind", "cave_drip", "cave_wind", "lift_hum", "ruin_wind", "night_insects"]) for path in paths]
+        count_ok = len(records) == 32 and len({record["sha256"] for record in records}) == 32
+        music = [inspect_music(path) for path in sorted((ROOT / "game/audio/music").glob("*.ogg"))]
+        source = (ROOT / "game/audio/music/来源.md").read_text(encoding="utf-8")
+        count_ok = count_ok and len(music) == 27 and all(record["file"] in source for record in music)
+        records.extend(music)
         filename = "audio-asset-checks.json"
     report = {"passed": count_ok and all(record["passed"] for record in records), "records": records}
     output = ROOT / "test-output" / "acceptance" / filename

@@ -10,6 +10,7 @@ New-Item -ItemType Directory -Path $licensesDirectory -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $repoDirectory 'game/licenses') -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $licensesDirectory -Force
 }
+Copy-Item -LiteralPath (Join-Path $repoDirectory 'game/audio/music/来源.md') -Destination (Join-Path $licensesDirectory '音乐来源.md') -Force
 @'
 星海尽头
 
@@ -23,6 +24,7 @@ T 加速时间，H 帮助，F3 性能，F12 截图，Esc 暂停菜单。
 菜单包含画面、声音与操作设置；退出时自动保存旅程。
 存档、设置与截图位于 %APPDATA%\Godot\app_userdata\StarSea\。
 本版本需要 Windows 64 位与支持 Vulkan 的显卡。
+包含用户提供的个人游玩音乐，不商用、不公开分发；来源与用途见 licenses。
 '@ | Set-Content -LiteralPath (Join-Path $outputDirectory '说明.txt') -Encoding utf8
 Get-FileHash -LiteralPath (Join-Path $outputDirectory 'StarSea.exe') -Algorithm SHA256 |
     Select-Object Algorithm, Hash | ConvertTo-Json |

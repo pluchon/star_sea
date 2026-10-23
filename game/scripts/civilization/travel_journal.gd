@@ -38,6 +38,7 @@ func _ready() -> void:
 	_title.add_theme_font_override("font", font)
 	_notice.add_child(_title)
 	_sound = AudioStreamPlayer.new()
+	_sound.bus = "Interface"
 	_sound.volume_db = -24
 	if ResourceLoader.exists("res://audio/discover.wav"):
 		_sound.stream = load("res://audio/discover.wav") as AudioStream

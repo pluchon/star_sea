@@ -90,6 +90,7 @@ func ignite(id: int, sound: bool = true) -> void:
 	_waiting[id + 1] = 2.0
 	if sound:
 		var audio: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+		audio.bus = "World"
 		audio.stream = load("res://audio/beacon_ignite.wav") as AudioStream
 		audio.position = tower_frame(towers[id], _planet.radius) * Vector3(0, TOP + 1, 0)
 		audio.max_distance = 100.0

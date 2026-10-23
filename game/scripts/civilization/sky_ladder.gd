@@ -181,6 +181,7 @@ func _build_near() -> void:
 	lift_collision.position.y = -0.35
 	lift.add_child(lift_collision)
 	_hum = AudioStreamPlayer3D.new()
+	_hum.bus = "World"
 	var hum_stream: AudioStreamWAV = (load("res://audio/lift_hum.wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 	hum_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	hum_stream.loop_end = roundi(hum_stream.get_length() * hum_stream.mix_rate)
@@ -190,6 +191,7 @@ func _build_near() -> void:
 	_hum.volume_db = -14
 	lift.add_child(_hum)
 	_start = AudioStreamPlayer3D.new()
+	_start.bus = "World"
 	_start.stream = load("res://audio/lift_start.wav") as AudioStream
 	_start.max_distance = 120
 	_start.unit_size = 16
@@ -211,6 +213,7 @@ func _build_platform() -> void:
 	door.position = Vector3(0, 0, -22)
 	_platform.add_child(door)
 	var wind: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+	wind.bus = "World"
 	_platform_wind = wind
 	var stream: AudioStreamWAV = (load("res://audio/high_wind.wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD

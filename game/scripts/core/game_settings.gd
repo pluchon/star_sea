@@ -55,6 +55,7 @@ func apply() -> void:
 	get_viewport().scaling_3d_scale = render_scale
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(volume, 0.0001)))
 	AudioServer.set_bus_mute(0, volume <= 0.0)
+	apply_music_volume()
 	if DisplayServer.get_name() != "headless":
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
@@ -78,3 +79,10 @@ func save(path: String = PATH) -> Error:
 	if error != OK:
 		return error
 	return DirAccess.rename_absolute(ProjectSettings.globalize_path(path + ".tmp"), ProjectSettings.globalize_path(path))
+
+
+static func apply_music_volume() -> void:
+	var index: int = AudioServer.get_bus_index("Music")
+	if index >= 0:
+		AudioServer.set_bus_volume_db(index, linear_to_db(maxf(music_volume, 0.0001)))
+		AudioServer.set_bus_mute(index, music_volume <= 0.0)

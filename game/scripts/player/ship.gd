@@ -53,6 +53,7 @@ func _ready() -> void:
 	ramp_collision.rotation.z = 0.45
 	body.add_child(ramp_collision)
 	engine = AudioStreamPlayer3D.new()
+	engine.bus = "World"
 	engine.name = "ShipEngine"
 	var loop: AudioStreamWAV = (load("res://audio/engine.wav") as AudioStreamWAV).duplicate() as AudioStreamWAV
 	loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
@@ -63,6 +64,7 @@ func _ready() -> void:
 	engine.volume_db = -12.0
 	add_child(engine)
 	effect = AudioStreamPlayer3D.new()
+	effect.bus = "World"
 	effect.max_distance = 100.0
 	effect.unit_size = 12.0
 	effect.volume_db = -8.0

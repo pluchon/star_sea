@@ -44,7 +44,9 @@ func _ready() -> void:
 	add_child(explorer)
 	explorer.attach_edges(camera)
 	_glide_effect = AudioStreamPlayer.new()
+	_glide_effect.bus = "World"
 	_glide_wind = AudioStreamPlayer.new()
+	_glide_wind.bus = "World"
 	add_child(_glide_effect)
 	add_child(_glide_wind)
 	_glide_effect.volume_db = -12.0

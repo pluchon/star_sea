@@ -100,10 +100,7 @@ func _process(delta: float) -> void:
 	if not light_path.is_zero_approx() and points.is_empty():
 		illuminate(1)
 	var camera: Camera3D = _player.camera
-	for i: int in _flares.size():
-		var flare: MeshInstance3D = _flares[i]
-		flare.global_basis = camera.global_basis
-		flare.scale = Vector3.ONE * BeaconTowers.flare_size(flare.global_position.distance_to(camera.global_position), camera.fov, get_viewport().get_visible_rect().size.y) * 0.7
+	_update_flares()
 	if busy:
 		_phase += delta
 		_path_overlay.queue_redraw()
@@ -216,6 +213,14 @@ func finish_credits() -> void:
 func return_position() -> void:
 	var at: Vector3 = points[-1] - light_path * 80
 	_player.place_at(_planet.to_global(at), light_path, at.normalized())
+	_update_flares()
+
+
+func _update_flares() -> void:
+	var camera: Camera3D = _player.camera
+	for flare: MeshInstance3D in _flares:
+		flare.global_basis = camera.global_basis
+		flare.scale = Vector3.ONE * BeaconTowers.flare_size(flare.global_position.distance_to(camera.global_position), camera.fov, get_viewport().get_visible_rect().size.y) * 0.7
 
 
 func restore_state(seen: bool, direction: Vector3) -> void:

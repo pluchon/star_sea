@@ -44,7 +44,10 @@ func _begin() -> void:
 	var protected: bool = not player.controls_enabled
 	ending._process(8)
 	await shot("ending_restored")
-	var report: Dictionary = {"passed": disabled and protected and ending.ending_seen and not ending.busy, "pause_save_disabled": disabled, "pause_resume_controls_protected": protected, "ending_seen": ending.ending_seen, "returned_mode": player.mode}
+	var flare: MeshInstance3D = ending._flares[-1]
+	var distance: float = flare.global_position.distance_to(player.camera.global_position)
+	var pixels: float = flare.scale.x / (distance * 2 * tan(deg_to_rad(player.camera.fov) * 0.5)) * root.size.y
+	var report: Dictionary = {"passed": disabled and protected and ending.ending_seen and not ending.busy and pixels < 17, "pause_save_disabled": disabled, "pause_resume_controls_protected": protected, "ending_seen": ending.ending_seen, "returned_mode": player.mode, "nearest_flare_width_px": pixels}
 	VerificationMetrics.write_json("res://../test-output/wanderer/ending_visual_checks.json", report)
 	print(JSON.stringify(report))
 	quit(0 if report["passed"] else 1)

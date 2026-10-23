@@ -351,14 +351,37 @@ def piece(name, broken=False):
                 ring((0, 0, 2.38), .16, .04, upright=True, steps=12)
                 ring_and_path((0, .045, 2.45), (0, 1, 0), .14, width=.018)
         elif name == "brazier":
+            # 旋转截面形成有内壁的浅盆，外翻盆沿和三条曲线铜足。
+            profile = [(.35,.69),(.72,.78),(1.10,1.05),(1.25,1.12),(1.28,1.20),(1.10,1.19),(.94,.99),(.62,.86),(.30,.84)]
+            profile = [(r * .9375, z * 1.167) for r,z in profile]
+            vertices, faces = [], []
+            for i in range(48):
+                angle = i * math.tau / 48
+                vertices.extend((r*math.cos(angle),r*math.sin(angle),z) for r,z in profile)
+            n=len(profile)
+            for i in range(48):
+                for j in range(n-1):faces.append((i*n+j,((i+1)%48)*n+j,((i+1)%48)*n+j+1,i*n+j+1))
+            revision.mesh(sys.modules[__name__], "外翻浅铜盆", vertices, faces, "patina")
             for index in range(3):
-                angle = index * math.tau / 3
-                cylinder((.65 * math.cos(angle), .65 * math.sin(angle), .35), .1, .7, "patina")
-            cylinder((0, 0, .9), .7, .5, "patina", top=1.2)
-            ring((0, 0, 1.3), 1.1, .1, end=5.4 if broken else math.tau)
-            for index in range(3):
-                angle = index * math.tau / 3
-                ring_and_path((math.cos(angle) * 1.08, math.sin(angle) * 1.08, 1.05), (math.cos(angle), math.sin(angle), 0), .3)
+                angle=index*math.tau/3
+                curve=bpy.data.curves.new("弯曲铜足", "CURVE");curve.dimensions="3D"
+                curve.bevel_depth=.085;curve.bevel_resolution=1;curve.resolution_u=4
+                spline=curve.splines.new("BEZIER");spline.bezier_points.add(3)
+                for point,(r,z) in zip(spline.bezier_points,[(.95,.08),(.60,.28),(.53,.58),(.72,.82)]):
+                    point.co=(r*math.cos(angle),r*math.sin(angle),z*1.167)
+                    point.handle_left_type=point.handle_right_type="AUTO"
+                obj=bpy.data.objects.new("弯曲铜足",curve);bpy.context.collection.objects.link(obj)
+                modeling.active(obj);bpy.ops.object.convert(target="MESH");finish(bpy.context.object,"patina")
+                box((.95*math.cos(angle),.95*math.sin(angle),.035),(.24,.24,.07),"patina",rotation=angle,collision=False)
+            for index in range(9):
+                angle=index*math.tau/9
+                ring_and_path((math.cos(angle)*1.07,math.sin(angle)*1.07,1.21),(math.cos(angle),math.sin(angle),0),.12,width=.018)
+            for index in range(11):
+                angle=index*2.4;r=.22+.5*(index%4)/3
+                coal=sphere((r*math.cos(angle),r*math.sin(angle),1.09),(.34,.26,.16))
+                shade=coal.data.attributes.new(name="shade",type="FLOAT",domain="POINT")
+                for value in shade.data:value.value=.16 if index%3 else .22
+            COLLISIONS.append({"kind":"cylinder","radius":1.2,"height":1.4,"position":[0,0,.7]})
         else:
             box((0, 0, .5), (3, 2, 1))
             ring((0, 0, 3.5), 2.25, .25, upright=True, end=5.7 if broken else math.tau)
@@ -564,7 +587,7 @@ def export_piece(name, output):
         exported.select_set(True)
     bpy.ops.export_scene.gltf(filepath=str(output / f"{name}.glb"), use_selection=True, export_format="GLB", export_yup=True, export_apply=True, export_vertex_color="ACTIVE", export_active_vertex_color_when_no_material=True)
     repair_vertex_colors(output / f"{name}.glb", samples)
-    if modeling.is_revised(name):
+    if modeling.is_revised(name) or name in ("brazier", "brazier_broken"):
         modeling.preview(name, PARTS, output)
     minimum = [min(point[axis] for points in surfaces.values() for point in points) for axis in range(3)]
     maximum = [max(point[axis] for points in surfaces.values() for point in points) for axis in range(3)]

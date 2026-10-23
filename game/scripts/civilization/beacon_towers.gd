@@ -167,6 +167,8 @@ func _process(delta: float) -> void:
 			flame.scale = Vector3.ONE * (1 + echo_fire * 0.35 if id == towers.size() - 1 else 1.0)
 			flame.visible = lit.has(id)
 			for node: Node in flame.get_children():
+				if node is GPUParticles3D:
+					(node as GPUParticles3D).speed_scale = 0 if paused else 1
 				if node is MeshInstance3D:
 					var material: ShaderMaterial = (node as MeshInstance3D).material_override as ShaderMaterial
 					material.set_shader_parameter("flame_time", _time)
@@ -203,16 +205,56 @@ func _build_near(tower: Dictionary) -> void:
 	for index: int in 4:
 		var mesh: MeshInstance3D = MeshInstance3D.new()
 		var quad: QuadMesh = QuadMesh.new()
-		quad.size = Vector2(1.1, 1.7)
+		quad.size = Vector2(1.45 - index * 0.12, 2.3 - index * 0.15)
 		mesh.mesh = quad
 		mesh.rotation.y = index * PI / 4.0
-		mesh.position.y = 0.85
-		mesh.material_override = material
+		mesh.position = Vector3(sin(index * 2.4) * 0.18, 1.15 - index * 0.075, cos(index * 2.4) * 0.18)
+		mesh.material_override = material.duplicate()
+		(mesh.material_override as ShaderMaterial).set_shader_parameter("phase", float(index))
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		flames.add_child(mesh)
+	for index: int in 2:
+		var fragment: MeshInstance3D = MeshInstance3D.new()
+		var quad: QuadMesh = QuadMesh.new()
+		quad.size = Vector2(0.9, 1.3)
+		fragment.mesh = quad
+		fragment.position.y = 0.9
+		fragment.rotation.y = index * PI / 2
+		fragment.material_override = material.duplicate()
+		(fragment.material_override as ShaderMaterial).set_shader_parameter("detached", true)
+		(fragment.material_override as ShaderMaterial).set_shader_parameter("phase", float(index) + 4)
+		fragment.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		flames.add_child(fragment)
 	var light: OmniLight3D = OmniLight3D.new()
 	light.light_color = Color(1, 0.59, 0.2)
-	light.omni_range = 14
-	light.light_energy = 1.6
+	light.omni_range = 18
+	light.light_energy = 3.0
 	light.shadow_enabled = false
 	flames.add_child(light)
+
+	var sparks: GPUParticles3D = GPUParticles3D.new()
+	sparks.amount = 12
+	sparks.use_fixed_seed = true
+	sparks.seed = 20261023
+	sparks.lifetime = 2.4
+	sparks.position.y = 1.2
+	var process: ParticleProcessMaterial = ParticleProcessMaterial.new()
+	process.direction = Vector3.UP
+	process.spread = 18
+	process.initial_velocity_min = 0.6
+	process.initial_velocity_max = 1.5
+	process.gravity = Vector3(0, 0.1, 0)
+	process.scale_min = 0.012
+	process.scale_max = 0.035
+	sparks.process_material = process
+	var ember: SphereMesh = SphereMesh.new()
+	ember.radius = 1
+	ember.height = 2
+	ember.radial_segments = 4
+	ember.rings = 1
+	var glow: StandardMaterial3D = StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.albedo_color = Color(1, 0.65, 0.2)
+	ember.material = glow
+	sparks.draw_pass_1 = ember
+	flames.add_child(sparks)

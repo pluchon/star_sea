@@ -45,9 +45,11 @@ function Invoke-SourceCheck {
     param([string]$Name, [string[]]$EngineArguments, [string]$Report)
     Invoke-AcceptanceItem $Name {
         $started = [DateTime]::UtcNow
-        if ($EngineArguments -contains '--') { $EngineArguments += '--scope=' + $Scope }
+        # 子作用域直接使用 += 会丢失父作用域中的数组；先复制，再追加范围。
+        $checkArguments = @($EngineArguments)
+        if ($checkArguments -contains '--') { $checkArguments += '--scope=' + $Scope }
         $engineFailure = $null
-        try { & (Join-Path $PSScriptRoot 'Check-Godot.ps1') -GodotArgs $EngineArguments -LogPath (Join-Path $logDirectory "$Name.log") | Out-Null }
+        try { & (Join-Path $PSScriptRoot 'Check-Godot.ps1') -GodotArgs $checkArguments -LogPath (Join-Path $logDirectory "$Name.log") | Out-Null }
         catch { $engineFailure = $_.Exception.Message }
         $sourcePath = Join-Path $repoDirectory $Report
         $data = Read-FreshReport $sourcePath $started
@@ -80,16 +82,17 @@ function Invoke-Release {
         if (@(Get-Process -Name 'Godot*', 'StarSea*' -ErrorAction SilentlyContinue).Count -gt 0) { throw '已有 Godot 或 StarSea 进程，无法执行独立验收。' }
         $started = [DateTime]::UtcNow
         $reportPath = $null
-        foreach ($argument in $GameArguments) {
+        $releaseArguments = @($GameArguments)
+        foreach ($argument in $releaseArguments) {
             if ($argument -like '--acceptance=*') { $reportPath = Join-Path $releaseDirectory ($argument.Substring(13) + '.json') }
             if ($argument -like '--shot=*') { $reportPath = Join-Path (Join-Path $releaseDirectory 'shots') ($argument.Substring(7) + '.json') }
             if ($argument -like '--descent=*') { $reportPath = $argument.Substring(10) }
             if ($argument -like '--walk=*') { $reportPath = $argument.Substring(7) }
         }
-        $GameArguments += "--scope=$Scope"
+        $releaseArguments += "--scope=$Scope"
         $logPath = Join-Path $logDirectory "$Name.log"
         if ($Startup) { & $executable --quit-after 180 2>&1 | Set-Content -LiteralPath $logPath -Encoding utf8 }
-        else { & $executable -- @GameArguments 2>&1 | Set-Content -LiteralPath $logPath -Encoding utf8 }
+        else { & $executable -- @releaseArguments 2>&1 | Set-Content -LiteralPath $logPath -Encoding utf8 }
         $code = $LASTEXITCODE
         $errors = @(Select-String -LiteralPath $logPath -Pattern '^\s*(SCRIPT ERROR:|ERROR:|WARNING:|Shader compilation failed)')
         if ($reportPath) {

@@ -160,7 +160,7 @@ try {
     $shots += @('s30_town_plaza','s31_town_overview','s32_terraces','s33_cemetery','s34_old_road')
     $shots += @('s35_beacon_top','s36_beacon_chain_night')
     $shots += @('s37_temple_gate','s38_temple_hall')
-    $shots += @('s41_ladder_from_spawn','s42_ladder_night','s43_ladder_base','s44_ladder_balcony','s45_ladder_from_orbit','s60_ladder_break','s46_echo_plaza','s47_echo_temple','s48_journal','s61_light_path','s61b_ending_return','s60b_ladder_view')
+    $shots += @('s41_ladder_from_spawn','s42_ladder_night','s43_ladder_base','s44_ladder_balcony','s45_ladder_from_orbit','s60_ladder_break','s46_echo_plaza','s47_echo_temple','s48_journal','s61_light_path','s61b_echo_ending','s60b_ladder_view')
     $shotDirectory = Join-Path $releaseDirectory 'shots'
     foreach ($shot in $shots) {
         Invoke-Release "release-$shot" @("--shot=$shot", "--out=$shotDirectory")

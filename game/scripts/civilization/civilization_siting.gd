@@ -78,7 +78,10 @@ static func town(noise: TerrainNoise, hydro: HydrologyData, tower: Dictionary, s
 			choice["minimum_area_km2"] = minimum_area
 			choice["small_river_fallback"] = small_river
 			return choice
-	push_error("文明烘焙失败：放宽至坡度 0.12、距离十二点一公里后仍无合格古城河岸。")
+	if small_river:
+		push_error("文明烘焙失败：近处小河段仍无合格古城河岸。")
+	else:
+		print("文明选址：大河没有合格河岸，交由既有近处小河段方案继续。")
 	return {}
 
 
@@ -111,3 +114,15 @@ static func visible(noise: TerrainNoise, eye: Vector3, target: Vector3) -> bool:
 		if point.length() < noise.radius + noise.height(point.normalized()) + 0.5:
 			return false
 	return true
+
+
+static func balcony_height(noise: TerrainNoise, tower: Dictionary, town_site: Dictionary) -> float:
+	var up: Vector3 = tower["direction"]
+	var origin: Vector3 = up * (noise.radius + float(tower["height"]) + 18)
+	var town_up: Vector3 = town_site["direction"]
+	var target: Vector3 = town_up * (noise.radius + noise.height(town_up) + 2)
+	var toward: Vector3 = origin.direction_to(target).slide(up).normalized()
+	for height: int in range(30, 6001, 5):
+		if visible(noise, origin + toward * 60 + up * (height + 1.7), target):
+			return float(height + 30)
+	return -1.0

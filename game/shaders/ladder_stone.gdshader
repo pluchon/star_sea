@@ -3,11 +3,13 @@ render_mode cull_back;
 #include "weather.gdshaderinc"
 uniform int kind = 0;
 uniform float frost = 0.0;
+uniform float cloth_time = 0.0;
 instance uniform float awake = 0.15;
 varying vec3 stable_position;
 varying float upward;
 varying vec3 object_position;
 void vertex() {
+	if (kind == 3) { VERTEX.z += smoothstep(0.0, 5.0, abs(VERTEX.x) - 19.0) * sin(cloth_time * 1.5 + VERTEX.x * 1.6) * 0.3; }
 	stable_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz - focus_center;
 	upward = dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), normalize(stable_position));
 	object_position = VERTEX;
@@ -16,6 +18,7 @@ void fragment() {
 	vec3 pigment = vec3(0.716, 0.672, 0.578);
 	if (kind == 1) { pigment = vec3(0.112, 0.263, 0.233); }
 	if (kind == 2) { pigment = vec3(0.888, 0.456, 0.102); EMISSION = pigment * awake * 2.0; }
+	if (kind == 3) { pigment = vec3(0.71, 0.40, 0.29); }
 	if (kind == 0) {
 		pigment *= 0.94 + 0.06 * sin(UV.x * 4.0 + UV.y * 3.0);
 		vec2 cell = object_position.xz / 2.0;

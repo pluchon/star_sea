@@ -99,9 +99,18 @@ void fragment() {
 	}
 	// 雨后地面颜色变深，雨停后慢慢变干。
 	if (terrestrial) {
-		float layer = mod(floor((v_height + patch(v_position / 170.0) * 3.0 + patch(v_position / 50.0) * 0.6) / 27.0), 3.0);
-		vec3 strata_color = layer < 1.0 ? vec3(0.381, 0.102, 0.045) : (layer < 2.0 ? vec3(0.584, 0.323, 0.105) : vec3(0.687, 0.610, 0.480));
-		c = mix(c, strata_color * (0.94 + patch(v_position / 50.0) * 0.06), v_marks.r);
+		float warped_height = v_height + sin(v_height * 0.031) * 11.0 + patch(v_position / 160.0) * 7.0;
+		float band = sin(warped_height * 0.17 + sin(warped_height * 0.043) * 2.3);
+		vec3 strata_color = mix(vec3(0.673, 0.571, 0.371), vec3(0.479, 0.376, 0.254), band * 0.5 + 0.5);
+		strata_color = mix(strata_color, vec3(0.434, 0.195, 0.102), smoothstep(0.80, 0.99, sin(warped_height * 0.037)) * 0.32);
+		vec3 radial = normalize(v_position);
+		vec3 flow_position = (v_position - radial * v_height) / 16.0 + radial * v_height / 350.0;
+		float streak = smoothstep(0.15, 0.70, patch(flow_position)) * 0.10;
+		strata_color *= 1.0 - streak;
+		float upward = 1.0 - smoothstep(0.13, 0.38, v_slope);
+		strata_color = mix(strata_color, mix(vec3(0.285, 0.233, 0.119), vec3(0.196, 0.233, 0.100), patch(v_position / 30.0) * 0.5 + 0.5), upward * 0.45);
+		// 峡谷台面使用土与草的色块，冰川仍由独立通道保持原色。
+		c = mix(c, strata_color, max(v_marks.r, v_marks.b));
 		vec3 ice = vec3(0.624, 0.791, 0.855) * (0.95 + smoothstep(0.92, 0.98, sin(v_position.x * 0.035 + v_position.z * 0.012)) * 0.05);
 		c = mix(c, ice, v_marks.g);
 	}

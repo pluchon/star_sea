@@ -20,7 +20,7 @@ func generate(noise: TerrainNoise, hydro: HydrologyData, small_river: bool = fal
 		return null
 	_data.town = CivilizationSiting.town(noise, hydro, _data.ladder, small_river)
 	if _data.town.is_empty():
-		return null
+		return generate(noise, hydro, true) if not small_river else null
 	print("文明烘焙：台地、梯田和墓园")
 	_regions()
 	_noise.features.civilization = CivilizationTerrain.new(_data, noise.radius)

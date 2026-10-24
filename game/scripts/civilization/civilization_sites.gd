@@ -34,6 +34,23 @@ func _ready() -> void:
 			for node: Node in builder.get_children():
 				if node is GeometryInstance3D:
 					(node as GeometryInstance3D).visibility_range_end = 8000.0
+	# 观景环超过三公里时近景已经卸载，保留同源墙体与穹顶作为聚落轮廓。
+	var town_outline: Array[Dictionary] = []
+	for record: Dictionary in _near_placements:
+		if record["piece"] in ["wall", "wall_broken", "wall_low", "wall_low_broken", "door_arch", "dome_broken", "floor_slab", "floor_slab_broken"]:
+			var distant: Dictionary = record.duplicate()
+			distant["collision"] = false
+			town_outline.append(distant)
+	var far_town: RuinBuilder = RuinBuilder.new()
+	far_town.name = "FarTown"
+	add_child(far_town)
+	far_town.build(town_outline)
+	for node: Node in far_town.get_children():
+		if node is GeometryInstance3D:
+			var geometry: GeometryInstance3D = node as GeometryInstance3D
+			geometry.visibility_range_begin = 1300
+			geometry.visibility_range_end = 30000
+			geometry.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var surface: RoadSurface = RoadSurface.new()
 	add_child(surface)
 
@@ -65,7 +82,7 @@ func indoors(local: Vector3) -> bool:
 		if absf(at.x) < half.x and absf(at.z) < half.z and at.y > 0 and at.y < half.y:
 			return true
 	var ladder: Vector3 = LandingPads.frame(_planet).affine_inverse() * local
-	return (absf(ladder.x) < 14 and absf(ladder.z + 30) < 15 and ladder.y > 0 and ladder.y < 32) or (absf(ladder.y - SkyLadder.LIFT_HEIGHT) < 4 and Vector2(ladder.x, ladder.z).length() < 42)
+	return (absf(ladder.x) < 14 and absf(ladder.z + 60) < 18 and ladder.y > 0 and ladder.y < 32) or (absf(ladder.y - LandingPads.balcony_height(_planet)) < 4 and Vector2(ladder.x, ladder.z).length() < 60)
 
 
 func ruin_proximity(local: Vector3) -> float:

@@ -9,6 +9,8 @@ const UPDATE_INTERVAL: float = 0.15
 const MAX_TASKS: int = 6
 const MAX_UPLOADS_PER_FRAME: int = 4
 const COLLISION_RANGE: float = 600.0
+const CANYON_GRID_SPACING: float = 8.0 # 四十五米岩壁至少保留五个采样间隔。
+const CANYON_DETAIL_RANGE: float = 5000.0
 const FACES: Array = [
 	[Vector3(0, 1, 0), Vector3(1, 0, 0), Vector3(0, 0, -1)],
 	[Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1)],
@@ -167,8 +169,29 @@ func _visit(node: TerrainNode, camera_position: Vector3) -> void:
 	if node.wants_collision and node.collider == null:
 		_request_build(node, true)
 	var above_horizon: bool = _above_horizon(node, camera_position)
-	var split: bool = node.depth < MAX_DEPTH and distance < node.edge_m * SPLIT_FACTOR and above_horizon
-	var merge: bool = distance > node.edge_m * MERGE_FACTOR or not above_horizon
+	var canyon_detail: bool = false
+	if _noise.features != null and _noise.features.landforms != null and node.edge_m / GRID > CANYON_GRID_SPACING:
+		var detail_range: float = CANYON_DETAIL_RANGE + (1000 if not node.children.is_empty() else 0)
+		if distance < detail_range:
+			var canyon: Vector3 = _noise.features.landforms.nearest(node.center_local.normalized(), true)
+			canyon_detail = canyon.x < DawnLandforms.CANYON_HALF_WIDTH * 1.1 + node.edge_m * 0.75
+	var town_detail: bool = false
+	if _noise.features != null and _noise.features.civilization != null:
+		var data: CivilizationData = _noise.features.civilization.data
+		var town_up: Vector3 = data.town["direction"]
+		var town: Vector3 = town_up * (radius + float(data.town["level"]))
+		if camera_position.distance_to(town) < 25000:
+			# 远处仍需保留真实城基；粗网格插值会把已经整平的聚落重新埋入山坡。
+			var town_gap: float = node.center_local.normalized().distance_to(town_up) * radius
+			town_detail = node.edge_m / GRID > 8 and town_gap < 200 + node.edge_m
+			var tower: Vector3 = Vector3(data.ladder["direction"]) * (radius + float(data.ladder["height"]) + 18)
+			if not town_detail and node.edge_m / GRID > 16 and camera_position.distance_to(tower) < 8000 and camera_position.length() - radius > 1500:
+				# 观景方向的粗山体可能超出离线视线的三十米余量，保留沿线地形轮廓。
+				var ray_point: Vector3 = Geometry3D.get_closest_point_to_segment(node.center_local, camera_position, town)
+				town_detail = node.center_local.distance_to(ray_point) < node.edge_m + 40
+	var detail: bool = canyon_detail or town_detail
+	var split: bool = node.depth < MAX_DEPTH and (distance < node.edge_m * SPLIT_FACTOR or detail) and above_horizon
+	var merge: bool = (distance > node.edge_m * MERGE_FACTOR and not detail) or not above_horizon
 	if split and node.children.is_empty():
 		var half: float = node.size * 0.5
 		for row: int in 2:

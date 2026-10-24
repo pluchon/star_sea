@@ -14,6 +14,10 @@ static func run(tree: SceneTree) -> Dictionary:
 	var frame: Transform3D = LandingPads.frame(planet)
 	var data: CivilizationData = planet.noise.features.civilization.data
 	var up: Vector3 = frame.basis.y
+	var apron_landing: bool = StarSeaShip.can_land(planet, (frame * Vector3(0, -12, -150)).normalized()).is_empty()
+	var gate_protected: bool = not StarSeaShip.can_land(planet, (frame * Vector3(0, 0, -60)).normalized()).is_empty()
+	if not apron_landing or not gate_protected:
+		failures.append("天梯外侧台地不能降落，或主门保护范围失效。")
 	player.controls_enabled = false
 	player.set_third_person(false)
 	(scene.get_node("SkyDirector") as SkyDirector).time_paused = true
@@ -22,7 +26,14 @@ static func run(tree: SceneTree) -> Dictionary:
 	var town: Vector3 = data.town["direction"]
 	# 四十公里半径下，现有选址的曲率与山体遮挡下半段；保留已交付文明区，记录调整后的可见高度。
 	var spawn_visible: bool = BeaconBake.visible(planet.noise, spawn * (planet.surface_radius(spawn) + 1.7), frame * Vector3(0, 2200, 0))
-	var town_visible: bool = BeaconBake.visible(planet.noise, town * (planet.surface_radius(town) + 1.7), frame * Vector3(0, 2400, 0))
+	var town_visible: bool = BeaconBake.visible(planet.noise, town * (planet.surface_radius(town) + 1.7), frame * Vector3(0, ladder.balcony_height + 20, 0))
+	var far_town: RuinBuilder = planet.get_node("CivilizationSites/FarTown") as RuinBuilder
+	var town_outline: bool = far_town.get_child_count() > 0
+	for node: Node in far_town.get_children():
+		if node is GeometryInstance3D and (node as GeometryInstance3D).visibility_range_end < 25000:
+			town_outline = false
+	if not town_outline:
+		failures.append("观景环没有覆盖古城距离的建筑轮廓。")
 	var base_error: float = 0
 	for ring: int in 3:
 		for angle: int in 16:
@@ -39,13 +50,16 @@ static func run(tree: SceneTree) -> Dictionary:
 	if ladder.far_triangles > 3000:
 		failures.append("天梯远景超过三千三角形。")
 	var flight: Dictionary = FlightSafety.sweep(tree, planet.to_global(frame * Vector3(200, 1000, 0)), planet.to_global(frame * Vector3(-200, 1000, 0)))
-	var flight_blocked: bool = flight.get("tower", false) and Vector2((frame.affine_inverse() * planet.to_local(flight["position"])).x, (frame.affine_inverse() * planet.to_local(flight["position"])).z).length() >= 36.95
+	var flight_blocked: bool = flight.get("tower", false) and Vector2((frame.affine_inverse() * planet.to_local(flight["position"])).x, (frame.affine_inverse() * planet.to_local(flight["position"])).z).length() >= SkyLadderMeshes.radius_at(1000) + 14.95
+	var grazing: Dictionary = FlightSafety.sweep(tree, planet.to_global(frame * Vector3(200, 500, 60)), planet.to_global(frame * Vector3(-200, 500, 60)))
+	if not grazing.get("tower", false):
+		failures.append("扩大后的塔基外侧没有纳入飞行保护。")
 	if not flight_blocked:
 		failures.append("飞船穿过天梯主体。")
 	player.place_at(planet.to_global(frame * Vector3(200, 1000, 0)), -frame.basis.x, up)
 	player.mode = StarSeaPlayer.Mode.FLY
 	player.advance_flight(-frame.basis.x * 1000, 1)
-	var stopped: bool = player.velocity.length() < 0.1 and Vector2(ladder.to_local(player.global_position).x, ladder.to_local(player.global_position).z).length() >= 36.95
+	var stopped: bool = player.velocity.length() < 0.1 and Vector2(ladder.to_local(player.global_position).x, ladder.to_local(player.global_position).z).length() >= SkyLadderMeshes.radius_at(1000) + 14.95
 	if not stopped:
 		failures.append("实际飞行撞塔后没有停止向塔内的速度。")
 	player.mode = StarSeaPlayer.Mode.WALK
@@ -57,7 +71,8 @@ static func run(tree: SceneTree) -> Dictionary:
 			failures.append("天梯近景加载超时。")
 			break
 	player.controls_enabled = true
-	Engine.time_scale = 4
+	# 移动平台按交付时的真实物理步长检查，避免四倍步长越过贴地距离。
+	Engine.time_scale = 1
 	var floor_frames: int = 0
 	var total_frames: int = 0
 	var trips: int = 0
@@ -68,16 +83,23 @@ static func run(tree: SceneTree) -> Dictionary:
 	var walk_time: float = 0
 	var balcony_exit: bool = false
 	var walk_events: Array[Dictionary] = []
-	while elapsed < 110 and trips < 2:
+	var ride_events: Array[Dictionary] = []
+	while elapsed < SkyLadder.LIFT_TIME * 2 + 35 and trips < 2:
 		await tree.physics_frame
-		elapsed += player.get_physics_process_delta_time()
+		var dt: float = player.get_physics_process_delta_time()
+		elapsed += dt
+		if elapsed < 8 and floori(elapsed) != floori(elapsed - dt):
+			ride_events.append({"initial_s": elapsed, "player": str(ladder.to_local(player.global_position)), "lift": str(ladder.lift.position), "mode": int(player.mode), "on_floor": player.is_on_floor(), "waiting": player._waiting_for_ground, "velocity": str(player.velocity), "input": str(Input.get_vector("move_left", "move_right", "move_back", "move_forward"))})
 		if ladder.lift_elapsed >= 0:
 			total_frames += 1
 			var rider_gap: float = absf(ladder.to_local(player.global_position).y - ladder.lift.position.y)
+			if rider_gap > 2 and ride_events.size() < 6:
+				ride_events.append({"time": elapsed, "player": str(ladder.to_local(player.global_position)), "lift": str(ladder.lift.position), "velocity": str(player.velocity), "platform_velocity": str(player.get_platform_velocity()), "on_floor": player.is_on_floor(), "origin_shifts": scene.get_node("FloatingOrigin").get("recenter_count")})
 			maximum_rider_gap = maxf(maximum_rider_gap, rider_gap)
 			floor_frames += int(player.is_on_floor() and rider_gap < 1)
 		if ladder.lift_top != previous_top:
 			trips += 1
+			ride_events.append({"trip": trips, "player": str(ladder.to_local(player.global_position)), "on_floor": player.is_on_floor()})
 			previous_top = ladder.lift_top
 			if trips == 1:
 				walk_phase = 1
@@ -85,14 +107,14 @@ static func run(tree: SceneTree) -> Dictionary:
 				Input.action_press("move_forward")
 		if walk_phase > 0:
 			walk_time += player.get_physics_process_delta_time()
-			if walk_phase == 1 and ladder.to_local(player.global_position).z <= -35:
-				balcony_exit = ladder.to_local(player.global_position).z < -32 and absf(ladder.to_local(player.global_position).y - 240) < 0.3 and player.is_on_floor()
+			if walk_phase == 1 and ladder.to_local(player.global_position).z <= -40:
+				balcony_exit = ladder.to_local(player.global_position).z < -32 and absf(ladder.to_local(player.global_position).y - ladder.balcony_height) < 0.3 and player.is_on_floor()
 				walk_events.append({"phase": "exit", "position": str(ladder.to_local(player.global_position)), "on_floor": player.is_on_floor()})
 				Input.action_release("move_forward")
 				Input.action_press("move_back")
 				walk_phase = 2
 				walk_time = 0
-			elif walk_phase == 2 and ladder.to_local(player.global_position).z >= -22:
+			elif walk_phase == 2 and ladder.to_local(player.global_position).z >= SkyLadder.LIFT_CENTER.z:
 				Input.action_release("move_back")
 				walk_events.append({"phase": "return", "position": str(ladder.to_local(player.global_position)), "on_floor": player.is_on_floor()})
 				walk_phase = 0
@@ -106,7 +128,7 @@ static func run(tree: SceneTree) -> Dictionary:
 	var persistence: Dictionary = LadderPersistenceChecks.run(scene)
 	if not persistence["passed"]:
 		failures.append("升降台行程存档未能往返或非法值没有整体拒绝。")
-	var pad_center: Vector3 = frame * Vector3(0, LandingPads.HEIGHT, -54)
+	var pad_center: Vector3 = frame * Vector3(0, LandingPads.HEIGHT, -LandingPads.DOCK_OFFSET)
 	player.place_at(planet.to_global(pad_center + up * 30), -frame.basis.z, up)
 	player.mode = StarSeaPlayer.Mode.FLY
 	player.ship.attach_to(player)
@@ -142,12 +164,16 @@ static func run(tree: SceneTree) -> Dictionary:
 		failures.append("断口下方空中召唤未在十秒内进入驾驶。")
 	var report: Dictionary = {"passed": failures.is_empty(), "failures": failures, "spawn_distance_m": distance, "spawn_visible": spawn_visible, "town_visible": town_visible, "base_error_m": base_error, "nearest_beacon_m": nearest_beacon, "far_triangles": ladder.far_triangles, "flight_blocked": flight_blocked, "lift_trips": trips, "lift_floor_ratio": floor_ratio, "lift_elapsed_s": elapsed, "pad_ship_error_m": pad_error, "pad_standing": pad_standing, "air_caught": caught, "air_catch_s": catch_time}
 	report["spawn_visible_height_m"] = 2200
-	report["town_visible_height_m"] = 2400
+	report["town_visible_height_m"] = ladder.balcony_height + 20
+	report["town_outline_loaded"] = town_outline
+	report["ride_events"] = ride_events
 	report["balcony_walk_exit"] = balcony_exit
 	report["actual_flight_stopped"] = stopped
+	report["widened_base_flight_blocked"] = grazing.get("tower", false)
 	report["balcony_walk_events"] = walk_events
 	report["persistence"] = persistence
 	report["maximum_rider_gap_m"] = maximum_rider_gap
+	report["ground_landing"] = {"apron_allowed": apron_landing, "gate_protected": gate_protected}
 	var ending: Dictionary = await EndingChecks.run(tree, scene)
 	report["ending"] = ending
 	if not ending["passed"]:

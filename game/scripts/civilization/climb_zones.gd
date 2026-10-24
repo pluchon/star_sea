@@ -14,8 +14,12 @@ var _prop_meshes: Dictionary[String, ArrayMesh] = {}
 func _ready() -> void:
 	var layout: Resource = load(ClimbLayout.LAYOUT_PATH)
 	var data: Dictionary = layout.get("metadata").get("climbs", {})
-	zones.assign(data.get("zones", []).duplicate(true))
 	var planet: Planet = get_parent() as Planet
+	for source: Dictionary in data.get("zones", []):
+		# 烽火塔已替代山顶旧石塔，与 Landmarks 的显示条件一致，旧绳索随之停用。
+		if source["id"] == "peak_rope" and planet.noise.features.civilization != null and not planet.noise.features.civilization.data.beacons.is_empty():
+			continue
+		zones.append(source.duplicate(true))
 	if planet.noise.features.civilization != null:
 		zones.append_array(planet.noise.features.civilization.data.climbs.duplicate(true))
 		var frame: Transform3D = LandingPads.frame(planet)

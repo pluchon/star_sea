@@ -2,6 +2,8 @@ class_name CivilizationTerrain
 extends RefCounted
 
 const ROAD_CELL: float = 64.0 # 道路和明渠的不可变索引格，米。
+const TOWN_ROAD_BLEND_START: float = 128.0 # 城内道路必须切开人工台地，保证步行连通。
+const TOWN_ROAD_BLEND_END: float = 180.0 # 城外恢复原有的一点五米整地限制。
 var data: CivilizationData
 var radius: float
 var _road_index: Dictionary = {}
@@ -74,21 +76,17 @@ func apply(direction: Vector3, base: float, hydro: GlobalHydrology) -> float:
 	var ladder_distance: float = direction.distance_to(data.ladder["direction"]) * radius
 	if ladder_distance < 200:
 		return ladder_height(direction, base)
-	if direction.distance_to(data.town["direction"]) * radius < 32.0:
+	var town_distance: float = direction.distance_to(data.town["direction"]) * radius
+	if town_distance < 22.0:
 		return data.town["level"]
-	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
-		if direction.distance_to(tower["direction"]) * radius < 7.0:
-			return tower["height"]
 	var height: float = regions(direction, base)
-	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
-		var distance: float = direction.distance_to(tower["direction"]) * radius
-		if distance < 16.0:
-			height = lerpf(height, tower["height"], 1.0 - smoothstep(7.0, 16.0, distance))
 	var road: Vector4 = road_at(direction)
 	if road.x < 6.0:
 		var river: Vector4 = hydro.nearest(direction, true)
 		if river.w < 0.0 or river.x > river.z + 15.0:
-			height = lerpf(height, clampf(road.y, height - 1.5, height + 1.5), 1.0 - smoothstep(2.5, 6.0, road.x))
+			var limited: float = clampf(road.y, height - 1.5, height + 1.5)
+			var urban: float = 1.0 - smoothstep(TOWN_ROAD_BLEND_START, TOWN_ROAD_BLEND_END, town_distance)
+			height = lerpf(height, lerpf(limited, road.y, urban), 1.0 - smoothstep(2.5, 6.0, road.x))
 	if not data.aqueduct.is_empty():
 		# 明渠只在触及山坡的短段雕刻；架空段不改变地表。
 		var point: Vector3 = direction * radius
@@ -100,6 +98,11 @@ func apply(direction: Vector3, base: float, hydro: GlobalHydrology) -> float:
 			if distance < 1.7:
 				carve = maxf(carve, 1.2 * (1.0 - smoothstep(0.7, 1.7, distance)))
 		height -= carve
+	# 塔基最后整平，避免道路覆盖缓坡后在塔基边界形成高度突变。
+	for tower: Dictionary in _beacon_index.get(Vector3i((direction * radius / ROAD_CELL).floor()), []):
+		var distance: float = direction.distance_to(tower["direction"]) * radius
+		if distance < 16.0:
+			height = lerpf(height, tower["height"], 1.0 - smoothstep(6.0, 16.0, distance))
 	return height
 
 
@@ -122,8 +125,8 @@ func regions(direction: Vector3, base: float) -> float:
 	var center: Vector3 = data.town["direction"]
 	var distance: float = direction.distance_to(center) * radius
 	var height: float = base
-	if distance < 44.0:
-		height = lerpf(base, data.town["level"], 1.0 - smoothstep(32.0, 44.0, distance))
+	if distance < 34.0:
+		height = lerpf(base, data.town["level"], 1.0 - smoothstep(22.0, 34.0, distance))
 	elif distance < 128.0:
 		var point: Vector2 = town_point(direction)
 		var angle: float = fposmod(atan2(point.y, point.x), TAU)
@@ -165,11 +168,14 @@ func in_clearing(direction: Vector3) -> bool:
 		if direction.distance_to(tower["direction"]) * radius < 8.0:
 			return true
 	var distance: float = direction.distance_to(data.town["direction"]) * radius
-	if distance < 32.0:
-		for gap: Vector3 in data.town.get("paving_gaps", PackedVector3Array()):
-			if direction.distance_to(gap) * radius < 0.9:
-				return false
-		return true
+	if distance < 23.0:
+		var center: Vector3 = data.town["direction"]
+		var toward: Vector3 = center.direction_to(data.ladder["direction"]).slide(center).normalized()
+		var delta: Vector3 = (direction - center) * radius
+		var p: Vector2 = Vector2(delta.dot(toward.cross(center)), delta.dot(toward))
+		# 只沿窄石缝与破碎边缘长草，避免整块方形草地。
+		var seam: float = minf(1 - absf(wrapf(p.x + sin(p.y * 0.8) * 0.06, -1, 1)), 1 - absf(wrapf(p.y + sin(p.x) * 0.05, -1, 1)))
+		return distance < 4 or (distance < 21.0 + sin(p.angle() * 9) and (seam > 0.12 or sin(p.x * 0.7 + p.y * 1.1) < 0.3))
 	if road_at(direction).x < 3.0:
 		return true
 	if distance < 150.0:

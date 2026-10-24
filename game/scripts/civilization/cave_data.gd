@@ -3,6 +3,7 @@ extends Resource
 
 const PATH: String = "res://data/dawn_caves.res"
 const BLOCK: float = 32.0 # 离线网格与运行时加载共用的分块边长，米。
+const GATE_APRON_Z: float = -12.0 # 主入口平段外沿，与洞壁裁切共用，米。
 @export var version: int = 1
 @export var signature: String = ""
 @export var networks: Array[Dictionary] = []
@@ -132,8 +133,8 @@ func apply(direction: Vector3, radius: float, height: float) -> float:
 			continue
 		var weight: float = (1 - smoothstep(32, 56, absf(p.x))) * smoothstep(-length_value - 16, -length_value, p.z) * (1 - smoothstep(-1, 1, p.z))
 		# 平段先覆盖距离场端帽，角色才能从缓坡连续进入零高度洞底。
-		var normal: Vector3 = frame.basis.y - frame.basis.z * float(approach["slope"]) if p.z < -12 else frame.basis.y
-		var origin: Vector3 = frame * Vector3(0, 0, -12)
+		var normal: Vector3 = frame.basis.y - frame.basis.z * float(approach["slope"]) if p.z < GATE_APRON_Z else frame.basis.y
+		var origin: Vector3 = frame * Vector3(0, 0, GATE_APRON_Z)
 		var plane_radius: float = origin.dot(normal) / direction.dot(normal)
 		height = lerpf(height, plane_radius - radius, weight)
 	return height

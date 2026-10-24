@@ -4,11 +4,13 @@ extends RefCounted
 var _noise: TerrainNoise
 var _data: CivilizationData
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _terrain: CivilizationTerrain
 
 
 func _init(noise: TerrainNoise, data: CivilizationData) -> void:
 	_noise = noise
 	_data = data
+	_terrain = CivilizationTerrain.new(data, noise.radius)
 	_rng.seed = CivilizationBake.TOWN_SEED
 
 
@@ -39,26 +41,24 @@ func _plaza() -> void:
 	var right: Vector3 = toward.cross(center).normalized()
 	_add("plaza_ring", center, toward)
 	_add("ring_monument", center, toward, 0.5, Vector3.ONE, "monument")
-	for index: int in 8:
-		var angle: float = index * TAU / 8
-		var direction: Vector3 = _point(center, right, toward, cos(angle) * 18, sin(angle) * 18)
-		_add("column_fallen" if index in [1, 4, 6] else ("column_broken" if index in [2, 7] else "column"), direction, toward.rotated(direction, angle))
-	for index: int in 4:
-		var angle: float = index * TAU / 4
-		_add("lamp_post", _point(center, right, toward, cos(angle) * 26, sin(angle) * 26), toward)
-	for sign_value: float in [-1.0, 1.0]:
-		var direction: Vector3 = _point(center, right, toward, sign_value * 7, 0)
-		_add("statue" if sign_value < 0 else "statue_broken", direction, direction.direction_to(center), 0, Vector3.ONE, "monument")
-	for x: int in range(-30, 31, 2):
-		for y: int in range(-30, 31, 2):
-			if Vector2(x, y).length() > 31 or Vector2(x, y).length() < 4:
+	# 少量生活遗迹按固定种子错落分布，避免环形阵列。
+	for record: Array in [["column_fallen", -12, 7, 0.7], ["column_fallen", 14, -5, -0.4], ["column_fallen", 5, -17, 1.9], ["rubble_1", -16, -5, 0.2], ["rubble_2", 17, 11, -1.0], ["stele", -8, 16, -0.3], ["stele", 15, 3, 0.8], ["sand_drift", -16, -13, 1.3]]:
+		var direction: Vector3 = _point(center, right, toward, record[1], record[2])
+		_add(record[0], direction, toward.rotated(direction, record[3]))
+	_data.trees.append(_point(center, right, toward, -13, -10))
+	for index: int in 5:
+		_add("wall_low_broken" if index == 3 else "wall_low", _point(center, right, toward, 19, -4 + index * 2), right)
+	_add("steps", _point(center, right, toward, 21, 5), right)
+	for x: int in range(-22, 23, 2):
+		for y: int in range(-22, 23, 2):
+			var distance: float = Vector2(x, y).length()
+			if distance > 22 + _rng.randf_range(-2, 1) or distance < 4:
 				continue
-			if _rng.randf() < 0.1:
-				var gaps: PackedVector3Array = _data.town.get("paving_gaps", PackedVector3Array())
-				gaps.append(_point(center, right, toward, x, y))
-				_data.town["paving_gaps"] = gaps
+			if _rng.randf() < (smoothstep(16, 24, distance) * 0.55 + 0.025):
 				continue
-			_add("floor_slab", _point(center, right, toward, x, y), toward, -0.35)
+			var direction: Vector3 = _point(center, right, toward, x, y)
+			var piece: String = "floor_slab_broken" if _rng.randf() < 0.12 else "floor_slab"
+			_add(piece, direction, toward.rotated(direction, _rng.randf_range(-0.025, 0.025) + (PI / 2 if _rng.randf() < 0.5 else 0)), -0.35 + _rng.randf_range(-0.015, 0.015), Vector3(_rng.randf_range(0.93, 0.98), 1, _rng.randf_range(0.93, 0.98)))
 	var well: Vector3 = _point(center, right, toward, 20, 10)
 	for index: int in 8:
 		var angle: float = index * TAU / 8
@@ -73,7 +73,7 @@ func _houses() -> void:
 	var houses: Array[Dictionary] = []
 	var serial: int = 0
 	for sector: Dictionary in _data.sectors:
-		var radius: float = float(sector["inner"]) + 12.0
+		var radius: float = float(sector["inner"]) + (2.0 if int(sector["ring"]) == 0 else 12.0)
 		var count: int = 2 if int(sector["ring"]) > 0 and int(sector["index"]) % 2 == 0 else 1
 		for index: int in count:
 			var angle: float = (float(sector["index"]) + (0.35 + index * 0.3 if count == 2 else 0.5)) * TAU / 12
@@ -267,7 +267,15 @@ func _fields() -> void:
 			for x: int in range(-40, 41, 2):
 				if _rng.randf() < 0.1:
 					continue
-				_add("wall_low", _point(center, along, across, x, y), across)
+				var foot: Vector3 = _point(center, along, across, x, y)
+				if not _blocks_road(foot):
+					_add("wall_low", foot, across)
+
+
+func _blocks_road(direction: Vector3) -> bool:
+	# 为整块墙体和角色胶囊预留道路缺口，视觉模型与碰撞同时移除。
+	var road: Vector4 = _terrain.road_at(direction)
+	return road.x < road.z * 0.5 + 1.5
 
 
 func _retaining_walls() -> void:
@@ -282,7 +290,7 @@ func _retaining_walls() -> void:
 			var heading: Vector3 = along * cos(angle) + bank * sin(angle)
 			var foot: Vector3 = SurfaceSites.offset_direction(center, heading, radius - 1.0, _noise.radius)
 			var height: float = float(sector["level"]) - _noise.height(foot)
-			if height > 0.6:
+			if height > 0.6 and not _blocks_road(foot):
 				_add("wall_low_broken" if _rng.randf() < 0.1 else "wall_low", foot, heading, 0, Vector3(1, height, 1))
 		for neighbor: Dictionary in _data.sectors:
 			if neighbor["ring"] != sector["ring"] or int(neighbor["index"]) != (int(sector["index"]) + 1) % 12 or float(sector["level"]) - float(neighbor["level"]) <= 0.6:
@@ -292,5 +300,5 @@ func _retaining_walls() -> void:
 			for radius_value: int in range(int(sector["inner"]) + 4, int(sector["outer"]) - 3, 2):
 				var foot: Vector3 = SurfaceSites.offset_direction(center, heading, radius_value, _noise.radius)
 				var height: float = float(sector["level"]) - _noise.height(foot)
-				if height > 0.6:
+				if height > 0.6 and not _blocks_road(foot):
 					_add("wall_low", foot, heading.cross(foot).normalized(), 0, Vector3(1, height, 1))

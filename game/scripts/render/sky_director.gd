@@ -157,7 +157,7 @@ func _update_environment() -> void:
 	var caves: CaveSystem = _planet.get_node_or_null("CaveSystem") as CaveSystem
 	cave_blend = caves.cave_blend if caves != null else 0.0
 	_sun.light_energy *= 1 - cave_blend
-	_environment.ambient_light_energy *= lerpf(1.0, 0.08, cave_blend)
+	_environment.ambient_light_energy *= lerpf(1.0, 0.18, cave_blend)
 	if cave_blend > 0:
 		_environment.adjustment_color_correction = null
 	else:

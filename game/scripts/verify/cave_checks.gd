@@ -73,7 +73,8 @@ func _begin() -> void:
 	_check(_caves.is_settled(), "洞穴运行时加载超时。")
 	var walks: Array[Dictionary] = []
 	if "--skip-walk" not in OS.get_cmdline_user_args():
-		Engine.time_scale = 6
+		# 洞口短矮坎在放大的物理步长下可能直接越过，按实际步长验证连续通行。
+		Engine.time_scale = 1
 		var walk_network: Dictionary = network.duplicate(true)
 		var approach_ids: Array[int] = []
 		for road: Dictionary in _planet.noise.features.civilization.data.roads:

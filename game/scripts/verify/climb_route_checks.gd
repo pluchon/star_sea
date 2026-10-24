@@ -15,6 +15,10 @@ func _begin() -> void:
 	var planet: Planet = player.current_planet()
 	var terrain: PlanetTerrain = planet.get_node("Terrain") as PlanetTerrain
 	var zones: ClimbZones = planet.get_node("ClimbZones") as ClimbZones
+	if scene.find_child("PeakTower", true, false) == null:
+		for zone: Dictionary in zones.zones:
+			if zone["id"] == "peak_rope":
+				_failures.append("石塔不存在时仍启用了悬空绳索。")
 	(scene.get_node("SkyDirector") as SkyDirector).time_paused = true
 	player.controls_enabled = false
 	Engine.time_scale = 6.0

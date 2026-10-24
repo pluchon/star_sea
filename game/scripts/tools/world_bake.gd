@@ -55,7 +55,6 @@ func _bake() -> void:
 		if landmark["kind"] == "peak_tower":
 			landmark["point"] = _features.plane(tower_direction)
 	layout.metadata["landmarks"] = _features.landmarks
-	ResourceSaver.save(layout, layout_path)
 	_data = HydrologyData.new()
 	_data.metadata = {"site": _features.site, "center": _features.center, "axis_u": _features.axis_u, "axis_v": _features.axis_v, "volcano": _features.volcano, "volcano_base": _features.volcano_base, "landmarks": _features.landmarks}
 	_data.metadata["landforms"] = layout.metadata["landforms"]
@@ -109,6 +108,7 @@ func _bake() -> void:
 	caves.prepare()
 	_features.caves = caves
 	var gate: Transform3D = network["frame"]
+	var approach_start: Vector3 = (gate * Vector3(0, 0, -float(network["approach"]["length"]))).normalized()
 	var gate_approach: Vector3 = (gate * Vector3(0, 0, -8)).normalized()
 	# 沿已验收的出城道路离开台地，再分岔去神殿，避免新寻路横切古城挡墙。
 	var temple_path: PackedVector3Array = []
@@ -116,11 +116,13 @@ func _bake() -> void:
 		temple_path.append(point)
 		if point.distance_to(_data.civilization.town["direction"]) * _noise.radius >= 220:
 			break
-	var temple_branch: PackedVector3Array = CivilizationPaths.find(_noise, temple_path[-1], gate_approach)
+	var temple_branch: PackedVector3Array = CivilizationPaths.find(_noise, temple_path[-1], approach_start)
 	if temple_branch.is_empty():
 		quit(1)
 		return
 	temple_path.append_array(temple_branch.slice(1))
+	# 寻路先到洞外缓坡起点，再沿坡面进入洞门，避免网格寻路绕到洞顶后折返。
+	temple_path.append_array(CivilizationPaths.resample(PackedVector3Array([approach_start, gate_approach]), _noise.radius).slice(1))
 	_data.civilization.roads.append(CivilizationPaths.road(_noise, temple_path, 2.0, "temple"))
 	_data.civilization.town["cave_gate"] = gate.origin
 	_features.civilization = CivilizationTerrain.new(_data.civilization, _noise.radius)
@@ -137,7 +139,24 @@ func _bake() -> void:
 	_data.civilization.trees.clear()
 	_data.civilization.town["paving_gaps"] = PackedVector3Array()
 	CivilizationBuildings.new(_noise, _data.civilization).build()
+	var balcony_height: float = CivilizationSiting.balcony_height(_noise, _data.civilization.ladder, _data.civilization.town)
+	if balcony_height < 0:
+		push_error("文明烘焙失败：观景环在断口以下无法越过岩壁看到古城。")
+		quit(1)
+		return
+	_data.civilization.ladder["balcony_height"] = balcony_height
 	_data.civilization.echo_anchors = EchoAnchors.bake(_noise, _data.civilization, caves)
+	# 攀爬路线依赖最终山体、石塔位置和栈道高度，不能继续使用改地形前的出口。
+	var climbs: Dictionary = ClimbLayout.generate(_noise)
+	if climbs.is_empty():
+		push_error("攀爬路线生成失败。")
+		quit(1)
+		return
+	layout.metadata["climbs"] = climbs
+	if ResourceSaver.save(layout, layout_path) != OK:
+		push_error("攀爬布局保存失败。")
+		quit(1)
+		return
 	print("烘焙：洞穴距离场与分块网格")
 	CaveMesher.new().generate(caves, _noise)
 	caves.statistics["bake_seconds"] = float(Time.get_ticks_msec() - cave_started) / 1000.0

@@ -8,7 +8,7 @@ static func bake(noise: TerrainNoise, data: CivilizationData, caves: CaveData) -
 	var town: Transform3D = Transform3D(Basis.looking_at(heading, town_up), town_up * (noise.radius + noise.height(town_up)))
 	var up: Vector3 = data.ladder["direction"]
 	var ladder: Transform3D = Transform3D(Basis.looking_at(data.ladder["forward"], up), up * (noise.radius + float(data.ladder["height"]) + 18))
-	var departure: Transform3D = ladder.translated_local(Vector3(0, 0.05, -35))
+	var departure: Transform3D = ladder.translated_local(Vector3(0, 0.05, -70))
 	departure.basis *= Basis(Vector3.UP, PI)
 	var faith: Transform3D = caves.networks[0]["frame"]
 	faith.origin = caves.networks[0]["echo_anchor"]
@@ -26,5 +26,5 @@ static func bake(noise: TerrainNoise, data: CivilizationData, caves: CaveData) -
 	var bridge: Vector3 = (ladder.basis.inverse() * ladder.origin.direction_to(giant)).slide(Vector3.UP).normalized()
 	if bridge.is_zero_approx():
 		bridge = Vector3.BACK
-	var ending: Transform3D = ladder * Transform3D(Basis.looking_at(bridge, Vector3.UP), bridge * 74 + Vector3.UP * LandingPads.HEIGHT)
+	var ending: Transform3D = ladder * Transform3D(Basis.looking_at(bridge, Vector3.UP), bridge * LandingPads.BRIDGE_END + Vector3.UP * LandingPads.HEIGHT)
 	return {"dawn_daily": town.translated_local(Vector3(0, 0.04, 12)), "dawn_faith": faith, "dawn_departure": departure, "dawn_watcher": watcher, "dawn_ending": ending}

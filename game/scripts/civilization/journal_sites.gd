@@ -29,10 +29,10 @@ static func catalog(planet: Planet) -> Dictionary:
 	hall.origin = network["echo_anchor"]
 	add(sites, "temple_hall", "回声洞大厅", hall, 15, "dawn_faith")
 	var ladder: Transform3D = LandingPads.frame(planet)
-	add(sites, "ladder_base", "天梯基座", ladder, 65, "dawn_departure")
-	var balcony: Transform3D = ladder.translated_local(Vector3(0, 240, -36))
+	add(sites, "ladder_base", "天梯基座", ladder, 90, "dawn_departure")
+	var balcony: Transform3D = ladder.translated_local(Vector3(0, LandingPads.balcony_height(planet), -55))
 	add(sites, "ladder_balcony", "天梯观景环", balcony, 20)
-	add(sites, "ladder_break", "天梯断口", ladder.translated_local(Vector3(0, LandingPads.HEIGHT, -54)), 17)
+	add(sites, "ladder_break", "天梯断口", ladder.translated_local(Vector3(0, LandingPads.HEIGHT, -LandingPads.DOCK_OFFSET)), 17)
 	var ordinals: Array[String] = ["第一", "第二", "第三", "第四", "第五", "第六", "第七", "第八", "第九", "第十"]
 	for i: int in data.beacons.size():
 		var frame: Transform3D = BeaconTowers.tower_frame(data.beacons[i], planet.radius).translated_local(Vector3(0, BeaconTowers.TOP, 0))
@@ -74,13 +74,13 @@ static func anchors(planet: Planet, sites: Dictionary) -> Dictionary:
 		if site["echo"] == "dawn_daily":
 			frame = frame.translated_local(Vector3(0, 0.04, 12))
 		if site["echo"] == "dawn_departure":
-			frame = LandingPads.frame(planet).translated_local(Vector3(0, 0.05, -35))
+			frame = LandingPads.frame(planet).translated_local(Vector3(0, 0.05, -70))
 			frame.basis *= Basis(Vector3.UP, PI)
 		if site["echo"] == "dawn_faith":
 			# 第二幅壁画才是环与径；朝向与离线壁画的顺时针角度一致。
 			frame.basis *= Basis(Vector3.UP, TAU / 6 + 0.2)
 		result[site["echo"]] = frame
 	var ladder: SkyLadder = planet.get_node("SkyLadder") as SkyLadder
-	var end: Vector3 = ladder.bridge_direction * 74 + Vector3.UP * LandingPads.HEIGHT
+	var end: Vector3 = ladder.bridge_direction * LandingPads.BRIDGE_END + Vector3.UP * LandingPads.HEIGHT
 	result["dawn_ending"] = LandingPads.frame(planet) * Transform3D(Basis.looking_at(ladder.bridge_direction, Vector3.UP), end)
 	return result

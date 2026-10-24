@@ -33,6 +33,10 @@ func _ready() -> void:
 	atmosphere_material.set_shader_parameter("planet_center", global_position)
 	atmosphere_material.set_shader_parameter("planet_radius", radius)
 	atmosphere_material.set_shader_parameter("atmo_radius", radius + atmosphere_height)
+	if profile == 0:
+		var tower_frame: Transform3D = LandingPads.frame(self)
+		atmosphere_material.set_shader_parameter("tower_origin", tower_frame.origin)
+		atmosphere_material.set_shader_parameter("tower_up", tower_frame.basis.y)
 	if profile == 1:
 		atmosphere_material.set_shader_parameter("day_color", Color(0.77, 0.53, 0.39))
 		atmosphere_material.set_shader_parameter("sunset_color", Color(0.95, 0.37, 0.25))

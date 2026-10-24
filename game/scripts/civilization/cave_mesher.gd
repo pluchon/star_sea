@@ -3,6 +3,8 @@ extends RefCounted
 
 const STEP: float = 0.5 # 回声洞的开凿段需要半米精度，整网共用网格以免异级接缝。
 const CELLS: int = 64 # 每块三十二米；多计算一圈单元，共享边界的顶点完全相同。
+const GATE_TRIM_HALF_WIDTH: float = 8.0 # 主入口端帽的裁切范围，不能影响侧面的第二出口。
+const GATE_FLOOR_OVERLAP: float = 2.0 # 胶囊接触网格边缘前先踏上平段，避免从斜坡撞到地板薄边。
 const CORNERS: Array[Vector3i] = [Vector3i(0,0,0), Vector3i(1,0,0), Vector3i(0,1,0), Vector3i(1,1,0), Vector3i(0,0,1), Vector3i(1,0,1), Vector3i(0,1,1), Vector3i(1,1,1)]
 const EDGES: Array[Vector2i] = [Vector2i(0,1), Vector2i(2,3), Vector2i(4,5), Vector2i(6,7), Vector2i(0,2), Vector2i(1,3), Vector2i(4,6), Vector2i(5,7), Vector2i(0,4), Vector2i(1,5), Vector2i(2,6), Vector2i(3,7)]
 var _noise: FastNoiseLite = FastNoiseLite.new()
@@ -129,8 +131,7 @@ func _surface_clip(origin: Vector3, frame: Transform3D, terrain: TerrainNoise, v
 	# 距离场必须延伸到地表外才能开口，但洞壁网格不能在井口上方形成封闭圆筒。
 	var offsets: PackedFloat32Array = PackedFloat32Array()
 	for vertex: Vector3 in vertices:
-		var world: Vector3 = frame * (vertex + origin)
-		offsets.append(world.length() - terrain.radius - terrain.height(world.normalized()) - 0.2)
+		offsets.append(_clip_distance(vertex + origin, frame, terrain))
 	var result: PackedInt32Array = PackedInt32Array()
 	for start: int in range(0, indices.size(), 3):
 		var triangle: Array[int] = [indices[start], indices[start + 1], indices[start + 2]]
@@ -150,8 +151,7 @@ func _surface_clip(origin: Vector3, frame: Transform3D, terrain: TerrainNoise, v
 				for iteration: int in 12:
 					var t: float = (low + high) * 0.5
 					var p: Vector3 = vertices[a].lerp(vertices[b], t)
-					var world: Vector3 = frame * (p + origin)
-					var distance: float = world.length() - terrain.radius - terrain.height(world.normalized()) - 0.2
+					var distance: float = _clip_distance(p + origin, frame, terrain)
 					if (distance <= 0) == (offsets[a] <= 0):
 						low = t
 					else:
@@ -168,3 +168,12 @@ func _surface_clip(origin: Vector3, frame: Transform3D, terrain: TerrainNoise, v
 		for corner: int in range(1, polygon.size() - 1):
 			result.append_array(PackedInt32Array([polygon[0], polygon[corner], polygon[corner + 1]]))
 	return {"vertices": vertices, "normals": normals, "colors": colors, "cells": cells, "indices": result}
+
+
+func _clip_distance(point: Vector3, frame: Transform3D, terrain: TerrainNoise) -> float:
+	var world: Vector3 = frame * point
+	var distance: float = world.length() - terrain.radius - terrain.height(world.normalized()) - 0.2
+	# 洞外端帽不能形成高出坡面的矮坎；平段与地形重叠后再开洞，保持地面连续。
+	if absf(point.x) < GATE_TRIM_HALF_WIDTH:
+		distance = maxf(distance, CaveData.GATE_APRON_Z + GATE_FLOOR_OVERLAP - point.z)
+	return distance

@@ -6,6 +6,7 @@ const DRAW_RANGE: float = 600.0
 const COLLISION_RANGE: float = 150.0
 const CAVE_SHADER: Shader = preload("res://shaders/cave.gdshader")
 const COLLISION_SLICE: int = 768 # 每次最多创建二百五十六个三角形的碰撞，避免整块构建 BVH。
+const NICHE_EXIT_HALF_WIDTH: float = 1.5 # 环形石碑为侧厅出口保留三米净宽。
 var data: CaveData
 var seen: Array[String] = []
 var cave_blend: float = 0.0
@@ -55,13 +56,50 @@ func _ready() -> void:
 		var groups: Dictionary = {}
 		var frame: Transform3D = network["frame"]
 		var mural: int = 0
-		for original: Dictionary in network["props"]:
+		var records: Array = network["props"].duplicate(true)
+		var hall: Vector3 = Vector3(network["nodes"][4]["local"])
+		for record: Dictionary in records:
+			if record["piece"] == "statue_kneel":
+				record["transform"] = frame * Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * 2), hall + Vector3(0, 1, 7.5))
+		for index: int in 48:
+			var angle: float = index * TAU / 48
+			for y: float in [0.0, 11.3]:
+				records.append({"piece": "wall_low", "transform": frame * Transform3D(Basis(Vector3.UP, angle).scaled(Vector3(1, 0.65, 1.5)), hall + Vector3(sin(angle) * 15.3, y, cos(angle) * 15.3)), "collision": false})
+		for index: int in 6:
+			var angle: float = (index + 0.5) * TAU / 6 + 0.2
+			records.append({"piece": "column", "transform": frame * Transform3D(Basis(Vector3.UP, angle).scaled(Vector3(1.4, 2.55, 1.4)), hall + Vector3(sin(angle) * 15.1, 0.5, cos(angle) * 15.1)), "collision": false})
+		records.append({"piece": "plinth_round", "transform": frame * Transform3D(Basis.IDENTITY.scaled(Vector3(0.5, 0.83, 0.5)), hall + Vector3(0, 0, 7.5))})
+		records.append({"piece": "plaza_ring", "transform": frame * Transform3D(Basis.IDENTITY.scaled(Vector3(0.8, 0.02, 0.8)), hall + Vector3(0, 0.11, 0)), "collision": false, "awake": 0.35})
+		for index: int in 9:
+			var angle: float = index * TAU / 9 + 0.38
+			var at: Vector3 = hall + Vector3(sin(angle) * 13.8, 0.1, cos(angle) * 13.8)
+			records.append({"piece": "rubble" if index % 3 == 0 else "sand_drift", "transform": frame * Transform3D(Basis(Vector3.UP, angle).scaled(Vector3(0.7, 0.3, 0.7)), at), "collision": false})
+		for record: Dictionary in records:
+			RuinKit.mesh(record["piece"])
+		for original: Dictionary in records:
 			var record: Dictionary = original.duplicate()
+			if network["template"] == "echo" and record["piece"] == "stele":
+				var niche: Vector3 = network["nodes"][7]["local"]
+				var exit_direction: Vector3 = (Vector3(network["nodes"][6]["local"]) - niche).slide(Vector3.UP).normalized()
+				var offset: Vector3 = frame.affine_inverse() * Transform3D(record["transform"]).origin - niche
+				# 同时移除模型和碰撞，避免固定角度的石碑挡住旋转拟合后的通道。
+				if offset.length() < 10 and absf(offset.y) < 1 and offset.dot(exit_direction) > 0 and absf(offset.cross(exit_direction).y) < NICHE_EXIT_HALF_WIDTH:
+					continue
 			if record["piece"] == "mural_panel":
 				record["mural"] = mural
+				var lamp: OmniLight3D = OmniLight3D.new()
+				lamp.position = Transform3D(record["transform"]).origin - frame.basis.y * 1.3 - (Transform3D(record["transform"]).origin - frame * hall).slide(frame.basis.y).normalized() * 0.8
+				lamp.omni_range = 5.5
+				lamp.light_color = Color("f4ce8e")
+				lamp.light_energy = 0.8
+				lamp.shadow_enabled = false
+				lamp.visible = false
+				add_child(lamp)
+				_lamps.append(lamp)
 				# 刻纹降到站立人影能够伸手触及的位置，保留墙上的嵌板。
 				var panel_frame: Transform3D = record["transform"]
 				panel_frame.origin -= frame.basis.y * 1.7
+				panel_frame.basis = panel_frame.basis.orthonormalized()
 				record["transform"] = panel_frame
 				mural += 1
 			var at: Vector3 = frame.affine_inverse() * Transform3D(record["transform"]).origin
@@ -114,7 +152,7 @@ func _build_shaft(record: Dictionary) -> void:
 	_shaft_materials.append(material_value)
 	var cone: CylinderMesh = CylinderMesh.new()
 	cone.top_radius = 3.8
-	cone.bottom_radius = 7
+	cone.bottom_radius = 8.5
 	cone.height = length_value
 	cone.radial_segments = 24
 	cone.rings = 1
@@ -131,7 +169,7 @@ func _build_shaft(record: Dictionary) -> void:
 	var bounce: OmniLight3D = OmniLight3D.new()
 	bounce.position = target + up * 4
 	bounce.omni_range = 18
-	bounce.light_energy = 1.2
+	bounce.light_energy = 2.8
 	bounce.light_color = Color("fff0d2")
 	bounce.shadow_enabled = false
 	bounce.visible = false
@@ -194,7 +232,7 @@ func _process(delta: float) -> void:
 		_time += delta
 	for material_value: ShaderMaterial in _shaft_materials:
 		material_value.set_shader_parameter("phase", _time)
-		material_value.set_shader_parameter("strength", 0.04 if _planet.to_local(camera.global_position).normalized().dot(director.sun_direction) > 0 else 0.012)
+		material_value.set_shader_parameter("strength", 0.18 if _planet.to_local(camera.global_position).normalized().dot(director.sun_direction) > 0 else 0.045)
 		material_value.set_shader_parameter("tint", Color("fff0d2") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed"))
 	for material_value: ShaderMaterial in _dust_materials:
 		material_value.set_shader_parameter("phase", _time)
@@ -212,7 +250,7 @@ func _process(delta: float) -> void:
 				_lamps[index].light_energy = 18 if local.normalized().dot(director.sun_direction) > 0 else 5.4
 				_lamps[index].light_color = Color("fff0d2") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed")
 			elif _lamps[index].has_meta("shaft_bounce"):
-				_lamps[index].light_energy = 1.2 if local.normalized().dot(director.sun_direction) > 0 else 0.36
+				_lamps[index].light_energy = 2.8 if local.normalized().dot(director.sun_direction) > 0 else 0.8
 	_update_chunks(local)
 
 

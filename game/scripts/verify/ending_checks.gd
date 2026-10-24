@@ -16,7 +16,18 @@ static func run(tree: SceneTree, scene: Node) -> Dictionary:
 		failures.append("四段回声没有唤醒断口。")
 	sky.time_paused = true
 	var frame: Transform3D = echoes.anchors["dawn_ending"]
-	player.place_at(planet.to_global(frame * Vector3(0, 0.12, 18)), -frame.basis.z, frame.basis.y)
+	var platform_frame: Transform3D = LandingPads.frame(planet)
+	var ladder: SkyLadder = planet.get_node("SkyLadder") as SkyLadder
+	# 从真实下船位置走过石环和栈桥，不能只验证栈桥末端而漏掉护栏封路。
+	var route: Array[Vector3] = [platform_frame * Vector3(0, LandingPads.HEIGHT, -70)]
+	var angle: float = Vector3.FORWARD.signed_angle_to(ladder.bridge_direction, Vector3.UP)
+	var count: int = maxi(1, ceili(absf(angle) / 0.12))
+	for index: int in range(1, count + 1):
+		var direction: Vector3 = Vector3.FORWARD.rotated(Vector3.UP, angle * index / count)
+		route.append(platform_frame * (direction * 70 + Vector3.UP * LandingPads.HEIGHT))
+	var bridge_start: Vector3 = route[-1]
+	route.append(frame.origin)
+	player.place_at(planet.to_global(platform_frame * Vector3(-4, LandingPads.HEIGHT + 0.12, -LandingPads.DOCK_OFFSET)), -platform_frame.basis.z, platform_frame.basis.y)
 	player.mode = StarSeaPlayer.Mode.WALK
 	player.controls_enabled = true
 	var deadline: int = Time.get_ticks_msec() + 15000
@@ -24,20 +35,30 @@ static func run(tree: SceneTree, scene: Node) -> Dictionary:
 		await tree.physics_frame
 	var standing: bool = player.is_on_floor()
 	var walked: float = 0
+	var target: int = 0
+	var previous_scale: float = Engine.time_scale
+	Engine.time_scale = 1
 	Input.action_press("move_forward")
-	deadline = Time.get_ticks_msec() + 15000
+	deadline = Time.get_ticks_msec() + 120000
 	while Time.get_ticks_msec() < deadline:
 		await tree.physics_frame
-		var at: Vector3 = frame.affine_inverse() * planet.to_local(player.global_position)
-		walked = 18 - at.z
-		if at.z < 3:
-			break
-		if absf(at.y) > 1:
+		var position: Vector3 = planet.to_local(player.global_position)
+		var up: Vector3 = position.normalized()
+		var desired: Vector3 = route[target] - position
+		if desired.slide(up).length() < 0.65 and absf(desired.dot(up)) < 0.5:
+			target += 1
+			if target == route.size():
+				break
+			continue
+		player.global_basis = Basis.looking_at(planet.global_basis * desired.slide(up).normalized(), planet.global_basis * up)
+		if absf((frame.affine_inverse() * position).y) > 1:
 			break
 	Input.action_release("move_forward")
+	Engine.time_scale = previous_scale
 	for i: int in 30:
 		await tree.physics_frame
 	var at: Vector3 = frame.affine_inverse() * planet.to_local(player.global_position)
+	walked = bridge_start.distance_to(planet.to_local(player.global_position)) if target == route.size() else 0
 	var bridge_walk: bool = standing and walked >= 15 and player.is_on_floor() and absf(at.y) < 0.3
 	if not bridge_walk:
 		failures.append("无法实际沿桥面走到终章圆台。")
@@ -48,6 +69,11 @@ static func run(tree: SceneTree, scene: Node) -> Dictionary:
 	var triggered: bool = echoes.active == "dawn_ending"
 	if not triggered:
 		failures.append("圆台静止没有触发终章。")
+		var blockers: Array[String] = []
+		for index: int in player.get_slide_collision_count():
+			blockers.append(str(player.get_slide_collision(index).get_collider().get_path()))
+		# 上游路线失败时保留定位信息，不能继续使用尚未生成的零向量光路。
+		return {"passed": false, "failures": failures, "bridge_walk": bridge_walk, "dock_to_bridge": target == route.size(), "route_target": target, "end_local": str(at), "platform_local": str(platform_frame.affine_inverse() * planet.to_local(player.global_position)), "standing": standing, "blockers": blockers, "waiting_for_ground": player._waiting_for_ground}
 	echoes.frozen = true
 	if triggered:
 		echoes.show_time(28)
@@ -72,4 +98,4 @@ static func run(tree: SceneTree, scene: Node) -> Dictionary:
 	if not resumed or not once:
 		failures.append("结尾恢复或单次播放失败。")
 	sky.time_paused = true
-	return {"passed": failures.is_empty(), "failures": failures, "bridge_walk_m": walked, "bridge_walk": bridge_walk, "end_local": str(at), "triggered": triggered, "points": ending.points.size(), "credits_began": began, "save_blocked": save_blocked, "resumed": resumed, "played_once": once}
+	return {"passed": failures.is_empty(), "failures": failures, "bridge_walk_m": walked, "bridge_walk": bridge_walk, "dock_to_bridge": target == route.size(), "end_local": str(at), "triggered": triggered, "points": ending.points.size(), "credits_began": began, "save_blocked": save_blocked, "resumed": resumed, "played_once": once}

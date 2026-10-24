@@ -43,7 +43,7 @@ static func source_signature() -> String:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
 	for path: String in ["res://scripts/civilization/dawn_landforms.gd", "res://scripts/civilization/landform_layout.gd"]:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
-	for path: String in ["civilization_data", "civilization_siting", "civilization_terrain", "civilization_paths", "civilization_bake", "civilization_buildings"]:
+	for path: String in ["civilization_data", "civilization_siting", "civilization_terrain", "civilization_paths", "civilization_bake", "civilization_buildings", "climb_layout"]:
 		text += FileAccess.get_file_as_string("res://scripts/civilization/" + path + ".gd").replace("\r\n", "\n")
 	text += FileAccess.get_file_as_string("res://scripts/civilization/beacon_bake.gd").replace("\r\n", "\n")
 	for path: String in ["res://scripts/civilization/echo_anchors.gd", "res://scripts/player/landing_pads.gd", "res://scenes/main.tscn"]:

@@ -139,7 +139,8 @@ static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 		var b: Vector3 = nodes[edge["b"]]["local"]
 		var shaft: bool = edge["profile"] == "shaft"
 		if edge["a"] == 0:
-			a.z -= 8
+			# 端帽必须位于洞外缓坡下方，不能在平段末端留下阻挡步行的矮坎。
+			a.z -= 16
 		if edge["b"] == 9:
 			b.z -= 8
 		if shaft:
@@ -193,7 +194,10 @@ static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 			for z: int in range(-floori(radius), floori(radius) + 1, 2):
 				if Vector2(x, z).length() > radius or posmod(x * 37 + z * 17, 19) == 0:
 					continue
-				_prop(network, "floor_slab", center + Vector3(x, -0.30, z), 0)
+				var wide: bool = posmod(x, 4) == 0 and absf(x + 2) + absf(z) < radius - 2
+				if posmod(x, 4) == 2 and absf(x - 2) + absf(z) < radius - 2:
+					continue
+				_prop(network, "floor_slab", center + Vector3(x + (1 if wide else 0), -0.30, z), 0, Vector3(1.96 if wide else 0.97, 1, 0.96))
 				network["props"][-1]["collision"] = false
 	for index: int in 12:
 		var angle: float = index * TAU / 12

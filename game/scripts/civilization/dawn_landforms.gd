@@ -123,7 +123,9 @@ func height(direction: Vector3, base: float) -> float:
 		var half_width: float = CANYON_HALF_WIDTH * (0.85 if signed > 0.0 else 1.1)
 		var across: float = clampf((near.x - CANYON_FLOOR_HALF_WIDTH) / (half_width - CANYON_FLOOR_HALF_WIDTH), 0.0, 1.0)
 		var tier: float = across * CANYON_LAYERS
-		var wall: float = (floorf(tier) + smoothstep(0.75, 0.97, fposmod(tier, 1.0))) / CANYON_LAYERS
+		# 十一级大台阶；每级陡坡占横向间距一半，最窄约 45 米，避免远景采样形成针状锯齿。
+		var phase: float = fposmod(tier, 1.0)
+		var wall: float = (floorf(tier) + phase * 0.04 + smoothstep(0.50, 1.0, phase) * 0.96) / CANYON_LAYERS
 		var carved: float = floor_level + depth * wall
 		# 谷底始终保持出水坡度，最外侧平滑接回原高原。
 		result = lerpf(carved, result, smoothstep(half_width, half_width + 900.0, near.x))
@@ -138,4 +140,5 @@ func surface_marks(direction: Vector3, elevation: float, slope: float) -> Color:
 	var near: Vector3 = nearest(direction, true)
 	var wall: float = (1.0 - smoothstep(1100.0, CANYON_HALF_WIDTH, near.x)) * smoothstep(0.15, 0.5, slope)
 	var glacier: float = smoothstep(2200.0, 2500.0, elevation) * (1.0 - smoothstep(0.15, 0.3, slope)) * (1.0 - smoothstep(5000.0, 7000.0, nearest(direction).x))
-	return Color(wall, glacier, 0, 0)
+	var canyon_region: float = (1.0 - smoothstep(CANYON_HALF_WIDTH * 1.1, CANYON_HALF_WIDTH * 1.1 + 200, near.x)) * smoothstep(CANYON_FLOOR_HALF_WIDTH + 40, CANYON_FLOOR_HALF_WIDTH + 100, near.x)
+	return Color(wall, glacier, canyon_region, 0)

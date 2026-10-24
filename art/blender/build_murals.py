@@ -13,12 +13,12 @@ def line(points):
     curve=bpy.data.curves.new('浅浮雕刻线','CURVE')
     curve.dimensions='3D'
     curve.resolution_u=2
-    curve.bevel_depth=.024
+    curve.bevel_depth=.072
     curve.bevel_resolution=1
     s=curve.splines.new('BEZIER')
     s.bezier_points.add(len(points)-1)
     for b,(x,z) in zip(s.bezier_points,points):
-        b.co=(x,.17,z)
+        b.co=(x,.23,z)
         b.handle_left_type=b.handle_right_type='VECTOR'
     o=bpy.data.objects.new('刻线',curve)
     bpy.context.collection.objects.link(o)

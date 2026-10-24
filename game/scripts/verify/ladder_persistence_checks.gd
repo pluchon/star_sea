@@ -12,7 +12,7 @@ static func run(scene: Node) -> Dictionary:
 	var state: Dictionary = {"top": false, "target_top": true, "elapsed": 20.0}
 	ladder.restore_lift(state)
 	var frame: Transform3D = LandingPads.frame(planet)
-	player.place_at(planet.to_global(frame * (SkyLadder.LIFT_CENTER + Vector3.UP * 120.05)), -frame.basis.z, frame.basis.y)
+	player.place_at(planet.to_global(frame * (SkyLadder.LIFT_CENTER + Vector3.UP * (ladder.balcony_height * SkyLadder.lift_fraction(20) + 0.05))), -frame.basis.z, frame.basis.y)
 	player.mode = StarSeaPlayer.Mode.WALK
 	var expected: Vector3 = player.global_position
 	var saved: Error = JourneyStore.save(scene, path)
@@ -23,7 +23,7 @@ static func run(scene: Node) -> Dictionary:
 	var roundtrip: bool = saved == OK and restored == OK and error < 0.01 and ladder.lift_state() == state
 	var config: ConfigFile = ConfigFile.new()
 	config.load(path)
-	var invalid: Array = [0, [], {"top": false}, {"top": 0, "target_top": true, "elapsed": 2.0}, {"top": false, "target_top": true, "elapsed": NAN}, {"top": false, "target_top": true, "elapsed": -0.5}, {"top": false, "target_top": true, "elapsed": 41.0}, {"top": true, "target_top": true, "elapsed": 10.0}]
+	var invalid: Array = [0, [], {"top": false}, {"top": 0, "target_top": true, "elapsed": 2.0}, {"top": false, "target_top": true, "elapsed": NAN}, {"top": false, "target_top": true, "elapsed": -0.5}, {"top": false, "target_top": true, "elapsed": SkyLadder.LIFT_TIME + 1}, {"top": true, "target_top": true, "elapsed": 10.0}]
 	var rejected: int = 0
 	for value: Variant in invalid:
 		config.set_value("journey", "ladder_lift", value)

@@ -2,6 +2,8 @@ class_name ClimbLayout
 extends RefCounted
 
 const LAYOUT_PATH: String = "res://data/dawn_layout.tres"
+const FACE_MIN_GRADE: float = 1.0 # 宽岩壁从坡度一处进入攀爬，覆盖改宽后不足二的坡面。
+const EXIT_RUNOUT: float = 6.0 # 末段延至缓坡，避免出口仍停在陡壁上。
 
 
 static func generate(noise: TerrainNoise) -> Dictionary:
@@ -42,7 +44,7 @@ static func generate(noise: TerrainNoise) -> Dictionary:
 	for meter: int in range(400, 1400):
 		var a: Vector3 = SurfaceSites.offset_direction(center, side, meter, noise.radius)
 		var b: Vector3 = SurfaceSites.offset_direction(center, side, meter + 1, noise.radius)
-		var steep: bool = noise.height(b) - noise.height(a) > 2.0
+		var steep: bool = noise.height(b) - noise.height(a) > FACE_MIN_GRADE
 		if steep and first < 0:
 			first = meter
 		elif not steep and first >= 0:
@@ -63,6 +65,8 @@ static func generate(noise: TerrainNoise) -> Dictionary:
 	assert(selected.size() == 3, "峡谷没有找到 120～200 米的三级攀爬路线。")
 	for index: int in selected.size():
 		var run: Vector2i = selected[index]
+		if index == selected.size() - 1:
+			run.y += int(EXIT_RUNOUT)
 		var low: Vector3 = SurfaceSites.offset_direction(center, side, run.x, noise.radius)
 		var high: Vector3 = SurfaceSites.offset_direction(center, side, run.y, noise.radius)
 		bottom = surface(noise, low)

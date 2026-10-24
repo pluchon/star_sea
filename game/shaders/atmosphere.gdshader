@@ -9,6 +9,9 @@ uniform float planet_radius;
 uniform float atmo_radius;
 uniform float density = 1.5;
 uniform float falloff = 4.0;
+uniform vec3 tower_origin = vec3(0.0);
+uniform vec3 tower_up = vec3(0.0);
+uniform float tower_pixel_radius = 0.0;
 uniform vec3 day_color : source_color = vec3(0.52, 0.74, 1.0);
 uniform vec3 sunset_color : source_color = vec3(1.0, 0.56, 0.38);
 uniform vec3 night_color : source_color = vec3(0.03, 0.04, 0.10);
@@ -66,5 +69,10 @@ void fragment() {
 		optical += d;
 	}
 	ALBEDO = sum / max(weight, 1e-5);
-	ALPHA = clamp(1.0 - exp(-optical), 0.0, 1.0);
+	// 用不透明深度终点识别塔身，仅减弱塔面前方的大气，天空和山体保持原值。
+	vec3 endpoint = ro + rd * scene_dist - planet_center - tower_origin;
+	float tower_height = dot(endpoint, tower_up);
+	float tower_radius = max(mix(60.0, 38.0, clamp(tower_height / 1000.0, 0.0, 1.0)), scene_dist * tower_pixel_radius);
+	bool tower_surface = length(tower_up) > 0.5 && tower_height > 300.0 && tower_height < 6199.0 && abs(length(endpoint - tower_up * tower_height) - tower_radius) < 2.0;
+	ALPHA = clamp(1.0 - exp(-optical * (tower_surface ? 0.6 : 1.0)), 0.0, 1.0);
 }

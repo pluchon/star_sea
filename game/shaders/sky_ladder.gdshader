@@ -1,11 +1,18 @@
 shader_type spatial;
 render_mode cull_disabled;
 #include "weather.gdshaderinc"
-uniform float awake = 0.15;
+uniform float awake = 0.3;
 uniform float echo_rise = -1.0;
 uniform bool hide_base = false;
+uniform float pixel_radius = 0.0;
 varying vec3 stable_position;
-void vertex() { stable_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz - focus_center; }
+void vertex() {
+	// 远景按十二像素轮廓预留抗锯齿边缘，保证实色宽度；近景和物理尺寸使用真实半径。
+	vec3 axis_point = (MODEL_MATRIX * vec4(0.0, VERTEX.y, 0.0, 1.0)).xyz;
+	float radius = length(VERTEX.xz);
+	VERTEX.xz *= max(1.0, distance(axis_point, CAMERA_POSITION_WORLD) * pixel_radius / max(radius, 0.01));
+	stable_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz - focus_center;
+}
 void fragment() {
 	if (hide_base && UV.y < 300.0) { discard; }
 	float collar = 1.0 - step(3.0, abs(mod(UV.y + 60.0, 120.0) - 60.0));
@@ -15,6 +22,8 @@ void fragment() {
 	ALBEDO = mix(stone, vec3(0.16, 0.32, 0.27), collar);
 	float response = (echo_rise >= 0.0 && UV.y <= echo_rise * 6200.0) ? 1.0 : 0.0;
 	EMISSION = vec3(1.0, 0.61, 0.20) * (ring + line * 0.7) * max(awake, response) * 1.8;
+	float edge = pow(1.0 - max(dot(NORMAL, VIEW), 0.0), 3.0);
+	EMISSION += vec3(0.55, 0.52, 0.42) * edge * 0.4;
 	ROUGHNESS = 0.85;
 }
 #include "toon_light.gdshaderinc"

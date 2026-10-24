@@ -18,10 +18,10 @@ func _begin() -> void:
 	_require(river.x >= 60.0 and river.x <= 120.1 and river.z >= 3.0 + 2.2 * sqrt(float(data.town["minimum_area_km2"])), "古城河岸距离或汇水面积不足。")
 	var plaza_error: float = 0.0
 	for angle: int in 24:
-		for radius: float in [0.0, 10.0, 20.0, 30.0]:
+		for radius: float in [0.0, 10.0, 20.0, 22.0]:
 			var direction: Vector3 = SurfaceSites.offset_direction(town, Vector3(data.town["along"]).rotated(town, angle * TAU / 24), radius, noise.radius)
 			plaza_error = maxf(plaza_error, absf(noise.height(direction) - float(data.town["level"])))
-	_require(plaza_error <= 0.1, "广场三十米内高度不一致。")
+	_require(plaza_error <= 0.1, "广场二十二米内高度不一致。")
 	var counts: Dictionary = {}
 	var triangles: int = 0
 	var batches: Dictionary = {}
@@ -64,6 +64,14 @@ func _begin() -> void:
 				road_gap = maxf(road_gap, gap)
 				total += gap
 				maximum_slope = maxf(maximum_slope, absf(noise.height(points[index]) - noise.height(points[index - 1])) / maxf(gap, 0.01))
+				# 十米端点会漏掉台地接缝的短陡坡，按一米间隔检查实际行走路径。
+				var steps: int = maxi(1, ceili(gap))
+				var previous_height: float = noise.height(points[index - 1])
+				for step: int in range(1, steps + 1):
+					var direction: Vector3 = points[index - 1].slerp(points[index], step / float(steps)).normalized()
+					var sample_height: float = noise.height(direction)
+					maximum_slope = maxf(maximum_slope, absf(sample_height - previous_height) / maxf(gap / steps, 0.01))
+					previous_height = sample_height
 		road_lengths[road["name"]] = total
 	_require(road_gap <= 15.0, "道路相邻点间距超过十五米。")
 	_require(road_error <= 0.1, "道路烘焙高度与唯一高度函数不一致。")

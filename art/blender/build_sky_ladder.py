@@ -16,6 +16,8 @@ bronze = bpy.data.materials.new('Patina')
 bronze.diffuse_color = (.19, .34, .29, 1)
 glyph = bpy.data.materials.new('Glyph')
 glyph.diffuse_color = (1, .68, .27, 1)
+cloth = bpy.data.materials.new('Cloth')
+cloth.diffuse_color = (.71, .40, .29, 1)
 
 def reset():
     bpy.ops.object.select_all(action='SELECT')
@@ -116,6 +118,39 @@ def export(name, parts, budget=16000):
         bpy.ops.object.transform_apply(location=False,rotation=True,scale=False)
     modeling.preview('ladder_'+name,[obj],ROOT/'test-output/models')
 
+
+reset()
+parts=[]
+# 六度一根的石肋沿真实收分截面上升，门前保留三十五米净空。
+for side in range(60):
+    angle=side*math.tau/60
+    vertices=[]
+    levels=[0,35,60,90,120,150,180,210,240,270,300]
+    for z in levels:
+        radius=60-22*z/1000
+        for lateral,outward in [(-.48,-.3),(-.32,1.1),(.32,1.1),(.48,-.3)]:
+            vertices.append((math.sin(angle)*(radius+outward)+math.cos(angle)*lateral,math.cos(angle)*(radius+outward)-math.sin(angle)*lateral,z))
+    faces=[]
+    for level in range(len(levels)-1):
+        if level==0 and abs((angle+math.pi)%math.tau-math.pi)<.36:continue
+        for edge in range(3):faces.append((level*4+edge,level*4+edge+1,(level+1)*4+edge+1,(level+1)*4+edge))
+    parts.append(mesh('竖向石肋',vertices,faces))
+for z in range(30,301,30):
+    radius=60-22*z/1000
+    parts.append(ring('浅浮雕横带',radius-.15,radius+.55,.8,.36 if z<35 else 0,math.tau-.36 if z<35 else math.tau,segments=60))
+for side in range(4):
+    angle=(side+.5)*math.tau/4
+    vertices=[]
+    for radial,z in [(58,0),(101,-6),(58,60)]:
+        for width in [-4,4]:vertices.append((math.sin(angle)*radial+math.cos(angle)*width,math.cos(angle)*radial-math.sin(angle)*width,z))
+    parts.append(mesh('斜撑石扶壁',vertices,[(0,2,4),(1,5,3),(0,1,3,2),(2,3,5,4),(4,5,1,0)]))
+for side in [-1,1]:
+    x,y=side*19,91
+    parts.append(curve('旗杆',[(x,y,-6),(x,y,5)],.13,bronze))
+    vertices=[(x,y,4.6),(x+side*4,y+.4,4.4),(x+side*5.2,y+.2,3.8),(x+side*3.2,y+.4,2.8),(x+side*4.4,y+.1,1.9),(x+side*2.3,y+.3,1.7),(x,y,1.5)]
+    parts.append(mesh('残破的旗',vertices,[(0,i,i+1) for i in range(1,6)],cloth))
+export('base_detail',parts,18000)
+
 reset()
 parts=[ring('升降圆盘',0,6,.7,segments=64)]
 parts.append(ring('铜框边缘',5.65,6.05,.16,segments=64,material=bronze))
@@ -123,21 +158,26 @@ parts.append(curve('环与径',[(2.2*math.cos(a),2.2*math.sin(a),.025) for a in 
 parts.append(curve('径',[(0,-2.2,.025),(0,-4.5,.025)],.045,glyph))
 export('lift',parts,5000)
 reset()
-parts=[ring('观景石环',30,42,.8)]
+parts=[ring('观景石环',36,60,.8)]
 for start,end in [(.12,2.7),(3.3,5.65)]:
-    points=[(41.5*math.sin(a),41.5*math.cos(a),1.2) for a in [start+(end-start)*i/60 for i in range(61)]]
+    points=[(59.5*math.sin(a),59.5*math.cos(a),1.2) for a in [start+(end-start)*i/60 for i in range(61)]]
     parts.append(curve('残存扶手',points,.15))
     for i in range(0,61,5):
         x,y,z=points[i]
         parts.append(curve('支柱',[(x,y,0),(x,y,z)],.13))
-parts.append(plate('升降台出口',12,8))
-parts[-1].location.y=31
+parts.append(plate('升降台出口',16,14))
+parts[-1].location.y=35
 export('balcony',parts)
 reset()
 parts=[ring('断口石环',22,44,1.2)]
-parts.append(curve('残存扶手',[(43.4*math.sin(a),43.4*math.cos(a),1.15) for a in [i*math.tau/60 for i in range(41)]],.14))
+# 停泊台与栈桥连接处留出通道，不能用完整扶手横断主线。
+rail_spans=[(0,1.45),(2.25,2.85),(3.45,4*math.pi/3)]
+for start,end in rail_spans:
+    count=max(8,math.ceil((end-start)*20))
+    parts.append(curve('残存扶手',[(43.4*math.sin(a),43.4*math.cos(a),1.15) for a in [start+(end-start)*i/count for i in range(count+1)]],.14))
 for i in range(40):
     a=i*math.tau/60
+    if not any(start+.04<a<end-.04 for start,end in rail_spans):continue
     parts.append(curve('残缺护栏',[(43.4*math.sin(a),43.4*math.cos(a),0),(43.4*math.sin(a),43.4*math.cos(a),1.15)],.18))
 parts.append(plate('停泊石台',36,24,1.2))
 parts[-1].location.y=-54
@@ -152,19 +192,24 @@ parts[-1].location.y=30
 export('gangway',parts,4500)
 reset()
 parts=[]
-# 从连续拱形带面挤出门框，内轮廓二十四米高，保留完整门洞。
-path=[(-9,0),(-9,14)]+[(9*math.cos(math.pi-i*math.pi/24),14+10*math.sin(math.pi-i*math.pi/24)) for i in range(25)]+[(9,0)]
-vertices=[]
-for x,z in path:
-    outward=Vector((x,z-14)).normalized() if z>14 else Vector((-1 if x<0 else 1,0))
-    for y,extra in [(-2,0),(2,0),(2,3),(-2,3)]:vertices.append((x+outward.x*extra,y,z+outward.y*extra))
-faces=[]
-for i in range(len(path)-1):
-    for j in range(4):faces.append((i*4+j,i*4+(j+1)%4,(i+1)*4+(j+1)%4,(i+1)*4+j))
-faces += [(3,2,1,0),(len(vertices)-4,len(vertices)-3,len(vertices)-2,len(vertices)-1)]
-parts.append(mesh('主门',vertices,faces,stone,.18))
-parts.append(curve('门楣环',[(3*math.cos(a),-2.16,26+3*math.sin(a)) for a in [i*math.tau/48 for i in range(49)]],.15,glyph))
-parts.append(curve('门楣径',[(0,-2.16,23),(0,-2.16,20)],.15,glyph))
+# 三层退进石框；内门洞高三十二米，铜边与八米环纹形成近景识别点。
+for layer in range(3):
+    radius=12+layer*1.7
+    path=[(-radius,0),(-radius,20)]+[(radius*math.cos(math.pi-i*math.pi/32),20+radius*math.sin(math.pi-i*math.pi/32)) for i in range(33)]+[(radius,0)]
+    vertices=[]
+    for x,z in path:
+        outward=Vector((x,z-20)).normalized() if z>20 else Vector((-1 if x<0 else 1,0))
+        for y,extra in [(-2.8+layer*.7,0),(1.0+layer*.7,0),(1.0+layer*.7,1.6),(-2.8+layer*.7,1.6)]:
+            extra *= 3.1875 if layer == 2 else 1
+            vertices.append((x+outward.x*extra,y,z+outward.y*extra))
+    faces=[]
+    for i in range(len(path)-1):
+        for j in range(4):faces.append((i*4+j,i*4+(j+1)%4,(i+1)*4+(j+1)%4,(i+1)*4+j))
+    faces += [(3,2,1,0),(len(vertices)-4,len(vertices)-3,len(vertices)-2,len(vertices)-1)]
+    parts.append(mesh('退进石框',vertices,faces,stone,.15))
+    parts.append(curve('铜包边',[(x,-2.95+layer*.7,z) for x,z in path],.13,bronze,1,1))
+parts.append(curve('门楣环',[(4*math.cos(a),2.7,36+4*math.sin(a)) for a in [i*math.tau/64 for i in range(65)]],.15,glyph))
+parts.append(curve('门楣径',[(0,2.7,32),(0,2.7,36)],.15,glyph))
 export('gate',parts,6500)
 reset()
 rng=random.Random(20261021)

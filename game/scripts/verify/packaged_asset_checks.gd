@@ -22,7 +22,7 @@ static func run(tree: SceneTree) -> Dictionary:
 	for index: int in 6:
 		if not ResourceLoader.exists("res://models/cave/mural_%d.glb" % index):
 			failures.append("打包缺少洞穴壁画：%d" % index)
-	for piece: String in ["lift", "balcony", "break_platform", "gangway", "gate", "broken_top", "watcher_lamp"]:
+	for piece: String in ["lift", "balcony", "break_platform", "gangway", "gate", "broken_top", "watcher_lamp", "base_detail"]:
 		if not ResourceLoader.exists("res://models/sky_ladder/" + piece + ".glb"):
 			failures.append("打包缺少天梯模型：" + piece)
 	for sound: String in ["lift_start", "lift_hum", "discover"]:

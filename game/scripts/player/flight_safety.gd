@@ -67,7 +67,8 @@ static func _tower_sweep(planet: Planet, start: Vector3, finish: Vector3) -> Dic
 	var frame: Transform3D = planet.global_transform * LandingPads.frame(planet)
 	var a: Vector3 = frame.affine_inverse() * start
 	var b: Vector3 = frame.affine_inverse() * finish
-	if AABB(Vector3(-50, 0, -50), Vector3(100, 6200, 100)).intersects_segment(a, b) == null:
+	var bound: float = SkyLadderMeshes.radius_at(0) + 15
+	if AABB(Vector3(-bound, 0, -bound), Vector3(bound * 2, 6200, bound * 2)).intersects_segment(a, b) == null:
 		return {}
 	var steps: int = maxi(1, ceili(a.distance_to(b) / SAMPLE_DISTANCE))
 	for index: int in steps + 1:

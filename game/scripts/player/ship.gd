@@ -7,6 +7,9 @@ const BOARD_RANGE: float = 6.0 # 登船距离，米。
 const HOLD_TIME: float = 1.2 # 召唤按住时间，秒。
 const LAND_RADIUS: float = 6.0 # 降落检查范围，米。
 const FOOT_HEIGHT: float = 1.2 # 飞船原点离地高度，米。
+const LADDER_APRON_INNER: float = 132.0 # 避开内侧台阶与扶壁，米。
+const LADDER_APRON_OUTER: float = 174.0 # 为一百八十米台阶预留六米净空。
+const LADDER_APRON_HALF_WIDTH: float = 32.0 # 仅开放主门前方的平整台地，米。
 var state: State = State.PARKED
 var planet: Planet
 var visual: Node3D
@@ -153,13 +156,25 @@ static func can_land(planet_value: Planet, direction: Vector3) -> String:
 		var height: float = planet_value.noise.height(up)
 		if height < 0.5 or planet_value.noise.water_surface(up) > -INF:
 			return "这里不能降落：水面"
-		if planet_value.noise.features != null and planet_value.noise.features.in_clearing(up):
+		if planet_value.noise.features != null and planet_value.noise.features.in_clearing(up) and not _ladder_apron(planet_value, up):
 			return "这里不能降落：地标占地"
 		minimum = minf(minimum, height)
 		maximum = maxf(maximum, height)
 	if maximum - minimum > 2.5:
 		return "这里不能降落：地面不平"
 	return ""
+
+
+static func _ladder_apron(planet_value: Planet, direction: Vector3) -> bool:
+	if planet_value.profile != 0 or planet_value.noise.features.civilization == null:
+		return false
+	var frame: Transform3D = LandingPads.frame(planet_value)
+	if direction.dot(frame.basis.y) < 0.99:
+		return false
+	var point: Vector3 = frame.affine_inverse() * (direction * planet_value.radius)
+	var radial: float = Vector2(point.x, point.z).length()
+	# 每个起落架采样点都必须在安全台地内，原有水面和平整度检查继续生效。
+	return point.z < 0 and absf(point.x) < LADDER_APRON_HALF_WIDTH and radial >= LADDER_APRON_INNER and radial <= LADDER_APRON_OUTER
 
 
 static func find_landing(planet_value: Planet, direction: Vector3, forward: Vector3, initial: bool = false) -> Transform3D:

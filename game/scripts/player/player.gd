@@ -166,6 +166,13 @@ func _physics_process(delta: float) -> void:
 	var distance: float = offset.length()
 	var up: Vector3 = offset / maxf(distance, 0.001)
 	altitude = distance - _planet.surface_radius(up)
+	if mode == Mode.WALK and is_on_floor():
+		for index: int in get_slide_collision_count():
+			var support: Object = get_slide_collision(index).get_collider()
+			if support is AnimatableBody3D:
+				# 升降井保持固定轴向，站立时避免球面重力引入持续的横向滑移。
+				up = (support as AnimatableBody3D).global_basis.y.normalized()
+				break
 	if PlayerTraversal.cave_at(self) >= 0:
 		altitude = 0.0
 	# 近地缩短裁剪范围，使近物可见；太空保留足够的近裁剪距离，避免超大远近比使视锥退化。
@@ -210,12 +217,15 @@ func _physics_process(delta: float) -> void:
 		var speed: float = 8.0 if Input.is_action_pressed("run") and controls_enabled else 4.0
 		if traversal.stumble_left > 0:
 			speed *= 0.5
-		var vertical: Vector3 = up * velocity.dot(up)
+		var vertical: Vector3 = Vector3.ZERO if was_on_floor else up * velocity.dot(up)
 		velocity = direction * speed + vertical
-		if not is_on_floor():
-			velocity -= up * _planet.gravity * delta
-		elif jumping:
+		if not was_on_floor and traversal.climb_jump_left > 0:
+			velocity += traversal.climb_jump_velocity.slide(up)
+		if jumping:
 			velocity = direction * speed + up * 5.0
+		else:
+			# 静止时仍向支撑面施加重力，避免零位移使接触状态隔帧失效。
+			velocity -= up * _planet.gravity * delta
 		var impact: float = -velocity.dot(up)
 		move_and_slide()
 		if is_on_floor():

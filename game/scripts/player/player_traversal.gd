@@ -8,6 +8,9 @@ const GLIDE_BLEND: float = 0.6 # 下落速度过渡时间，秒。
 const TURN_RATE: float = PI * 0.5 # 水平转向上限，弧度每秒。
 const MANTLE_TIME: float = 0.6 # 翻越顶端的时间，秒。
 const MANTLE_ARC_HEIGHT: float = 0.65 # 普通翻越的脚底抬升，米；洞穴岩缘可由攀爬区增加净空。
+const CLIMB_JUMP_PUSH_TIME: float = 0.2 # 跳离后短暂保留向外的速度，避免下一帧步行控制立即覆盖。
+var climb_jump_left: float = 0.0
+var climb_jump_velocity: Vector3 = Vector3.ZERO
 var airborne_time: float = 0.0
 var glide_time: float = 0.0
 var stumble_left: float = 0.0
@@ -57,6 +60,7 @@ func glide_velocity(delta: float, up: Vector3, desired: Vector3, input_forward: 
 
 func update_walk(player: StarSeaPlayer, delta: float, jump: bool) -> bool:
 	stumble_left = maxf(0.0, stumble_left - delta)
+	climb_jump_left = maxf(0.0, climb_jump_left - delta)
 	_reattach_delay = maxf(0.0, _reattach_delay - delta)
 	if player.is_on_floor():
 		# 攀爬使用 move_and_collide，离开时的站立标志可能仍来自旧接触。
@@ -148,7 +152,11 @@ func step_climb(player: StarSeaPlayer, delta: float, input: Vector2, jump: bool)
 	if jump:
 		leave_climb(player)
 		player.velocity = normal * 2.0 + up * 3.0
+		climb_jump_velocity = player.velocity.slide(up)
+		climb_jump_left = CLIMB_JUMP_PUSH_TIME
 		airborne_time = 0.0
+		# 立即离开支撑面，清除攀爬前遗留的站立标志。
+		player.move_and_slide()
 		return
 	var along: Vector3 = current["tangent"]
 	var side: Vector3 = along.cross(normal).normalized()

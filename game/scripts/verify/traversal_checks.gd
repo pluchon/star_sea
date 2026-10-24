@@ -196,6 +196,7 @@ func _begin() -> void:
 	cliff["occupied"] = true
 	await _jump()
 	_check(_player.mode == StarSeaPlayer.Mode.WALK and _player.velocity.dot(cliff["normal"]) > 0.1, "攀爬跳离没有朝外弹开。")
+	_records["climb_jump"] = {"outward_velocity_m_s": _player.velocity.dot(cliff["normal"]), "on_floor": _player.is_on_floor()}
 	await _step(0.5)
 	await _jump()
 	_check(_player.mode == StarSeaPlayer.Mode.GLIDE, "从高处跳离攀爬面后不能展开软翼。")

@@ -1,8 +1,10 @@
 # 星海尽头
 
-Godot 4.7.2（GDScript）单人星球漫游游戏。总体方案见 `docs/方案.md`，最新交付状态见 README 文档表中的最后一份记录。Godot 项目位于 `game/`。
+Godot 4.7.2（GDScript）单人星球漫游游戏。Godot 项目位于 `game/`。文档都在 `docs/`：入口是 `docs/00-总览.md`，当前进度在 `docs/进度.md`，接下来每一步做什么在 `docs/20-分步交接.md`。
 
-第二阶段「远行者」的方案、规格和分步交接在 `docs/远行者/`。分工：Claude 负责方案、规格、调度和验收；编码交给 Grok（Cursor 命令行 `agent -p` 或 xAI 的 Grok Build `grok -p`），按 `docs/远行者/20-分步交接.md` 执行，Claude 也可以直接改。第 0～11 步由 GPT 完成。云端会话里如果被要求改代码，同样先对照这些文档，不和文档冲突。
+分工：Claude 负责方案、规格、调度、审图验收和文档整理；编码交给 GPT 或 Grok（Cursor 命令行 `agent -p` 或 xAI 的 Grok Build `grok -p`），按 `docs/20-分步交接.md` 执行，Claude 也可以直接改。云端会话里如果被要求改代码，同样先对照这些文档，不和文档冲突。
+
+文档保持少而集中：规格做完后由 Claude 把长期规则并进 01、02、03 再删除；每一步的记录写在 `docs/记录/`，里程碑之后清理（见 `docs/02-工程约定.md` 第六节）。不要在 `docs/` 下新建其他文档。
 
 ## 开发规则
 

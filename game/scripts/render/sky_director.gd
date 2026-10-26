@@ -67,8 +67,11 @@ func set_sun_altitude(up: Vector3, horizontal: Vector3, angle_degrees: float) ->
 
 
 func _process(delta: float) -> void:
-	if not get_tree().paused:
-		# 风和云在暂停时间推进时照常流动，验收机位固定太阳但画面仍然是活的。
+	if time_paused:
+		# 固定机位同时固定风痕和云影，避免启动耗时改变截图相位。
+		_weather_time = 0.0
+		_cloud_offset = Vector3.ZERO
+	elif not get_tree().paused:
 		_weather_time += delta
 		_cloud_offset -= wind_direction * wind_strength * 14.0 * delta
 	if not time_paused and not get_tree().paused:

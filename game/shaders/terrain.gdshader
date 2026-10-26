@@ -22,6 +22,7 @@ uniform float snow_height = 1580.0;
 uniform float beach_height = 12.0;
 uniform bool terrestrial = true;
 uniform sampler2D ground_paint : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D meadow_paint : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_paint : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 volcano_center = vec3(0.0);
 uniform float volcano_radius = 0.0;
@@ -98,9 +99,12 @@ void fragment() {
 	// 雨后地面颜色变深，雨停后慢慢变干。
 	if (terrestrial) {
 		float upward = 1.0 - smoothstep(0.13, 0.38, v_slope);
-		vec3 strata_color = strata_pigment(v_position, v_height, upward);
 		// 峡谷台面使用土与草的色块，冰川仍由独立通道保持原色。
-		c = mix(c, strata_color, max(v_marks.r, v_marks.b));
+		float strata_weight = max(v_marks.r, v_marks.b);
+		if (strata_weight > 0.0) {
+			vec3 strata_color = strata_pigment(v_position, v_height, upward);
+			c = mix(c, strata_color, strata_weight);
+		}
 		vec3 ice = vec3(0.624, 0.791, 0.855) * (0.95 + smoothstep(0.92, 0.98, sin(v_position.x * 0.035 + v_position.z * 0.012)) * 0.05);
 		c = mix(c, ice, v_marks.g);
 	}
@@ -113,11 +117,11 @@ void fragment() {
 		float brush = 0.0;
 		if (exposed < 0.95) {
 			vec3 grass_samples = vec3(0.5);
-			if (weights.x > 0.06) { grass_samples.x = texture(ground_paint, v_position.yz / 42.0).r; }
-			if (weights.y > 0.06) { grass_samples.y = texture(ground_paint, v_position.xz / 42.0).r; }
-			if (weights.z > 0.06) { grass_samples.z = texture(ground_paint, v_position.xy / 42.0).r; }
+			if (weights.x > 0.06) { grass_samples.x = texture(meadow_paint, v_position.yz / 24.0).r; }
+			if (weights.y > 0.06) { grass_samples.y = texture(meadow_paint, v_position.xz / 24.0).r; }
+			if (weights.z > 0.06) { grass_samples.z = texture(meadow_paint, v_position.xy / 24.0).r; }
 			float grass_brush = dot(grass_samples, weights);
-			brush = (grass_brush - 0.5) * 1.7 * (1.0 - exposed);
+			brush = (grass_brush - 0.5) * 1.8 * (1.0 - exposed);
 		}
 		if (exposed > 0.05) {
 			vec3 stone_samples = vec3(0.76);
@@ -133,9 +137,10 @@ void fragment() {
 	}
 	if (terrestrial && middle_detail > 0.001 && exposed < 0.99 && snow_line < 0.99) {
 		vec3 side = normalize(cross(normalize(v_position), wind_dir));
-		float wave = sin(dot(v_position, wind_dir) / 9.0 - weather_time * 2.3 + sin(dot(v_position, side) / 17.0) * 1.6);
+		// 晴天暂停时也保留三至十米宽的浅色风痕，不能依赖风速才显现。
+		float wave = sin(dot(v_position, wind_dir) / 5.0 - weather_time * 2.3 + sin(dot(v_position, side) / 17.0) * 1.6);
 		float sweep = smoothstep(0.5, 0.95, wave) * (1.0 - exposed) * (1.0 - snow_line);
-		c *= 1.0 + sweep * 0.065 * middle_detail * wind_speed;
+		c *= 1.0 + sweep * 0.23 * middle_detail;
 	}
 	float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
 	if (terrestrial && near_detail > 0.0) {

@@ -115,7 +115,7 @@ func _ready() -> void:
 			if record["kind"] == "shaft":
 				var spot: SpotLight3D = SpotLight3D.new()
 				spot.spot_range = float(record["range"]) * 1.6
-				spot.spot_angle = 18
+				spot.spot_angle = 12
 				spot.transform = Transform3D(Basis.looking_at(Vector3(record["position"]).direction_to(record["target"]), Vector3(record["position"]).normalized().cross(Vector3.RIGHT).normalized()), record["position"])
 				lamp = spot
 				_build_shaft(record)
@@ -127,7 +127,7 @@ func _ready() -> void:
 			lamp.light_color = record["color"]
 			lamp.light_energy = 1.2
 			if record["kind"] == "shaft":
-				lamp.light_energy = 18.0
+				lamp.light_energy = 28.0
 			lamp.shadow_enabled = false
 			lamp.visible = false
 			add_child(lamp)
@@ -170,7 +170,7 @@ func _build_shaft(record: Dictionary) -> void:
 	bounce.position = target + up * 4
 	bounce.omni_range = 18
 	bounce.light_energy = 2.8
-	bounce.light_color = Color("fff0d2")
+	bounce.light_color = Color("fff9ef")
 	bounce.shadow_enabled = false
 	bounce.visible = false
 	bounce.set_meta("shaft_bounce", true)
@@ -232,8 +232,10 @@ func _process(delta: float) -> void:
 		_time += delta
 	for material_value: ShaderMaterial in _shaft_materials:
 		material_value.set_shader_parameter("phase", _time)
-		material_value.set_shader_parameter("strength", 0.09 if _planet.to_local(camera.global_position).normalized().dot(director.sun_direction) > 0 else 0.0225)
-		material_value.set_shader_parameter("tint", Color("fff0d2") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed"))
+		material_value.set_shader_parameter("strength", 0.045 if _planet.to_local(camera.global_position).normalized().dot(director.sun_direction) > 0 else 0.01125)
+		# 月光散射更少，集中核心以保留夜间光束与墙面的对比。
+		material_value.set_shader_parameter("core_gain", 2.2 if local.normalized().dot(director.sun_direction) > 0 else 6.0)
+		material_value.set_shader_parameter("tint", Color("fff9ef") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed"))
 	for material_value: ShaderMaterial in _dust_materials:
 		material_value.set_shader_parameter("phase", _time)
 	for material_value: ShaderMaterial in _water_materials:
@@ -247,8 +249,8 @@ func _process(delta: float) -> void:
 			_lamps[index].visible = index < 11 and _lamps[index].position.distance_to(local) < DRAW_RANGE
 			active_lights += int(_lamps[index].visible)
 			if _lamps[index] is SpotLight3D:
-				_lamps[index].light_energy = 18 if local.normalized().dot(director.sun_direction) > 0 else 5.4
-				_lamps[index].light_color = Color("fff0d2") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed")
+				_lamps[index].light_energy = 28 if local.normalized().dot(director.sun_direction) > 0 else 8.4
+				_lamps[index].light_color = Color("fff9ef") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed")
 			elif _lamps[index].has_meta("shaft_bounce"):
 				_lamps[index].light_energy = 2.8 if local.normalized().dot(director.sun_direction) > 0 else 1.8
 	_update_chunks(local)

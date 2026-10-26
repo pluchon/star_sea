@@ -11,6 +11,9 @@ func grade(color: Color, index: int) -> Color:
 	var shadow: Color = period["lift"]
 	var gain: Color = period["gain"]
 	var saturation: float = period["saturation"]
+	# 天空的冷色比草地更容易被色调映射压灰，分开补偿以免草地过饱和。
+	var cool_saturation: float = period.get("cool_saturation", saturation)
+	saturation = lerpf(saturation, cool_saturation, smoothstep(0.0, 0.08, color.b - color.g))
 	var result: Color = Color(luminance, luminance, luminance).lerp(color, saturation)
 	# 阴影和亮部采用不同色温，避免一维曲线把所有颜色一并染色。
 	var dark: float = pow(1.0 - luminance, 2.0)

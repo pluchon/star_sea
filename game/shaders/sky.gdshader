@@ -8,6 +8,7 @@ global uniform float cloud_cover;
 global uniform float rain;
 global uniform vec3 moon_dir;
 global uniform float aurora;
+global uniform float weather_time;
 
 uniform vec3 nebula_a : source_color = vec3(0.10, 0.06, 0.22);
 uniform vec3 nebula_b : source_color = vec3(0.02, 0.14, 0.24);
@@ -96,14 +97,14 @@ void sky() {
 		}
 		// 极光：只在夜里出现在天空较高处，竖直的光幕缓慢流动，下绿上紫。
 		if (aurora > 0.001 && elevation > 0.05) {
-			vec3 flow = dir * vec3(2.6, 0.6, 2.6) + vec3(TIME * 0.012, 0.0, TIME * 0.008);
-			float curtain = smoothstep(0.52, 0.78, fbm(flow + vec3(0.0, fbm(dir * 3.0 + TIME * 0.01) * 1.5, 0.0)));
+			vec3 flow = dir * vec3(2.6, 0.6, 2.6) + vec3(weather_time * 0.012, 0.0, weather_time * 0.008);
+			float curtain = smoothstep(0.52, 0.78, fbm(flow + vec3(0.0, fbm(dir * 3.0 + weather_time * 0.01) * 1.5, 0.0)));
 			float band = smoothstep(0.08, 0.3, elevation) * (1.0 - smoothstep(0.55, 0.9, elevation));
 			vec3 aurora_color = mix(vec3(0.25, 1.0, 0.62), vec3(0.72, 0.36, 0.95), smoothstep(0.25, 0.7, elevation));
 			col += aurora_color * curtain * band * aurora * star_visibility * surface_sky * 0.55;
 		}
 		// 云层使用球面方向，不随浮动原点偏移；高空逐渐消失。
-		vec3 cloud_point = dir / max(elevation, 0.12) * 3.4 + vec3(TIME * 0.005, 0.0, 0.0);
+		vec3 cloud_point = dir / max(elevation, 0.12) * 3.4 + vec3(weather_time * 0.005, 0.0, 0.0);
 		float cloud_shape = fbm(cloud_point);
 		// 云量越大，成云的阈值越低；晨的基础云量 0.45 时与原来的天空一致。
 		float threshold = 0.51 + (0.45 - cloud_cover) * 0.32;

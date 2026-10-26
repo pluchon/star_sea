@@ -1,28 +1,33 @@
 param(
     [switch]$SkipBuild,
-    [ValidateSet('dawn', 'all')][string]$Scope = 'dawn'
+    [ValidateSet('dawn', 'all')][string]$Scope = 'dawn',
+    [string[]]$OnlyChecks = @(),
+    [string]$ReportDirectory = 'test-output/acceptance'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
-$outputDirectory = Join-Path $repoDirectory 'test-output/acceptance'
+$outputDirectory = [IO.Path]::GetFullPath($ReportDirectory, $repoDirectory)
 $logDirectory = Join-Path $outputDirectory 'logs'
 $releaseDirectory = Join-Path $outputDirectory 'release'
 $executable = Join-Path $repoDirectory 'build/StarSea/StarSea.console.exe'
 New-Item -ItemType Directory -Path $logDirectory, $releaseDirectory -Force | Out-Null
 $results = [Collections.Generic.List[object]]::new()
+$matchedChecks = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 [pscustomobject]@{ passed = $false; status = 'running'; checks = @() } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputDirectory 'summary.json') -Encoding utf8
 
 function Save-AcceptanceSummary {
     param([string]$Status = 'running')
     $failed = @($results | Where-Object { -not $_.passed })
-    [pscustomobject]@{ passed = $Status -eq 'passed'; status = $Status; scope = $Scope; completed_at = [DateTimeOffset]::Now.ToString('o'); failures = $failed; checks = @($results.ToArray()) } |
+    [pscustomobject]@{ passed = $Status -eq 'passed'; status = $Status; scope = $Scope; full_suite = $OnlyChecks.Count -eq 0; selected_checks = $OnlyChecks; completed_at = [DateTimeOffset]::Now.ToString('o'); failures = $failed; checks = @($results.ToArray()) } |
         ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $outputDirectory 'summary.json') -Encoding utf8
 }
 
 function Invoke-AcceptanceItem {
     param([string]$Name, [scriptblock]$Action)
+    if ($OnlyChecks.Count -gt 0 -and $Name -notin $OnlyChecks) { return }
+    [void]$matchedChecks.Add($Name)
     try {
         & $Action
         $results.Add([pscustomobject]@{ name = $Name; passed = $true })
@@ -190,10 +195,15 @@ try {
     $manifest = Get-Content -LiteralPath (Join-Path $repoDirectory 'build/StarSea/sha256.json') -Raw | ConvertFrom-Json
     if ($binaryHash -ne $manifest.Hash -or $binaryHash -ne $archiveHash) { throw '可执行文件、清单和压缩包内容不一致。' }
     }
+    $unknownChecks = @($OnlyChecks | Where-Object { -not $matchedChecks.Contains($_) })
+    if ($unknownChecks.Count -gt 0) {
+        $results.Add([pscustomobject]@{ name = 'selection'; passed = $false; error = '未知验收项目：' + ($unknownChecks -join ', ') })
+    }
     $failed = @($results | Where-Object { -not $_.passed })
     if ($failed.Count -gt 0) { throw "验收结束，$($failed.Count) 项未通过，详见 summary.json。" }
     Save-AcceptanceSummary 'passed'
-    Write-Output '全部自动验收通过。'
+    if ($OnlyChecks.Count -gt 0) { Write-Output '已选项目全部通过（定向复查）。' }
+    else { Write-Output '全部自动验收通过。' }
 }
 catch {
     Save-AcceptanceSummary 'failed'

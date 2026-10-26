@@ -22,6 +22,7 @@ static func fit(noise: TerrainNoise, data: CivilizationData) -> Dictionary:
 			var inward: Vector3 = (side * dx + tangent * dz).normalized()
 			if inward.dot(town.slide(direction).normalized()) > -0.15:
 				continue
+			var valley_mouth: Vector3 = Vector3.INF
 			for variant: int in 32:
 				attempts += 1
 				var z: Vector3 = inward
@@ -34,7 +35,11 @@ static func fit(noise: TerrainNoise, data: CivilizationData) -> Dictionary:
 					if index != 9:
 						nodes[index]["local"] = (Vector3(nodes[index]["local"]) - Vector3(0, 0, 20)).rotated(Vector3.UP, rotation) + Vector3(0, 0, 20)
 				var mouth: Vector3 = frame * Vector3(nodes[9]["local"])
-				var mouth_ground: Vector3 = mouth.normalized() * (noise.radius + noise.height(mouth.normalized()))
+				if variant == 0:
+					valley_mouth = _valley_mouth(noise, mouth)
+				if valley_mouth == Vector3.INF:
+					break
+				var mouth_ground: Vector3 = valley_mouth
 				var local_mouth: Vector3 = frame.affine_inverse() * mouth_ground
 				if absf(local_mouth.y + 18) > 35:
 					continue
@@ -65,6 +70,10 @@ static func constraints(noise: TerrainNoise, network: Dictionary, data: Civiliza
 	var maximum_slope: float = 0.0
 	var minimum_floor: float = INF
 	var length_value: float = 0.0
+	var mouth: Vector3 = nodes[9]["position"]
+	var river: Vector4 = noise.features.hydrology.nearest(mouth.normalized())
+	if river.w < 0 or river.x > river.z + 150.0 or mouth.length() - noise.radius > river.y + 15.0:
+		return {"passed": false, "reason": "第二出口河谷"}
 	for edge: Dictionary in network["edges"]:
 		var a: Vector3 = nodes[edge["a"]]["local"]
 		var b: Vector3 = nodes[edge["b"]]["local"]
@@ -108,6 +117,28 @@ static func constraints(noise: TerrainNoise, network: Dictionary, data: Civiliza
 	return {"passed": true, "reason": "", "minimum_roof_m": minimum_roof, "maximum_floor_slope": maximum_slope, "minimum_floor_altitude_m": minimum_floor, "passages_m": length_value}
 
 
+static func _valley_mouth(noise: TerrainNoise, mouth: Vector3) -> Vector3:
+	var up: Vector3 = mouth.normalized()
+	var tangent: Vector3 = SurfaceSites.tangent_forward(up)
+	var best: Vector3 = Vector3.INF
+	var score: float = INF
+	for distance: float in [0.0, 32.0, 64.0, 96.0]:
+		for bearing: int in (1 if distance == 0 else 8):
+			var point: Vector3 = SurfaceSites.offset_direction(up, tangent.rotated(up, bearing * TAU / 8), distance, noise.radius)
+			var river: Vector4 = noise.features.hydrology.nearest(point)
+			if river.w < 0 or river.x < river.z + 6.0 or river.x > river.z + 150.0:
+				continue
+			var height: float = noise.height(point)
+			if height < river.y + 0.4 or height > river.y + 15.0:
+				continue
+			var candidate: Vector3 = point * (noise.radius + height)
+			var cost: float = candidate.distance_to(mouth) + river.x * 0.3
+			if cost < score:
+				score = cost
+				best = candidate
+	return best
+
+
 static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 	var frame: Transform3D = network["frame"]
 	var approach: Dictionary = {}
@@ -120,10 +151,22 @@ static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 			break
 	network["approach"] = approach
 	var nodes: Array = network["nodes"]
+	var mouth_local: Vector3 = nodes[9]["local"]
+	var inner: Vector3 = mouth_local - Vector3(nodes[8]["local"])
+	var outward: Vector3 = inner.slide(Vector3.UP).normalized()
+	var exit_length: float = 20.0
+	var mouth_exit_direction: Vector3 = (frame * (mouth_local + outward * exit_length)).normalized()
+	var exit_point: Vector3 = frame.affine_inverse() * (mouth_exit_direction * (noise.radius + noise.height(mouth_exit_direction)))
+	var after_direction: Vector3 = (frame * (mouth_local + outward * (exit_length + 2))).normalized()
+	var after: Vector3 = frame.affine_inverse() * (after_direction * (noise.radius + noise.height(after_direction)))
+	network["mouth_approach"] = {"outward": outward, "length": exit_length, "inner_slope": inner.y / inner.slide(Vector3.UP).length(), "end_y": exit_point.y, "end_slope": (after.y - exit_point.y) / 2.0}
 	var entrances_local: PackedVector3Array = PackedVector3Array()
 	for pair: Array in [[0, "gate"], [9, "mouth"]]:
 		var node: Dictionary = nodes[pair[0]]
-		network["entrances"].append({"node": pair[0], "kind": pair[1], "position": Vector3(node["position"]) + frame.basis.y * 3, "normal": -frame.basis.z, "up": frame.basis.y})
+		var normal: Vector3 = -frame.basis.z
+		if pair[1] == "mouth":
+			normal = (Vector3(node["position"]) - Vector3(nodes[8]["position"])).slide(frame.basis.y).normalized()
+		network["entrances"].append({"node": pair[0], "kind": pair[1], "position": Vector3(node["position"]) + frame.basis.y * 3, "normal": normal, "up": frame.basis.y})
 		entrances_local.append(node["local"])
 	var hall: Vector3 = nodes[4]["position"]
 	var sky: Vector3 = hall.normalized() * (noise.radius + noise.height(hall.normalized()))
@@ -142,7 +185,8 @@ static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 			# 端帽必须位于洞外缓坡下方，不能在平段末端留下阻挡步行的矮坎。
 			a.z -= 16
 		if edge["b"] == 9:
-			b.z -= 8
+			# 河谷出口会横向移动，端帽必须沿实际通道延长，保持出口中心处的地板高度。
+			b += a.direction_to(b) * 8
 		if shaft:
 			a += Vector3.UP * 4
 			b += Vector3.UP * 8
@@ -154,14 +198,20 @@ static func complete(noise: TerrainNoise, network: Dictionary) -> void:
 	network["primitives"] = primitives
 	network["echo_anchor"] = hall + frame.basis.y * 0.15
 	# 出口位于两根柱子之间，并投影到真实地面，不能假设井口周围同高。
-	var exit_heading: Vector3 = frame.basis.x.rotated(sky.normalized(), PI / 8).slide(sky.normalized()).normalized()
+	# 绳索放在进厅路线侧方，避免经过主厅的角色朝前行走时自动附着。
+	var incoming: Vector3 = (hall - Vector3(nodes[3]["position"])).slide(sky.normalized()).normalized()
+	var side_heading: Vector3 = incoming.cross(sky.normalized()).normalized()
+	var side_angle: float = atan2(side_heading.dot(frame.basis.z), side_heading.dot(frame.basis.x))
+	var gap_angle: float = snappedf(side_angle - PI / 8, PI / 4) + PI / 8
+	var exit_heading: Vector3 = (frame.basis.x * cos(gap_angle) + frame.basis.z * sin(gap_angle)).slide(sky.normalized()).normalized()
 	var rope_bottom: Vector3 = hall + exit_heading * 2.8 + frame.basis.y * 0.5
 	var rope_top: Vector3 = sky + exit_heading * 2.8
 	var exit_direction: Vector3 = SurfaceSites.offset_direction(sky.normalized(), exit_heading, 6.8, noise.radius)
 	var exit_top: Vector3 = exit_direction * (noise.radius + noise.height(exit_direction) + 0.1)
 	network["climbs"].append({"id": "cave_0_skylight", "kind": "rope", "bottom": rope_bottom, "top": rope_top, "width": 0.6, "normal": exit_heading, "exit_top": exit_top})
 	_prop(network, "temple_gate", Vector3(0, -0.1, -1), 0, Vector3(2, 1, 1))
-	_prop(network, "cave_mouth", nodes[9]["local"], 0)
+	var mouth_heading: Vector3 = (Vector3(nodes[9]["local"]) - Vector3(nodes[8]["local"])).slide(Vector3.UP).normalized()
+	_prop(network, "cave_mouth", nodes[9]["local"], atan2(-mouth_heading.x, -mouth_heading.z))
 	for sign_value: float in [-1.0, 1.0]:
 		_prop(network, "statue_broken", Vector3(sign_value * 7, 0, -4), 0)
 	_prop(network, "stele", Vector3(nodes[1]["local"]) + Vector3(4, 0, 0), PI)

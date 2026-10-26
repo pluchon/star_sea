@@ -1,15 +1,16 @@
 class_name HydrologyData
 extends Resource
 
-const GRID: int = 384 # 每个立方体面的水系格网边长。
+const GRID: int = 768 # 每面约百米的水系格网，避免漏掉侵蚀高度场中的低地通道。
 const BUCKET_GRID: int = 64 # 每面的索引桶边长。
 const CARVE_GRID: int = 256 # 高度查询使用细索引，避免遍历整公里桶内的河段。
 const RIVER_AREA: float = 3000000.0 # 河流最小汇水面积，平方米。
 const LAKE_AREA: float = 120000.0 # 湖泊最小面积，平方米。
 const LAKE_DEPTH: float = 4.0 # 湖泊最小深度，米。
 const PATH: String = "res://data/dawn_world.res"
+const VERSION: int = 2 # 格网索引改为 768，不能把旧的 384 格索引解释成新数据。
 
-@export var version: int = 1
+@export var version: int = VERSION
 @export var planet_seed: int = 20261019
 @export var planet_radius: float = 40000.0
 @export var signature: String
@@ -39,8 +40,11 @@ const PATH: String = "res://data/dawn_world.res"
 static func source_signature() -> String:
 	# 源文件与所有烘焙算法共同签名；调整阈值或算法后必须重新烘焙。
 	var text: String = ""
-	for path: String in ["res://scripts/planet/terrain_noise.gd", "res://scripts/planet/terrain_features.gd", "res://scripts/planet/hydrology_data.gd", "res://scripts/tools/world_bake.gd", "res://data/dawn_layout.tres"]:
+	for path: String in ["res://scripts/planet/terrain_noise.gd", "res://scripts/planet/terrain_features.gd", "res://scripts/planet/dawn_heightfield.gd", "res://scripts/planet/hydrology_data.gd", "res://scripts/tools/world_bake.gd", "res://data/dawn_layout.tres"]:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
+	text += FileAccess.get_sha256(DawnHeightfield.PATH)
+	text += FileAccess.get_sha256(SpawnWaterBake.PATH)
+	text += FileAccess.get_file_as_string("res://scripts/civilization/spawn_water_bake.gd").replace("\r\n", "\n")
 	for path: String in ["res://scripts/civilization/dawn_landforms.gd", "res://scripts/civilization/landform_layout.gd"]:
 		text += path + "\n" + FileAccess.get_file_as_string(path).replace("\r\n", "\n")
 	for path: String in ["civilization_data", "civilization_siting", "civilization_terrain", "civilization_paths", "civilization_bake", "civilization_buildings", "climb_layout"]:

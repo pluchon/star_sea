@@ -14,7 +14,7 @@ func _begin() -> void:
 	var spawn: Vector3 = noise.features.site["direction"]
 	var distance: float = spawn.angle_to(town) * noise.radius
 	var river: Vector4 = noise.features.hydrology.nearest(town)
-	_require(distance >= 4000 and distance <= CivilizationSiting.TOWN_FALLBACK_DISTANCE, "古城距离超过已记录的搜索范围。")
+	_require(distance >= CivilizationSiting.MIN_TOWN_DISTANCE and distance <= CivilizationSiting.MAX_WALKING_DISTANCE, "古城侵入出生保护区或超过步行搜索范围。")
 	_require(river.x >= 60.0 and river.x <= 120.1 and river.z >= 3.0 + 2.2 * sqrt(float(data.town["minimum_area_km2"])), "古城河岸距离或汇水面积不足。")
 	var plaza_error: float = 0.0
 	for angle: int in 24:
@@ -53,10 +53,12 @@ func _begin() -> void:
 	var road_gap: float = 0.0
 	var road_error: float = 0.0
 	var road_lengths: Dictionary = {}
+	var walking_lengths: Dictionary = {}
 	var maximum_slope: float = 0.0
 	for road: Dictionary in data.roads:
 		var points: PackedVector3Array = road["points"]
 		var total: float = 0.0
+		var walking_total: float = 0.0
 		for index: int in points.size():
 			road_error = maxf(road_error, absf(noise.height(points[index]) - float(road["levels"][index])))
 			if index > 0:
@@ -67,12 +69,21 @@ func _begin() -> void:
 				# 十米端点会漏掉台地接缝的短陡坡，按一米间隔检查实际行走路径。
 				var steps: int = maxi(1, ceili(gap))
 				var previous_height: float = noise.height(points[index - 1])
+				var previous_position: Vector3 = points[index - 1] * (noise.radius + previous_height)
 				for step: int in range(1, steps + 1):
 					var direction: Vector3 = points[index - 1].slerp(points[index], step / float(steps)).normalized()
 					var sample_height: float = noise.height(direction)
+					var sample_position: Vector3 = direction * (noise.radius + sample_height)
+					walking_total += previous_position.distance_to(sample_position)
+					previous_position = sample_position
 					maximum_slope = maxf(maximum_slope, absf(sample_height - previous_height) / maxf(gap / steps, 0.01))
 					previous_height = sample_height
 		road_lengths[road["name"]] = total
+		walking_lengths[road["name"]] = walking_total
+	# 古道终点离出发地二百五十米；把这段实际进路一起计入普通步行时间。
+	var approach: PackedVector3Array = data.town["spawn_approach"]
+	var walking_distance: float = float(walking_lengths.get("old_road", 0.0)) + CivilizationPaths.walk_length(noise, approach)
+	_require(walking_distance >= 3600.0 and walking_distance <= CivilizationSiting.MAX_WALKING_DISTANCE, "出发地到古城的实际路程不在十五至二十分钟之间。")
 	_require(road_gap <= 15.0, "道路相邻点间距超过十五米。")
 	_require(road_error <= 0.1, "道路烘焙高度与唯一高度函数不一致。")
 	_require(maximum_slope <= 1.0, "道路存在超过玩家站立坡度上限的路段。")
@@ -90,6 +101,9 @@ func _begin() -> void:
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "town_distance_m": distance, "river_distance_m": river.x, "river_width_m": river.z, "slope_limit": data.town["slope_limit"], "plaza_error_m": plaza_error, "foundation_error_m": foundation_error, "foundation_count": foundations, "supported_upper_pieces": structural, "wet_foundations": wet_foundations, "road_point_gap_m": road_gap, "road_height_error_m": road_error, "road_lengths_m": road_lengths, "maximum_road_grade": maximum_slope, "terrace_count": data.terraces.size(), "piece_counts": counts, "triangles": triangles, "estimated_batches": batches.size(), "bridge_jump": jump}
 	report["wet_records"] = wet_records
 	report["minimum_catchment_km2"] = data.town["minimum_area_km2"]
+	report["walking_lengths_m"] = walking_lengths
+	report["spawn_town_walking_m"] = walking_distance
+	report["spawn_town_walking_minutes"] = walking_distance / 240.0
 	report["field_stalks"] = field_record
 	if not data.beacons.is_empty():
 		var beacons: Dictionary = await BeaconChecks.run(self, noise)

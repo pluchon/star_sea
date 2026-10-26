@@ -68,10 +68,21 @@ const NAMES: Array[String] = [
 	"s61b_echo_ending",
 	"s62_materials",
 	"s63_temple_night",
+	"s70_spawn_north",
+	"s71_spawn_east",
+	"s72_spawn_south",
+	"s73_spawn_west",
+	"s74_pass_view",
+	"s75_volcano",
+	"s76_oblique_3km",
+	"s77_canyon_far",
 ]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
+	if name in ["s70_spawn_north", "s71_spawn_east", "s72_spawn_south", "s73_spawn_west", "s74_pass_view", "s75_volcano", "s76_oblique_3km", "s77_canyon_far"]:
+		LandformShots.terrain_place(name, player, planet, director)
+		return
 	if name == "s63_temple_night":
 		place("s38_temple_hall", player, planet, director)
 		var frame: Transform3D = planet.noise.features.caves.networks[0]["frame"]

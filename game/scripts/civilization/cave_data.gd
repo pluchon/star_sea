@@ -4,6 +4,7 @@ extends Resource
 const PATH: String = "res://data/dawn_caves.res"
 const BLOCK: float = 32.0 # 离线网格与运行时加载共用的分块边长，米。
 const GATE_APRON_Z: float = -12.0 # 主入口平段外沿，与洞壁裁切共用，米。
+const MOUTH_APRON_JOIN: float = 4.0 # 出口洞底与外侧地形在四米处交接。
 @export var version: int = 1
 @export var signature: String = ""
 @export var networks: Array[Dictionary] = []
@@ -65,13 +66,17 @@ func in_hole(position: Vector3) -> bool:
 					return true
 			else:
 				var normal: Vector3 = entrance["normal"]
+				# 端帽裁切后由外侧缓坡接管地面，不能继续移除这段地形。
+				if entrance["kind"] == "mouth" and delta.dot(normal) >= MOUTH_APRON_JOIN - 2.0:
+					continue
 				var across: Vector3 = normal.cross(up).normalized()
 				if pow(delta.dot(across) / 6, 2) + pow(delta.dot(up) / 4.5, 2) + pow(delta.dot(normal) / 12, 2) < 1:
 					var p: Vector3 = Transform3D(network["frame"]).affine_inverse() * position
 					var key: Vector3i = Vector3i((p / BLOCK).floor())
-					# 开洞只覆盖真实空腔，避免较宽的入口椭球切掉洞壁外侧地面。
-					if _indices[id].has(key) and field(p + Vector3.UP * 0.3, _indices[id][key], null) < 0:
-						return true
+					# 只移除脚部实际进入空腔的地面，保留低于洞底的地表以免出现缺口。
+					if _indices[id].has(key):
+						if field(p + Vector3.UP * 0.3, _indices[id][key], null) < 0:
+							return true
 	return false
 
 
@@ -125,6 +130,7 @@ func apply(direction: Vector3, radius: float, height: float) -> float:
 		var frame: Transform3D = network["frame"]
 		if direction.dot(frame.origin.normalized()) < 0.99997:
 			continue
+		height = _mouth_height(network, direction, radius, height)
 		# 外侧缓坡连接真实山坡，避免短台地在门前形成无法步行的陡坎。
 		var p: Vector3 = frame.affine_inverse() * (direction * (radius + height))
 		var approach: Dictionary = network.get("approach", {"length": 18.0, "slope": 0.0})
@@ -138,6 +144,33 @@ func apply(direction: Vector3, radius: float, height: float) -> float:
 		var plane_radius: float = origin.dot(normal) / direction.dot(normal)
 		height = lerpf(height, plane_radius - radius, weight)
 	return height
+
+
+func _mouth_height(network: Dictionary, direction: Vector3, radius: float, height: float) -> float:
+	var approach: Dictionary = network.get("mouth_approach", {})
+	if approach.is_empty():
+		return height
+	var frame: Transform3D = network["frame"]
+	var p: Vector3 = frame.affine_inverse() * (direction * (radius + height))
+	var mouth: Vector3 = network["nodes"][9]["local"]
+	var outward: Vector3 = approach["outward"]
+	var delta: Vector3 = p - mouth
+	var along: float = delta.dot(outward)
+	var across: float = absf(delta.dot(outward.cross(Vector3.UP)))
+	var length_value: float = approach["length"]
+	if along < -8 or along > length_value + 4 or across > 12:
+		return height
+	var slope: float = approach["inner_slope"]
+	var target: float = mouth.y + slope * along
+	if along > MOUTH_APRON_JOIN:
+		var span: float = length_value - MOUTH_APRON_JOIN
+		var t: float = clampf((along - MOUTH_APRON_JOIN) / span, 0, 1)
+		var start: float = mouth.y + slope * MOUTH_APRON_JOIN
+		target = (2*t*t*t - 3*t*t + 1)*start + (t*t*t - 2*t*t + t)*span*slope + (-2*t*t*t + 3*t*t)*float(approach["end_y"]) + (t*t*t - t*t)*span*float(approach["end_slope"])
+	# 距离场地板带少量粗糙度；缓坡略微覆盖网格边缘，避免反向行走撞上薄边。
+	target += 0.15 * smoothstep(0, 2, along) * (1 - smoothstep(6, 8, along))
+	var weight: float = smoothstep(-8, -4, along) * (1 - smoothstep(length_value, length_value + 4, along)) * (1 - smoothstep(4, 12, across))
+	return height + (target - p.y) / direction.dot(frame.basis.y) * weight
 
 
 func valid_seen(value: Variant) -> bool:

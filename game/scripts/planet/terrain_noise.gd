@@ -6,8 +6,9 @@ const MAX_HEIGHT: float = 4300.0
 var radius: float
 var profile: int = 0
 var planet_seed: int = 0
-# 晨样板区的火山、河流与湖泊；其他星球为空。
+# 晨的河道、文明区与洞穴；其他星球为空。
 var features: TerrainFeatures
+var heightfield: DawnHeightfield
 var _continent: FastNoiseLite
 var _mountain: FastNoiseLite
 var _hills: FastNoiseLite
@@ -18,7 +19,7 @@ var _drainage: FastNoiseLite
 var _geology: FastNoiseLite
 
 
-func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 0, include_features: bool = true) -> void:
+func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 0, include_features: bool = true, include_heightfield: bool = true) -> void:
 	radius = planet_radius
 	profile = terrain_profile
 	planet_seed = planet_seed_value
@@ -31,6 +32,9 @@ func _init(planet_seed_value: int, planet_radius: float, terrain_profile: int = 
 	_groves = _make(planet_seed_value + 5, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 280.0, FastNoiseLite.FRACTAL_FBM, 2)
 	_drainage = _make(planet_seed_value + 6, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 2100.0, FastNoiseLite.FRACTAL_FBM, 3)
 	_geology = _make(planet_seed_value + 7, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, 1.0 / 4800.0, FastNoiseLite.FRACTAL_FBM, 3)
+	if profile == 0 and include_heightfield:
+		heightfield = DawnHeightfield.shared()
+		assert(heightfield != null, "晨高度场缺失，请执行 tools/Bake-Terrain.py。")
 	if profile == 0 and include_features:
 		features = TerrainFeatures.for_noise(self)
 
@@ -51,8 +55,14 @@ func height(direction: Vector3) -> float:
 	return features.apply(direction, base) if features != null else base
 
 
-# 不含样板区特征的基础地形；只供特征计算和出发地选址使用。
+# 基础高度不含河道、文明区和洞穴；晨的大尺度地貌已经烘焙。
 func base_height(direction: Vector3) -> float:
+	if profile == 0:
+		var detail: float = _detail.get_noise_3dv(direction * radius) * 0.35
+		# 八米保护样本已包含原有细节，不在出生区重复增加噪声。
+		if direction.dot(heightfield.spawn) > DawnHeightfield.SPAWN_ALIGNMENT:
+			detail *= smoothstep(DawnHeightfield.SPAWN_CORE, DawnHeightfield.SPAWN_BLEND_END, direction.distance_to(heightfield.spawn) * radius)
+		return heightfield.sample(direction) + detail
 	var point: Vector3 = direction * radius
 	var continent: float = _continent.get_noise_3dv(point)
 	var land: float = smoothstep(-0.35, 0.0, continent)
@@ -73,23 +83,7 @@ func base_height(direction: Vector3) -> float:
 		# 冰原保留宽阔盆地，以相互连接的山脊区分于海岸和沙丘。
 		var basin: float = smoothstep(-0.25, 0.42, continent)
 		return 24.0 + basin * 400.0 + pow(ridge, 2.0) * basin * 1900.0 + hills * 0.35 + detail * 0.5
-	# 高地沟谷使用连续等值线下切，海岸与低地不受影响；三种地形查询仍共用本函数。
-	var drainage: float = absf(_drainage.get_noise_3dv(point))
-	# 低处沟谷为 V 形；高山上的沟谷底部展宽成冰川 U 形谷，两壁更陡。
-	var glacial: float = smoothstep(700.0, 1300.0, mountain + upland)
-	var valley: float = lerpf(1.0 - smoothstep(0.015, 0.13, drainage), 1.0 - smoothstep(0.075, 0.13, drainage), glacial)
-	var geology: float = _geology.get_noise_3dv(point) * 0.5 + 0.5
-	var highland: float = mountain + upland + foothills
-	var erosion: float = valley * smoothstep(150.0, 900.0, mountain + upland) * lerpf(90.0, 210.0, smoothstep(0.35, 0.65, geology)) * (1.0 + glacial * 0.25)
-	# 台地保留宽阔台面与圆缓坡肩，只改变高地，不在出生低地制造台阶。
-	var terrace_mask: float = smoothstep(0.56, 0.74, geology) * smoothstep(160.0, 500.0, highland)
-	var tier: float = highland / 180.0
-	var terraced: float = (floorf(tier) + smoothstep(0.32, 0.90, fposmod(tier, 1.0))) * 180.0
-	var plateau: float = (terraced - highland) * terrace_mask * 0.75
-	# 宽阔盆地与起伏山麓采用不同尺度，盆地边缘连续过渡到现有大陆。
-	var basin: float = smoothstep(0.42, 0.23, geology) * smoothstep(0.03, 0.20, continent) * (1.0 - smoothstep(180.0, 650.0, highland)) * 70.0
-	var coastal_bluff: float = smoothstep(0.50, 0.68, geology) * smoothstep(-0.10, 0.01, continent) * (1.0 - smoothstep(0.06, 0.17, continent)) * smoothstep(80.0, 220.0, highland) * 65.0
-	return lerpf(-420.0, 40.0, land) + highland + hills + detail + plateau + coastal_bluff - erosion - basin
+	return 0.0
 
 
 func landform(direction: Vector3) -> String:

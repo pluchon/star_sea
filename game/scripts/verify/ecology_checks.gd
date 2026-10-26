@@ -52,7 +52,8 @@ func _begin() -> void:
 	var total_instances: Dictionary = {}
 	for kind: String in SurfaceDetails.KINDS:
 		total_instances[kind] = 0
-	var site: Dictionary = SurfaceSites.find(noise)
+	# 高度场已经固定出生布局；不能重新搜索另一个海岸，再称为出生区检查。
+	var site: Dictionary = noise.features.site
 	var ruin_direction: Vector3 = SurfaceSites.ruin_direction(site, noise.radius)
 	for divisions: int in [SurfaceDetails.NEAR_DIVISIONS, SurfaceDetails.FOREST_DIVISIONS]:
 		var keys: Array[Vector3i] = SurfaceGrid.nearby(site["direction"], noise.radius, 450.0, divisions)

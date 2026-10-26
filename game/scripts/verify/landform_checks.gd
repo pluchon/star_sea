@@ -9,6 +9,8 @@ func _begin() -> void:
 	var failures: Array[String] = []
 	var noise: TerrainNoise = TerrainNoise.new(20261019, 40000.0)
 	var forms: DawnLandforms = noise.features.landforms
+	var heightfield: Dictionary = TerrainHeightfieldChecks.run(noise)
+	failures.append_array(heightfield["failures"])
 	var highest: float = -INF
 	var highest_direction: Vector3 = Vector3.ZERO
 	for peak: Dictionary in forms.metadata["peaks"]:
@@ -55,13 +57,13 @@ func _begin() -> void:
 	var river_samples: int = 0
 	var floor_monotonic: bool = true
 	var previous: float = INF
-	for segment: int in forms.canyon.size() - 1:
+	for segment: int in forms.canyon_curve.size() - 1:
 		for sample: int in 20:
-			var direction: Vector3 = forms.canyon[segment].slerp(forms.canyon[segment + 1], sample / 20.0).normalized()
-			var floor_height: float = forms.height(direction, noise.base_height(direction))
+			var direction: Vector3 = forms.canyon_curve[segment].slerp(forms.canyon_curve[segment + 1], sample / 20.0).normalized()
+			var floor_height: float = noise.height(direction)
 			floor_monotonic = floor_monotonic and floor_height <= previous + 0.05
 			previous = floor_height
-			var tangent: Vector3 = forms.canyon[segment].direction_to(forms.canyon[segment + 1]).slide(direction).normalized()
+			var tangent: Vector3 = forms.canyon_curve[segment].direction_to(forms.canyon_curve[segment + 1]).slide(direction).normalized()
 			var side: Vector3 = tangent.cross(direction).normalized()
 			var rim: Vector3 = SurfaceSites.offset_direction(direction, side, DawnLandforms.CANYON_HALF_WIDTH, noise.radius)
 			var depth: float = noise.height(rim) - noise.height(direction)
@@ -102,18 +104,17 @@ func _begin() -> void:
 	if marks.size() != positions.size() * 4:
 		failures.append("地形及裙边没有为每个顶点写入 CUSTOM0 四通道。")
 	var report: Dictionary = {"passed": failures.is_empty(), "failures": failures, "highest_m": highest, "spawn_ridge_distance_m": ridge_distance, "peak_visible": visible_peak, "range_length_m": forms.ridge_lengths[-1], "canyon_length_m": forms.canyon_lengths[-1], "maximum_depth_m": maximum_depth, "minimum_depth_m": minimum_depth, "floor_monotonic": floor_monotonic, "river_samples": river_samples, "layers": DawnLandforms.CANYON_LAYERS, "wall_marks": wall_vertices, "glacier_marks": glacier_vertices, "passes": routes}
+	report["heightfield"] = heightfield
 	VerificationMetrics.write_json("res://../test-output/wanderer/landform_checks.json", report)
 	print(JSON.stringify(report))
 	quit(0 if failures.is_empty() else 1)
 
 
-func _pass_route(noise: TerrainNoise, pass_site: Dictionary, forms: DawnLandforms) -> Dictionary:
+func _pass_route(noise: TerrainNoise, pass_site: Dictionary, _forms: DawnLandforms) -> Dictionary:
 	const SPACING: float = 20.0
 	const COLUMNS: int = 801
-	const ROWS: int = 21
+	const ROWS: int = 75
 	var center: Vector3 = pass_site["direction"]
-	var nearest: Vector3 = forms.nearest(center)
-	var segment: int = clampi(int(nearest.z), 0, forms.ridge.size() - 2)
 	var along: Vector3 = pass_site["along"]
 	var across: Vector3 = pass_site["across"]
 	var heights: PackedFloat32Array = []
@@ -141,7 +142,7 @@ func _pass_route(noise: TerrainNoise, pass_site: Dictionary, forms: DawnLandform
 			if x < 0 or x >= COLUMNS or y < 0 or y >= ROWS:
 				continue
 			var next: int = y * COLUMNS + x
-			if distances[next] >= 0 or absf(heights[next] - heights[cell]) > SPACING * 0.45:
+			if distances[next] >= 0 or absf(heights[next] - heights[cell]) > SPACING * 0.35:
 				continue
 			distances[next] = distances[cell] + SPACING
 			queue.append(next)

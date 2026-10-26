@@ -72,10 +72,19 @@ func _begin() -> void:
 		await process_frame
 	_check(_caves.is_settled(), "洞穴运行时加载超时。")
 	var walks: Array[Dictionary] = []
+	var mouth_return: Dictionary = {}
 	if "--skip-walk" not in OS.get_cmdline_user_args():
 		# 洞口短矮坎在放大的物理步长下可能直接越过，按实际步长验证连续通行。
 		Engine.time_scale = 1
 		var walk_network: Dictionary = network.duplicate(true)
+		var outside_ids: Array[int] = []
+		var mouth: Vector3 = network["nodes"][9]["local"]
+		var outward: Vector3 = network["mouth_approach"]["outward"]
+		for distance: float in [4.0, 12.0, 20.0]:
+			var direction: Vector3 = (frame * (mouth + outward * distance)).normalized()
+			var at: Vector3 = direction * _planet.surface_radius(direction)
+			outside_ids.append(walk_network["nodes"].size())
+			walk_network["nodes"].append({"position": at, "local": frame.affine_inverse()*at, "id":"mouth_outside_%d" % distance,"kind":"bend"})
 		var approach_ids: Array[int] = []
 		for road: Dictionary in _planet.noise.features.civilization.data.roads:
 			if road["name"] != "temple":
@@ -86,10 +95,15 @@ func _begin() -> void:
 				approach_ids.append(walk_network["nodes"].size())
 				walk_network["nodes"].append({"position": at, "local": frame.affine_inverse() * at, "id": "approach_%d" % index, "kind": "bend"})
 		for route: Array in [[0,1,2,3,4,5,6,7,6,8,9], [0,1,10,11,8,9]]:
-			walks.append(await _walk(walk_network, approach_ids + route))
+			var walk: Dictionary = await _walk(walk_network, approach_ids + route + outside_ids)
+			walk["outside_cave"] = PlayerTraversal.cave_at(_player) < 0
+			walk["passed"] = walk["passed"] and walk["outside_cave"] and walk["on_floor"]
+			walks.append(walk)
 		Engine.time_scale = 1
 		for walk: Dictionary in walks:
 			_check(walk["passed"], "回声洞实际行走卡住或偏离路线。")
+		mouth_return = await _walk(walk_network, [outside_ids[-1], outside_ids[1], outside_ids[0], 9])
+		_check(mouth_return["passed"] and mouth_return["on_floor"], "河谷出口返回洞内时卡住。")
 	_player.controls_enabled = false
 	var hall: Vector3 = network["nodes"][4]["position"]
 	_player.place_at(_planet.to_global(hall + frame.basis.y * 8), frame.basis.z, frame.basis.y)
@@ -114,6 +128,7 @@ func _begin() -> void:
 	_check(_caves.active_lights <= 11, "同时启用的洞内点光源超出预算。")
 	var report: Dictionary = {"passed": _failures.is_empty(), "failures": _failures, "constraints": constraints, "connected_from_all_entrances": connected, "cycles": cycles, "finite_field_samples": sample_count, "seams": seams, "walks": walks, "cave_id": cave_id, "glide_blocked": no_glide, "camera_below_surface": camera_below_surface, "map_revealed": map_revealed, "persistence": persistence, "bytes": bytes, "chunks": data.chunks.size(), "triangles": data.statistics["triangles"], "maximum_runtime_build_ms": _caves.maximum_build_us / 1000.0, "maximum_mesh_ms": _caves.maximum_mesh_us / 1000.0, "maximum_collision_ms": _caves.maximum_collision_us / 1000.0, "maximum_props_ms": _caves.maximum_props_us / 1000.0, "active_lights": _caves.active_lights}
 	report["openings"] = openings
+	report["mouth_return"] = mouth_return
 	VerificationMetrics.write_json("res://../test-output/wanderer/cave_checks.json", report)
 	print(JSON.stringify(report))
 	scene.queue_free()
@@ -182,6 +197,8 @@ func _walk(network: Dictionary, route: Array) -> Dictionary:
 			if stuck > 4 or gap > 8:
 				break
 	Input.action_release("move_forward")
+	for frame_index: int in 12:
+		await physics_frame
 	_player.controls_enabled = false
 	return {"passed": target == route.size(), "route": route, "reached_index": target, "duration_s": elapsed, "maximum_path_error_m": maximum_error, "stuck_s": stuck, "last_local": str(frame.affine_inverse() * _planet.to_local(_player.global_position)), "on_floor": _player.is_on_floor(), "waiting": _player._waiting_for_ground}
 

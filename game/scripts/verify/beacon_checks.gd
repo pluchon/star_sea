@@ -30,9 +30,9 @@ static func run(tree: SceneTree, noise: TerrainNoise) -> Dictionary:
 		failures.append("塔链没有经过唯一的山口塔。")
 	if base_error > 0.1:
 		failures.append("烽火塔基六米范围没有保持平整，或后续道路改变了塔基高度。")
-	var stair: Dictionary = await _stairs(tree)
+	var stair: Dictionary = await _stairs(tree, noise)
 	if not stair["passed"]:
-		failures.append("实际角色未能沿石阶、跳过断口并登上塔冠。")
+		failures.append("实际角色未能在山口塔完成登顶、断口跳跃和下行。")
 	var scene: Node3D = (load("res://scenes/main.tscn") as PackedScene).instantiate() as Node3D
 	tree.root.add_child(scene)
 	tree.current_scene = scene
@@ -105,23 +105,38 @@ static func persistence(scene: Node) -> Dictionary:
 	return {"passed": roundtrip and legacy and rejected == invalid.size(), "roundtrip": roundtrip, "legacy": legacy, "invalid_rejected": rejected, "invalid_cases": invalid.size()}
 
 
-static func _stairs(tree: SceneTree) -> Dictionary:
+static func _stairs(tree: SceneTree, noise: TerrainNoise) -> Dictionary:
 	var scene: Node3D = Node3D.new()
 	tree.root.add_child(scene)
 	var body: StaticBody3D = StaticBody3D.new()
 	var ground: CollisionShape3D = CollisionShape3D.new()
-	var box: BoxShape3D = BoxShape3D.new()
-	box.size = Vector3(20, 0.2, 20)
-	ground.shape = box
-	ground.position.y = -0.1
+	var tower: Dictionary = {}
+	for candidate: Dictionary in noise.features.civilization.data.beacons:
+		if candidate["mountain_pass"]:
+			tower = candidate
+	var frame: Transform3D = BeaconTowers.tower_frame(tower, noise.radius)
+	var inverse: Transform3D = frame.affine_inverse()
+	# 在山口塔实际地面上建立碰撞，不能用平板代替重新选址后的塔基连接。
+	var faces: PackedVector3Array = []
+	for x: int in range(-8, 8):
+		for z: int in range(-8, 8):
+			var corners: PackedVector3Array = []
+			for offset: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1)]:
+				var direction: Vector3 = (frame * Vector3((x + offset.x) * 4, 0, (z + offset.y) * 4)).normalized()
+				corners.append(inverse * (direction * (noise.radius + noise.height(direction))))
+			for index: int in [0, 2, 1, 0, 3, 2]:
+				faces.append(corners[index])
+	var terrain_shape: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+	terrain_shape.set_faces(faces)
+	ground.shape = terrain_shape
 	body.add_child(ground)
-	for placement: Dictionary in BeaconTowers.pieces({"direction": Vector3.UP, "forward": Vector3.FORWARD, "height": 0}, 0):
+	for placement: Dictionary in BeaconTowers.pieces(tower, noise.radius):
 		if not placement.get("collision", true):
 			continue
 		for record: Dictionary in RuinKit.collision_records(placement["piece"]):
 			var collision: CollisionShape3D = CollisionShape3D.new()
 			collision.shape = record["shape"]
-			collision.transform = Transform3D(placement["transform"]) * Transform3D(record["transform"])
+			collision.transform = inverse * Transform3D(placement["transform"]) * Transform3D(record["transform"])
 			body.add_child(collision)
 	scene.add_child(body)
 	var actor: CharacterBody3D = CharacterBody3D.new()
@@ -174,7 +189,48 @@ static func _stairs(tree: SceneTree) -> Dictionary:
 			break
 		if actor.position.y < -1:
 			break
-	var result: Dictionary = {"passed": jumped and reached, "jumped_gap": jumped, "reached_crown": reached, "maximum_height_m": maximum_height, "duration_s": elapsed, "final_position": str(actor.position), "angle_degrees": rad_to_deg(progress), "gap_m": 3.9 * PI / 12.0, "maximum_centerline_height_step_m": 0.5 * 3 / (3.9 * PI / 2)}
+	var ascent_position: Vector3 = actor.position
+	var descent_progress: float = 3 * PI
+	var exited_crown: bool = false
+	var descent_exit_jump: bool = false
+	var descent_jump: bool = false
+	var returned: bool = false
+	if reached:
+		for count: int in 2400:
+			await tree.physics_frame
+			var delta: float = actor.get_physics_process_delta_time()
+			elapsed += delta
+			var angle: float = atan2(-actor.position.z, actor.position.x)
+			while angle < descent_progress - PI:
+				angle += TAU
+			while angle > descent_progress + PI:
+				angle -= TAU
+			if exited_crown:
+				descent_progress = minf(descent_progress, angle)
+			var next: float = maxf(descent_progress - 0.09, 0.0)
+			var target: Vector3 = Vector3(cos(next) * 3.9, 0, -sin(next) * 3.9) if exited_crown else Vector3(-3.9, 0, 0)
+			var direction: Vector3 = (target - actor.position).slide(Vector3.UP).normalized()
+			actor.velocity.x = direction.x * 3.5
+			actor.velocity.z = direction.z * 3.5
+			if actor.is_on_floor() and not exited_crown and not descent_exit_jump and Vector2(actor.position.x, actor.position.z).length() > 2.6:
+				# 塔冠入口与上行共用同一碰撞薄边，返回时也以正常短跳通过。
+				actor.velocity.y = 5
+				descent_exit_jump = true
+			elif actor.is_on_floor() and exited_crown and not descent_jump and descent_progress < deg_to_rad(225):
+				actor.velocity.y = 5
+				descent_jump = true
+			elif not actor.is_on_floor():
+				actor.velocity.y -= 9.8 * delta
+			else:
+				actor.velocity.y = 0
+			actor.move_and_slide()
+			exited_crown = exited_crown or Vector2(actor.position.x, actor.position.z).length() >= 3.85
+			if descent_progress <= 0.02 and actor.position.y < 0.35 and actor.is_on_floor():
+				returned = true
+				break
+			if actor.position.y < -1:
+				break
+	var result: Dictionary = {"passed": jumped and reached and descent_jump and returned, "mountain_pass_tower": tower["id"], "jumped_gap": jumped, "reached_crown": reached, "descent_exit_jump": descent_exit_jump, "descent_jumped_gap": descent_jump, "returned_to_ground": returned, "maximum_height_m": maximum_height, "duration_s": elapsed, "ascent_position": str(ascent_position), "final_position": str(actor.position), "angle_degrees": rad_to_deg(progress), "descent_degrees": rad_to_deg(descent_progress), "gap_m": 3.9 * PI / 12.0, "maximum_centerline_height_step_m": 0.5 * 3 / (3.9 * PI / 2)}
 	scene.queue_free()
 	for count: int in 3:
 		await tree.process_frame

@@ -71,17 +71,26 @@ func _bake() -> void:
 	print("烘焙：连续河道")
 	_rivers()
 	_canyon_river()
+	SpawnWaterBake.merge(_data, load(SpawnWaterBake.PATH) as HydrologyData, _features.site["direction"], _noise.radius)
 	_join_levels()
 	_mark_falls()
 	print("烘焙：空间索引")
 	_index()
 	_fine_index()
 	print("烘焙：文明区")
+	# 中途选址失败时仍能检查本轮水系，避免反复重算无关阶段。
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://../test-output/terrain"))
+	ResourceSaver.save(_data, "res://../test-output/terrain/hydrology-preview.res", ResourceSaver.FLAG_COMPRESS)
 	_features.hydrology = GlobalHydrology.new(_data, _noise.radius)
 	_features.protected_spawn = _features.site["direction"]
+	var protected: HydrologyData = load(SpawnWaterBake.PATH) as HydrologyData
+	_features.protected_civilization = CivilizationTerrain.new(protected.civilization, _noise.radius)
 	_noise.features = _features
-	_data.civilization = CivilizationBake.new().generate(_noise, _data)
+	var civilization_baker: CivilizationBake = CivilizationBake.new()
+	_data.civilization = civilization_baker.generate(_noise, _data)
 	if _data.civilization == null:
+		# 失败时保留精确河岸和渠道上下文，供调整意图后重新侵蚀；不能降低约束。
+		VerificationMetrics.write_json("res://../test-output/terrain/siting.json", civilization_baker.failure_context)
 		quit(1)
 		return
 	print("烘焙：烽火塔链")
@@ -210,11 +219,11 @@ func _canyon_river() -> void:
 	var forms: DawnLandforms = _features.landforms
 	var length: float = 0.0
 	var last_level: float = INF
-	for segment: int in forms.canyon.size() - 1:
-		var distance: float = forms.canyon[segment].angle_to(forms.canyon[segment + 1]) * _noise.radius
+	for segment: int in forms.canyon_curve.size() - 1:
+		var distance: float = forms.canyon_curve[segment].angle_to(forms.canyon_curve[segment + 1]) * _noise.radius
 		var steps: int = ceili(distance / 15.0)
 		for sample: int in steps:
-			var direction: Vector3 = forms.canyon[segment].slerp(forms.canyon[segment + 1], sample / float(steps)).normalized()
+			var direction: Vector3 = forms.canyon_curve[segment].slerp(forms.canyon_curve[segment + 1], sample / float(steps)).normalized()
 			var ground: float = _features.ground_height(direction, _noise.base_height(direction))
 			last_level = minf(last_level, maxf(-1.0, ground - 0.35))
 			_data.river_points.append(direction)

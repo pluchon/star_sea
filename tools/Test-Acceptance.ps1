@@ -161,6 +161,7 @@ try {
     $shots = @('s1_space','s2_high','s3_ground_day','s4_ground_sunset','s5_ground_night','s6_shore','s7_ember','s8_frost','s9_woodland','s10_highland','s11_orbit','s12_ruin','s13_tree_detail','s14_third_person','s15_relief_map','s16_terrace','s17_valley','s18_meadow','s19_broadleaf','s20_wetland','s21_drygrass','s22_tundra','s23_ship_parked','s24_ship_low','s25_waterfall','s28_canyon','s29_ruin_kit')
     if ($Scope -eq 'dawn') { $shots = @($shots | Where-Object { $_ -notin @('s7_ember', 's8_frost') }) }
     $shots += @('s49_range_from_spawn','s50_horn_peak','s51_canyon_rim','s52_canyon_floor','s53_mountain_pass')
+    $shots += @('s70_spawn_north','s71_spawn_east','s72_spawn_south','s73_spawn_west','s74_pass_view','s75_volcano','s76_oblique_3km','s77_canyon_far')
     $shots += @('s54_glide_canyon','s55_glide_range','s56_climb_route')
     $shots += @('s30_town_plaza','s31_town_overview','s32_terraces','s33_cemetery','s34_old_road')
     $shots += @('s35_beacon_top','s36_beacon_chain_night')

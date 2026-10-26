@@ -21,6 +21,7 @@ var hydrology: GlobalHydrology
 var landforms: DawnLandforms
 var protected_spawn: Vector3
 var civilization: CivilizationTerrain
+var protected_civilization: CivilizationTerrain
 var caves: CaveData
 
 
@@ -32,13 +33,15 @@ static func for_noise(noise: TerrainNoise) -> TerrainFeatures:
 		features = TerrainFeatures.new()
 		features.radius = noise.radius
 		var data: HydrologyData = load(HydrologyData.PATH) as HydrologyData
-		if data == null or data.version != 1 or data.planet_seed != noise.planet_seed or not is_equal_approx(data.planet_radius, noise.radius):
+		if data == null or data.version != HydrologyData.VERSION or int(data.statistics.get("grid_cells", 0)) != 6 * HydrologyData.GRID * HydrologyData.GRID or data.planet_seed != noise.planet_seed or not is_equal_approx(data.planet_radius, noise.radius):
 			_cache_mutex.unlock()
 			push_error("全球水系数据缺失或版本不兼容，请执行 tools/Bake-World.ps1。")
 			(Engine.get_main_loop() as SceneTree).quit(1)
 			return features
 		features.site = data.metadata["site"]
 		features.protected_spawn = features.site["direction"]
+		var protected: HydrologyData = load(SpawnWaterBake.PATH) as HydrologyData
+		features.protected_civilization = CivilizationTerrain.new(protected.civilization, noise.radius)
 		features.center = data.metadata["center"]
 		features.axis_u = data.metadata["axis_u"]
 		features.axis_v = data.metadata["axis_v"]
@@ -66,7 +69,7 @@ func direction_at(point: Vector2) -> Vector3:
 	return (lateral + center * sqrt(maxf(1.0 - lateral.length_squared(), 0.0))).normalized()
 
 
-# 此范围只用于保留样板区火山，全球水系查询不受此范围限制。
+# 此范围只用于火山标记与上升气流，全球地形和水系查询不受此范围限制。
 func contains(direction: Vector3) -> bool:
 	if direction.dot(center) < 0.94:
 		return false
@@ -79,13 +82,16 @@ func apply(direction: Vector3, base: float) -> float:
 	# 出发地两公里内不受新地貌影响；热路径直接判断，避免额外的曲线查询。
 	if landforms != null and direction.dot(protected_spawn) < 0.99875026:
 		height = landforms.height(direction, base)
-	if direction.dot(center) >= 0.94:
-		var point: Vector2 = plane(direction)
-		if absf(point.x) <= HALF_SIZE and absf(point.y) <= HALF_SIZE:
-			height = with_volcano(point, height)
 	height = hydrology.carve(direction, height)
+	var old_height: float = height
+	var protected_weight: float = 1.0
+	if protected_civilization != null and direction.dot(protected_spawn) > DawnHeightfield.SPAWN_ALIGNMENT:
+		protected_weight = smoothstep(DawnHeightfield.SPAWN_CORE, DawnHeightfield.SPAWN_BLEND_END, direction.distance_to(protected_spawn) * radius)
+		old_height = protected_civilization.apply(direction, height, hydrology)
 	if civilization != null:
 		height = civilization.apply(direction, height, hydrology)
+	if protected_weight < 1.0:
+		height = lerpf(old_height, height, protected_weight)
 	return caves.apply(direction, radius, height) if caves != null else height
 
 
@@ -94,34 +100,11 @@ func in_hole(position: Vector3) -> bool:
 
 
 func ground_height(direction: Vector3, base: float) -> float:
-	var result: float = landforms.height(direction, base) if landforms != null else base
-	return with_volcano(plane(direction), result) if contains(direction) else result
+	return landforms.height(direction, base) if landforms != null else base
 
 
 func surface_marks(direction: Vector3, elevation: float, slope: float) -> Color:
 	return landforms.surface_marks(direction, elevation, slope) if landforms != null else Color(0, 0, 0, 0)
-
-
-func with_volcano(point: Vector2, base: float) -> float:
-	if volcano == Vector2.INF:
-		return base
-	var offset: Vector2 = point - volcano
-	var distance: float = offset.length()
-	if distance >= volcano_radius:
-		return base
-	# 山脚以内逐渐把地面压到火山中心的高度，山体和火山口都建在这个平面上。
-	var ground: float = lerpf(base, volcano_base, smoothstep(volcano_radius, volcano_radius * 0.45, distance))
-	if distance < crater_radius:
-		# 火山口是一个碗形洼地，边缘保留一道略高的口沿。
-		var bowl: float = 1.0 - pow(distance / crater_radius, 2.0)
-		return ground + volcano_height - crater_depth * bowl + 6.0 * smoothstep(0.7, 1.0, distance / crater_radius)
-	var slope: float = (volcano_radius - distance) / (volcano_radius - crater_radius)
-	var cone: float = volcano_height * pow(slope, 1.45) + 6.0 * smoothstep(0.85, 1.0, slope)
-	# 山腰的放射状冲沟，越靠山顶越明显，避免锥体像一个光滑的圆锥。
-	var angle: float = atan2(offset.y, offset.x)
-	var gully: float = 0.5 + 0.5 * sin(angle * 13.0 + sin(angle * 5.0) * 2.2)
-	return ground + cone * (1.0 - 0.035 * gully * slope)
-
 
 
 func water_surface(direction: Vector3) -> float:

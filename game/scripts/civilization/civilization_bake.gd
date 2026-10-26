@@ -2,8 +2,9 @@ class_name CivilizationBake
 extends RefCounted
 
 const TOWN_SEED: int = 20261027
-const INTAKE_LIMIT: float = 8000.0 # 河岸高于河面约八十米，保留重力流向时允许沿既有河道上溯八公里。
-const MAX_OLD_ROAD: float = 12000.0 # 古道超过十二公里时重新选择河段，避免步行主线绕行数小时。
+const INTAKE_LIMIT: float = 8000.0 # 沿既有河道寻找能保持重力流向的取水口。
+const MAX_OLD_ROAD: float = CivilizationSiting.MAX_WALKING_DISTANCE
+var failure_context: Dictionary = {}
 var _noise: TerrainNoise
 var _data: CivilizationData
 var _hydro: HydrologyData
@@ -21,6 +22,7 @@ func generate(noise: TerrainNoise, hydro: HydrologyData, small_river: bool = fal
 	_data.town = CivilizationSiting.town(noise, hydro, _data.ladder, small_river)
 	if _data.town.is_empty():
 		return generate(noise, hydro, true) if not small_river else null
+	failure_context = {"town": _data.town, "ladder": _data.ladder}
 	print("文明烘焙：台地、梯田和墓园")
 	_regions()
 	_noise.features.civilization = CivilizationTerrain.new(_data, noise.radius)
@@ -28,20 +30,34 @@ func generate(noise: TerrainNoise, hydro: HydrologyData, small_river: bool = fal
 	_bridge()
 	print("文明烘焙：出发地古道与墓园道路")
 	var center: Vector3 = _data.town["direction"]
-	var spawn: Vector3 = noise.features.site["direction"]
-	var end: Vector3 = _road_end(spawn, center)
-	var crossings: Array[Dictionary] = [_data.bridge]
-	var path: PackedVector3Array = CivilizationPaths.find(noise, center, end, crossings)
+	var route: PackedVector3Array = _data.town["walking_route"]
+	var approach: PackedVector3Array = [route[0]]
+	var approach_length: float = 0.0
+	var first: int = 1
+	for index: int in range(1, route.size()):
+		var previous: Vector3 = route[index - 1] * (noise.radius + noise.height(route[index - 1]))
+		var point: Vector3 = route[index] * (noise.radius + noise.height(route[index]))
+		approach_length += previous.distance_to(point)
+		approach.append(route[index])
+		if approach_length >= 250.0 and noise.height(route[index]) >= 3.0 and noise.water_surface(route[index]) == -INF:
+			first = index
+			break
+	# 选址和正式古道共用同一条路线；只保留出生区内的自然进路，不重新改变绕行方向。
+	var path: PackedVector3Array = route.slice(first)
+	path.reverse()
+	_data.town.erase("walking_route")
+	_data.town["spawn_approach"] = approach
+	_data.town["spawn_approach_m"] = approach_length
 	if path.is_empty():
 		return null
-	var road_length: float = 0.0
-	for index: int in path.size() - 1:
-		road_length += path[index].distance_to(path[index + 1]) * noise.radius
-	if road_length > MAX_OLD_ROAD:
+	var road_length: float = CivilizationPaths.walk_length(noise, path)
+	# 寻路终点离出发地二百五十米，这段实际步行也计入总长。
+	_data.town["walking_distance_m"] = road_length + approach_length
+	if road_length + approach_length > MAX_OLD_ROAD:
 		if not small_river:
 			print("文明烘焙：大河选址古道过长，改为带可用取水口的近处小河段")
 			return generate(noise, hydro, true)
-		push_error("文明烘焙失败：小河段方案的古道仍超过十二公里。")
+		push_error("文明烘焙失败：小河段方案的古道步行仍超过二十分钟。")
 		return null
 	_data.roads.append(CivilizationPaths.road(noise, path, 4.0, "old_road"))
 	path = CivilizationPaths.find(noise, center, _data.cemetery["direction"])
@@ -59,24 +75,6 @@ func generate(noise: TerrainNoise, hydro: HydrologyData, small_river: bool = fal
 	buildings.build()
 	_data.sites = {"town": center, "plaza": center, "cemetery": _data.cemetery["direction"], "bridge": _data.bridge["direction"], "intake": _data.aqueduct["points"][0], "ladder": _data.ladder["direction"]}
 	return _data
-
-
-func _road_end(spawn: Vector3, town: Vector3) -> Vector3:
-	var heading: Vector3 = spawn.direction_to(town).slide(spawn).normalized()
-	for degrees: int in range(0, 181, 5):
-		for sign_value: float in [-1.0, 1.0]:
-			var forward: Vector3 = heading.rotated(spawn, deg_to_rad(degrees * sign_value))
-			var clear: bool = true
-			for distance: int in range(5, 256, 5):
-				var point: Vector3 = SurfaceSites.offset_direction(spawn, forward, distance, _noise.radius)
-				var height: float = _noise.height(point)
-				if height < 3.0 or _noise.water_surface(point, height) > -INF or _noise.slope(point, height) > 0.65:
-					clear = false
-					break
-			if clear:
-				return SurfaceSites.offset_direction(spawn, forward, 250.0, _noise.radius)
-	assert(false, "出发地二百五十米处没有连续干燥的古道终点。")
-	return spawn
 
 
 func _regions() -> void:
@@ -162,15 +160,30 @@ func _aqueduct() -> bool:
 	var town_index: int = _data.town["river_index"]
 	var first: int = _hydro.river_starts[_data.town["river"]]
 	var travelled: float = 0.0
-	var intake: int = -1
+	var previous_trial: float = -INF
+	var candidates: int = 0
+	var best_error: Dictionary = {}
 	for index: int in range(town_index - 1, first - 1, -1):
 		travelled += _hydro.river_points[index].distance_to(_hydro.river_points[index + 1]) * _noise.radius
-		if travelled >= 800.0 and travelled <= INTAKE_LIMIT and _hydro.river_levels[index] >= float(_data.town["level"]) + 12.0:
-			intake = index
+		if travelled > INTAKE_LIMIT:
 			break
-	if intake < 0:
-		push_error("文明烘焙失败：同一条河上溯八公里仍没有高出广场十二米的取水口。")
-		return false
+		if travelled < 800.0 or _hydro.river_levels[index] < float(_data.town["level"]) + 12.0 or travelled - previous_trial < 64.0:
+			continue
+		previous_trial = travelled
+		candidates += 1
+		if _aqueduct_from(index, travelled):
+			return true
+		if best_error.is_empty() or float(_channel_error["depth"]) < float(best_error["depth"]):
+			best_error = _channel_error.duplicate()
+	failure_context["channel_error"] = best_error
+	failure_context["intake_candidates"] = candidates
+	push_error("文明烘焙失败：沿河上溯八公里的取水口均不能满足十二米水头及一米二开挖限制：" + JSON.stringify(best_error))
+	return false
+
+
+func _aqueduct_from(intake: int, travelled: float) -> bool:
+	var town_index: int = _data.town["river_index"]
+	var first: int = _hydro.river_starts[_data.town["river"]]
 	var end: Vector3 = SurfaceSites.offset_direction(_data.town["direction"], -Vector3(_data.town["bank"]), 32.0, _noise.radius)
 	var levels: Vector2 = Vector2(_hydro.river_levels[intake] - 0.3, float(_data.town["level"]) + 4.0)
 	var corridor: PackedVector3Array = []
@@ -207,7 +220,8 @@ func _aqueduct() -> bool:
 	if not _channel_clear(path, levels):
 		path = CivilizationPaths.resample(corridor, _noise.radius, 8.0)
 	if not _channel_clear(path, levels):
-		push_error("文明烘焙失败：沿河谷的渠道仍有超过可开挖深度的山坡：" + JSON.stringify(_channel_error))
+		failure_context["channel_points"] = path
+		failure_context["channel_levels"] = levels
 		return false
 	var trenches: PackedInt32Array = []
 	for index: int in path.size() - 1:
@@ -218,13 +232,14 @@ func _aqueduct() -> bool:
 
 
 func _channel_clear(path: PackedVector3Array, levels: Vector2) -> bool:
+	_channel_error = {"depth": -INF}
 	for index: int in path.size():
 		var height: float = _noise.height(path[index])
 		var level: float = lerpf(levels.x, levels.y, index / float(path.size() - 1))
-		if height > level + 1.2:
-			_channel_error = {"index": index, "ground": height, "channel": level}
-			return false
-	return true
+		var depth: float = height - level
+		if depth > float(_channel_error["depth"]):
+			_channel_error = {"index": index, "ground": height, "channel": level, "depth": depth}
+	return float(_channel_error["depth"]) <= 1.2
 
 
 func _road_bridges() -> void:

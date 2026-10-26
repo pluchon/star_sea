@@ -2,7 +2,8 @@ class_name CivilizationSiting
 extends RefCounted
 
 const SAMPLE_RADIUS: float = 250.0 # 选址平缓范围，米。
-const TOWN_FALLBACK_DISTANCE: float = 12100.0 # 十二公里边界外增加一百米容差，保留现有河道和出发地。
+const MAX_WALKING_DISTANCE: float = 4800.0 # 普通步行四米每秒，主线第一段最多二十分钟。
+const MIN_TOWN_DISTANCE: float = 3000.0 # 避开两公里出生保护区，并留出文明区整地范围。
 
 
 static func ladder(noise: TerrainNoise) -> Dictionary:
@@ -30,14 +31,14 @@ static func town(noise: TerrainNoise, hydro: HydrologyData, tower: Dictionary, s
 	var spawn: Vector3 = noise.features.site["direction"]
 	var minimum_area: float = 10.0 if small_river else 40.0
 	var minimum_width: float = 3.0 + 2.2 * sqrt(minimum_area)
-	var search: Array[Vector2] = []
-	search.assign([Vector2(9000, 0.12), Vector2(9000, 0.18)] if small_river else [Vector2(9000, 0.08), Vector2(9000, 0.12), Vector2(TOWN_FALLBACK_DISTANCE, 0.12)])
-	for limits: Vector2 in search:
+	var search: Array[float] = []
+	search.assign([0.12, 0.18] if small_river else [0.08, 0.12])
+	for slope_limit: float in search:
 		var choices: Array[Dictionary] = []
 		for river: int in hydro.river_starts.size() - 1:
 			for index: int in range(hydro.river_starts[river] + 1, hydro.river_starts[river + 1] - 1):
 				var point: Vector3 = hydro.river_points[index]
-				if hydro.river_widths[index] < minimum_width or hydro.river_levels[index] < 15 or hydro.river_levels[index] > 300 or point.dot(spawn) < cos((limits.x + 150.0) / noise.radius) or point.dot(spawn) > cos(3850.0 / noise.radius):
+				if hydro.river_widths[index] < minimum_width or hydro.river_levels[index] < 15 or hydro.river_levels[index] > 300 or point.dot(spawn) < cos((MAX_WALKING_DISTANCE + 160.0) / noise.radius) or point.dot(spawn) > cos((MIN_TOWN_DISTANCE - 160.0) / noise.radius):
 					continue
 				var along: Vector3 = hydro.river_points[index - 1].direction_to(hydro.river_points[index + 1]).slide(point).normalized()
 				var side: Vector3 = along.cross(point).normalized()
@@ -46,21 +47,22 @@ static func town(noise: TerrainNoise, hydro: HydrologyData, tower: Dictionary, s
 						for offset: float in [60.0, 90.0, 120.0]:
 							var direction: Vector3 = (point * noise.radius + side * offset * bank + along * shift).normalized()
 							var distance: float = spawn.angle_to(direction) * noise.radius
-							if distance < 4000.0 or distance > limits.x:
+							if distance < MIN_TOWN_DISTANCE or distance > MAX_WALKING_DISTANCE:
 								continue
 							var nearest: Vector4 = noise.features.hydrology.nearest(direction)
 							if nearest.x < 60.0 or nearest.x > 120.1 or nearest.w < 0.0 or nearest.z < minimum_width:
 								continue
 							var height: float = noise.height(direction)
-							if height < 20.0 or height > 300.0 or noise.water_surface(direction, height) > -INF or noise.slope(direction, height) > limits.y * 2.0:
+							if height < 20.0 or height > 300.0 or noise.water_surface(direction, height) > -INF or noise.slope(direction, height) > slope_limit * 2.0:
 								continue
 							var owner: int = hydro.river_starts.bsearch(int(nearest.w), false) - 1
 							choices.append({"direction": direction, "distance": distance, "river_index": int(nearest.w), "river": owner, "river_offset": nearest.x, "along": along, "bank": side * bank, "height": height})
-		choices.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["distance"] < b["distance"])
+		choices.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return absf(float(a["distance"]) - 3800.0) < absf(float(b["distance"]) - 3800.0))
+		var walk_choices: Array[Dictionary] = []
 		for choice: Dictionary in choices:
 			var direction: Vector3 = choice["direction"]
 			var slope: float = average_slope(noise, direction)
-			if slope >= limits.y:
+			if slope >= slope_limit:
 				continue
 			var eye: Vector3 = direction * (noise.radius + choice["height"] + 1.7)
 			var tower_top: Vector3 = Vector3(tower["direction"]) * (noise.radius + float(tower["height"]) + 6200.0)
@@ -74,10 +76,27 @@ static func town(noise: TerrainNoise, hydro: HydrologyData, tower: Dictionary, s
 			if small_river and not _has_intake(hydro, choice):
 				continue
 			choice["slope"] = slope
-			choice["slope_limit"] = limits.y
+			choice["slope_limit"] = slope_limit
 			choice["minimum_area_km2"] = minimum_area
 			choice["small_river_fallback"] = small_river
-			return choice
+			# 先筛选合格河岸，再比较实际寻路长度；同一段河岸不重复计算。
+			var duplicate: bool = false
+			for tested: Dictionary in walk_choices:
+				duplicate = duplicate or direction.distance_to(tested["direction"]) * noise.radius < 150.0
+			if duplicate:
+				continue
+			var route: PackedVector3Array = CivilizationPaths.find(noise, spawn, direction, [], true)
+			var length_value: float = CivilizationPaths.walk_length(noise, route)
+			choice["walking_distance_m"] = length_value
+			choice["walking_score"] = absf(length_value - 4200.0) + slope * 100.0
+			choice["walking_route"] = route
+			walk_choices.append(choice)
+			if walk_choices.size() >= 12:
+				break
+		walk_choices.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["walking_score"] < b["walking_score"])
+		for choice: Dictionary in walk_choices:
+			if choice["walking_distance_m"] >= 3600.0 and choice["walking_distance_m"] <= MAX_WALKING_DISTANCE:
+				return choice
 	if small_river:
 		push_error("文明烘焙失败：近处小河段仍无合格古城河岸。")
 	else:

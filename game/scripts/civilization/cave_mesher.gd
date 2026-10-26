@@ -8,6 +8,9 @@ const GATE_FLOOR_OVERLAP: float = 2.0 # 胶囊接触网格边缘前先踏上平�
 const CORNERS: Array[Vector3i] = [Vector3i(0,0,0), Vector3i(1,0,0), Vector3i(0,1,0), Vector3i(1,1,0), Vector3i(0,0,1), Vector3i(1,0,1), Vector3i(0,1,1), Vector3i(1,1,1)]
 const EDGES: Array[Vector2i] = [Vector2i(0,1), Vector2i(2,3), Vector2i(4,5), Vector2i(6,7), Vector2i(0,2), Vector2i(1,3), Vector2i(4,6), Vector2i(5,7), Vector2i(0,4), Vector2i(1,5), Vector2i(2,6), Vector2i(3,7)]
 var _noise: FastNoiseLite = FastNoiseLite.new()
+var _mouth: Vector3
+var _outward: Vector3
+var _mouth_slope: float
 
 
 func generate(data: CaveData, terrain: TerrainNoise) -> void:
@@ -17,6 +20,9 @@ func generate(data: CaveData, terrain: TerrainNoise) -> void:
 	var triangles: int = 0
 	for id: int in data.networks.size():
 		var network: Dictionary = data.networks[id]
+		_mouth = network["nodes"][9]["local"]
+		_outward = (Vector3(network["nodes"][9]["local"]) - Vector3(network["nodes"][8]["local"])).slide(Vector3.UP).normalized()
+		_mouth_slope = float(network["mouth_approach"]["inner_slope"])
 		var keys: Array = data._indices[id].keys()
 		keys.sort_custom(func(a: Vector3i, b: Vector3i) -> bool: return a.x < b.x if a.x != b.x else (a.y < b.y if a.y != b.y else a.z < b.z))
 		for key: Vector3i in keys:
@@ -172,8 +178,16 @@ func _surface_clip(origin: Vector3, frame: Transform3D, terrain: TerrainNoise, v
 
 func _clip_distance(point: Vector3, frame: Transform3D, terrain: TerrainNoise) -> float:
 	var world: Vector3 = frame * point
-	var distance: float = world.length() - terrain.radius - terrain.height(world.normalized()) - 0.2
+	var delta: Vector3 = point - _mouth
+	var along: float = delta.dot(_outward)
+	var floor_y: float = _mouth.y + _mouth_slope * along
+	# 洞底有细小起伏，裁切容差必须保留支撑脚部的完整地板。
+	var floor_margin: float = 0.5 if along > -10 and along < CaveData.MOUTH_APRON_JOIN and absf(delta.dot(_outward.cross(Vector3.UP))) < 6 and absf(point.y - floor_y) < 0.4 else 0.2
+	var distance: float = world.length() - terrain.radius - terrain.height(world.normalized()) - floor_margin
 	# 洞外端帽不能形成高出坡面的矮坎；平段与地形重叠后再开洞，保持地面连续。
 	if absf(point.x) < GATE_TRIM_HALF_WIDTH:
 		distance = maxf(distance, CaveData.GATE_APRON_Z + GATE_FLOOR_OVERLAP - point.z)
+	# 第二出口也要裁掉端帽，在洞底与外侧缓坡重叠处交接。
+	if absf(delta.dot(_outward.cross(Vector3.UP))) < 12 and absf(delta.y) < 16:
+		distance = maxf(distance, delta.dot(_outward) - CaveData.MOUTH_APRON_JOIN)
 	return distance

@@ -5,7 +5,7 @@ const GRID: float = 20.0 # 寻路间距，米。
 const SAMPLE: float = 10.0 # 最终道路点间距，米。
 
 
-static func find(noise: TerrainNoise, start: Vector3, end: Vector3, bridges: Array[Dictionary] = []) -> PackedVector3Array:
+static func find(noise: TerrainNoise, start: Vector3, end: Vector3, bridges: Array[Dictionary] = [], distance_first: bool = false) -> PackedVector3Array:
 	var center: Vector3 = start.slerp(end, 0.5).normalized()
 	var forward: Vector3 = start.direction_to(end).slide(center).normalized()
 	var right: Vector3 = forward.cross(center).normalized()
@@ -47,7 +47,9 @@ static func find(noise: TerrainNoise, start: Vector3, end: Vector3, bridges: Arr
 						grid.set_point_solid(id)
 						continue
 				var slope: float = noise.slope(direction, height)
-				grid.set_point_weight_scale(id, (1.0 + slope * slope * 800.0 / GRID) * (10.0 if slope > 0.35 else 1.0) + (100.0 if planned_crossing else 0.0))
+				# 出发地段按实际地面路程计价，避免为绕开缓坡增加过长的绕行。
+				var ground_cost: float = sqrt(1.0 + slope * slope) if distance_first else 1.0 + slope * slope * 800.0 / GRID
+				grid.set_point_weight_scale(id, ground_cost * (10.0 if slope > 0.35 else 1.0) + (100.0 if planned_crossing else 0.0))
 		var a: Vector2i = Vector2i(roundi(start.dot(right) / start.dot(center) * noise.radius / GRID), roundi(start.dot(forward) / start.dot(center) * noise.radius / GRID))
 		var b: Vector2i = Vector2i(roundi(end.dot(right) / end.dot(center) * noise.radius / GRID), roundi(end.dot(forward) / end.dot(center) * noise.radius / GRID))
 		grid.set_point_solid(a, false)
@@ -66,9 +68,40 @@ static func find(noise: TerrainNoise, start: Vector3, end: Vector3, bridges: Arr
 				smooth.append(points[index].slerp(points[index + 1], 0.75).normalized())
 			smooth.append(points[-1])
 			points = smooth
-		return resample(points, noise.radius)
+		var sampled: PackedVector3Array = resample(points, noise.radius)
+		return _shortcut(noise, sampled) if distance_first else sampled
 	push_error("文明烘焙失败：道路寻路没有找到可通行的陆地或桥梁。")
 	return []
+
+
+static func _shortcut(noise: TerrainNoise, points: PackedVector3Array) -> PackedVector3Array:
+	var result: PackedVector3Array = [points[0]]
+	var cursor: int = 0
+	while cursor < points.size() - 1:
+		var next: int = cursor + 1
+		for candidate: int in range(mini(cursor + 20, points.size() - 1), cursor + 1, -1):
+			if _walkable_line(noise, points[cursor], points[candidate]):
+				next = candidate
+				break
+		result.append(points[next])
+		cursor = next
+	return resample(result, noise.radius)
+
+
+static func _walkable_line(noise: TerrainNoise, start: Vector3, end: Vector3) -> bool:
+	var distance: float = start.angle_to(end) * noise.radius
+	var count: int = maxi(1, ceili(distance / 2.0))
+	var previous: float = noise.height(start)
+	for index: int in count + 1:
+		var point: Vector3 = start.slerp(end, index / float(count)).normalized()
+		var height: float = noise.height(point)
+		# 只压缩可直接步行的陆地段，保留已有桥梁路线，不穿越水面或陡壁。
+		if height < 1.0 or noise.water_surface(point, height) > -INF or noise.slope(point, height) > 0.6:
+			return false
+		if index > 0 and absf(height - previous) > distance / count * 0.35:
+			return false
+		previous = height
+	return true
 
 
 static func resample(points: PackedVector3Array, radius: float, spacing: float = SAMPLE) -> PackedVector3Array:
@@ -84,6 +117,19 @@ static func resample(points: PackedVector3Array, radius: float, spacing: float =
 	if result[-1].distance_to(points[-1]) * radius > 0.05:
 		result.append(points[-1])
 	return result
+
+
+# 使用真实高度计入上下坡，避免把球面投影距离当成角色的实际路程。
+static func walk_length(noise: TerrainNoise, points: PackedVector3Array) -> float:
+	if points.is_empty():
+		return 0.0
+	var previous: Vector3 = points[0] * (noise.radius + noise.height(points[0]))
+	var length_value: float = 0.0
+	for index: int in range(1, points.size()):
+		var point: Vector3 = points[index] * (noise.radius + noise.height(points[index]))
+		length_value += previous.distance_to(point)
+		previous = point
+	return length_value
 
 
 static func road(noise: TerrainNoise, points: PackedVector3Array, width: float, name: String) -> Dictionary:

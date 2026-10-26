@@ -42,6 +42,7 @@ func _ready() -> void:
 		_models[piece] = load("res://models/sky_ladder/" + piece + ".glb") as PackedScene
 	_far_material = ShaderMaterial.new()
 	_far_material.shader = load("res://shaders/sky_ladder.gdshader") as Shader
+	_far_material.set_shader_parameter("stone_paint", load("res://textures/painted/stone.svg"))
 	_near_material = _far_material.duplicate() as ShaderMaterial
 	_far = MeshInstance3D.new()
 	_far.mesh = SkyLadderMeshes.body(false, balcony_height)
@@ -109,6 +110,7 @@ func model(piece: String, parent: Node3D, at: Vector3, collision: bool = true) -
 				material_value.shader = load("res://shaders/ladder_stone.gdshader") as Shader
 				material_value.set_shader_parameter("kind", maxi(kind, 0))
 				material_value.set_shader_parameter("frost", 0.3 if frost else 0.0)
+				material_value.set_shader_parameter("stone_paint", load("res://textures/painted/stone.svg"))
 				_stone_materials[key] = material_value
 			mesh.set_surface_override_material(surface, _stone_materials[key])
 		if collision:

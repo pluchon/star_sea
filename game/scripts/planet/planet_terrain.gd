@@ -68,6 +68,7 @@ func _ready() -> void:
 	_terrain_material.shader = load("res://shaders/terrain.gdshader") as Shader
 	_terrain_material.set_shader_parameter("planet_radius", radius)
 	_terrain_material.set_shader_parameter("ground_paint", load("res://textures/painted/ground.svg"))
+	_terrain_material.set_shader_parameter("rock_paint", load("res://textures/painted/stone.svg"))
 	_water_material = ShaderMaterial.new()
 	_water_material.shader = load("res://shaders/water.gdshader") as Shader
 	_water_material.set_shader_parameter("planet_radius", radius)

@@ -2,6 +2,7 @@ shader_type spatial;
 render_mode unshaded, cull_front, depth_draw_never, depth_test_disabled, blend_mix, fog_disabled, shadows_disabled;
 
 global uniform vec3 sun_dir;
+global uniform float cave_factor;
 
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 uniform vec3 planet_center;
@@ -74,5 +75,8 @@ void fragment() {
 	float tower_height = dot(endpoint, tower_up);
 	float tower_radius = max(mix(60.0, 38.0, clamp(tower_height / 1000.0, 0.0, 1.0)), scene_dist * tower_pixel_radius);
 	bool tower_surface = length(tower_up) > 0.5 && tower_height > 300.0 && tower_height < 6199.0 && abs(length(endpoint - tower_up * tower_height) - tower_radius) < 2.0;
-	ALPHA = clamp(1.0 - exp(-optical * (tower_surface ? 0.6 : 1.0)), 0.0, 1.0);
+	float cave_density = mix(1.0, 0.5, cave_factor);
+	float opacity = clamp(1.0 - exp(-optical * (tower_surface ? 0.6 : 1.0) * cave_density), 0.0, depth > 0.000001 ? 0.65 : 1.0);
+	// 地表保留至少 77% 的明度差；天空沿用完整积分，不复制屏幕颜色。
+	ALPHA = opacity * (depth > 0.000001 ? 0.35 : 1.0);
 }

@@ -24,6 +24,7 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	ALBEDO = v_color * (1.0 - wetness * 0.12) * (1.0 - v_haze);
 	EMISSION = mist_color * v_haze;
 	SPECULAR = 0.0;

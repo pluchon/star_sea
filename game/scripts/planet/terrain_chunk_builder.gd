@@ -47,7 +47,11 @@ static func build(noise: TerrainNoise, normal: Vector3, axis_a: Vector3, axis_b:
 			var vertex_normal: Vector3 = tangent_a.cross(tangent_b).normalized()
 			vertices[index] = position - center
 			normals[index] = vertex_normal
-			colors[index] = Color(clampf(heights[padded_index] / TerrainNoise.MAX_HEIGHT * 0.5 + 0.5, 0.0, 1.0), 1.0 - vertex_normal.dot(direction), noise.moisture(direction), noise.woodland(direction))
+			# 利用已有的边界采样估计凹曲率，不增加高度查询，也不改动网格或碰撞。
+			var neighbors: float = (heights[padded_index - 1] + heights[padded_index + 1] + heights[padded_index - count] + heights[padded_index + count]) * 0.25
+			var spacing: float = maxf((tangent_a.length() + tangent_b.length()) * 0.25, 0.01)
+			var cavity: float = smoothstep(0.012, 0.16, (neighbors - heights[padded_index]) / spacing)
+			colors[index] = Color(1.0 - cavity * 0.32, 1.0 - vertex_normal.dot(direction), noise.moisture(direction), noise.woodland(direction))
 			var special: Color = noise.features.surface_marks(direction, heights[padded_index], sqrt(maxf(0.0, 1.0 / maxf(pow(vertex_normal.dot(direction), 2), 0.001) - 1.0))) if noise.features != null else Color(0, 0, 0, 0)
 			for channel: int in 4:
 				marks[index * 4 + channel] = int(clampf(special[channel], 0, 1) * 255.0)

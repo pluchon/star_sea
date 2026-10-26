@@ -12,6 +12,7 @@ void vertex() {
 	v_sunlit = cloud_sunlit(v_world);
 }
 void fragment() {
+	toon_distance = length(VERTEX);
 	float layer = mod(floor(v_altitude / 27.0), 3.0);
 	vec3 pigment = layer < 1.0 ? vec3(0.381, 0.102, 0.045) : (layer < 2.0 ? vec3(0.584, 0.323, 0.105) : vec3(0.687, 0.610, 0.480));
 	if (grass_cap) {

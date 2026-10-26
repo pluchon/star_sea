@@ -1,4 +1,5 @@
 shader_type spatial;
+#include "res://shaders/toon_light.gdshaderinc"
 render_mode cull_back;
 #include "weather.gdshaderinc"
 uniform vec3 local_up = vec3(0.0, 1.0, 0.0);
@@ -12,6 +13,7 @@ void vertex() {
 	layer_noise = weather_noise(stable_position * 0.15);
 }
 void fragment() {
+	toon_distance = length(VERTEX);
 	float height = dot(stable_position, local_up);
 	float band = 0.94 + 0.06 * sin(height * 2.4 + layer_noise);
 	vec3 rock = vec3(0.20, 0.23, 0.27) * band;
@@ -28,4 +30,3 @@ void fragment() {
 	AO = marks.r;
 	ROUGHNESS = mix(0.95, 0.45, marks.g);
 }
-#include "toon_light.gdshaderinc"

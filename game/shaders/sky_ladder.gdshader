@@ -1,10 +1,12 @@
 shader_type spatial;
+#include "res://shaders/toon_light.gdshaderinc"
 render_mode cull_disabled;
 #include "weather.gdshaderinc"
 uniform float awake = 0.3;
 uniform float echo_rise = -1.0;
 uniform bool hide_base = false;
 uniform float pixel_radius = 0.0;
+uniform sampler2D stone_paint : filter_linear_mipmap, repeat_enable;
 varying vec3 stable_position;
 void vertex() {
 	// 远景按十二像素轮廓预留抗锯齿边缘，保证实色宽度；近景和物理尺寸使用真实半径。
@@ -14,16 +16,22 @@ void vertex() {
 	stable_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz - focus_center;
 }
 void fragment() {
+	toon_distance = length(VERTEX);
 	if (hide_base && UV.y < 300.0) { discard; }
 	float collar = 1.0 - step(3.0, abs(mod(UV.y + 60.0, 120.0) - 60.0));
 	float ring = 1.0 - step(3.0, abs(mod(UV.y + 300.0, 600.0) - 300.0));
 	float line = 1.0 - smoothstep(0.0015, 0.003, abs(fract(UV.x * 4.0 + 0.5) - 0.5));
 	vec3 stone = vec3(0.72, 0.69, 0.61);
+	float detail = 1.0 - smoothstep(120.0, 400.0, toon_distance);
+	if (detail > 0.001) {
+		// 环向与高度采用米制比例，近看有笔触，远处恢复干净轮廓。
+		vec2 stone_uv = vec2(UV.x * 320.0, UV.y);
+		float middle = texture(stone_paint, stone_uv / 18.0).r;
+		float small = texture(stone_paint, stone_uv / 3.0).r;
+		stone *= 1.0 + ((middle - 0.78) * 1.1 + (small - 0.78) * 0.5) * detail;
+	}
 	ALBEDO = mix(stone, vec3(0.16, 0.32, 0.27), collar);
 	float response = (echo_rise >= 0.0 && UV.y <= echo_rise * 6200.0) ? 1.0 : 0.0;
 	EMISSION = vec3(1.0, 0.61, 0.20) * (ring + line * 0.7) * max(awake, response) * 1.8;
-	float edge = pow(1.0 - max(dot(NORMAL, VIEW), 0.0), 3.0);
-	EMISSION += vec3(0.55, 0.52, 0.42) * edge * 0.4;
 	ROUGHNESS = 0.85;
 }
-#include "toon_light.gdshaderinc"

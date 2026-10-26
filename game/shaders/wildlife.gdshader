@@ -4,7 +4,6 @@ render_mode cull_disabled;
 #define CLOUD_SHADE
 #include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
-global uniform float rim_strength;
 
 // 鸟群：UV2.x 是离身体中线的距离，越靠翼尖扇得越高；INSTANCE_CUSTOM.r 是每只鸟的扇翅相位。
 // 鹿：UV2.x 为零，不受扇翅影响。
@@ -23,11 +22,11 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	ALBEDO = COLOR.rgb * tint;
 	if (!FRONT_FACING) {
 		NORMAL = -NORMAL;
 	}
 	ROUGHNESS = 1.0;
-	float rim = pow(1.0 - abs(dot(NORMAL, VIEW)), 4.0);
-	EMISSION = ALBEDO * rim * rim_strength;
+	EMISSION = vec3(0.0);
 }

@@ -13,6 +13,7 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	float warp = sin(v_local.x * 9.0 + v_local.z * 7.0) * 0.04;
 	float lat = v_local.y + warp;
 	float s = sin(lat * 22.0) * 0.5 + 0.5;

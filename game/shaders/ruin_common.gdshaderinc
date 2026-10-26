@@ -32,6 +32,7 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	vec3 pigment = vec3(0.72, 0.62, 0.43);
 	if (kind == 0) {
 		// 规格中的十六进制色先转换为线性空间，避免石材和铜锈过亮。

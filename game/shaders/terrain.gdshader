@@ -5,7 +5,6 @@ render_mode cull_back;
 #include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
 
-global uniform float rim_strength;
 uniform vec3 planet_center;
 
 uniform vec3 sand : source_color = vec3(0.86, 0.80, 0.64);
@@ -22,6 +21,7 @@ uniform float snow_height = 1580.0;
 uniform float beach_height = 12.0;
 uniform bool terrestrial = true;
 uniform sampler2D ground_paint : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D rock_paint : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 volcano_center = vec3(0.0);
 uniform float volcano_radius = 0.0;
 uniform vec3 basalt : source_color = vec3(0.30, 0.25, 0.25);
@@ -33,6 +33,8 @@ varying vec3 v_position;
 varying vec2 v_climate;
 varying float v_grove;
 varying vec4 v_marks;
+varying float v_cavity;
+varying vec3 v_normal;
 
 float patch(vec3 p) {
 	// 三轴连续变化，避免两极附近的色块拉伸成条纹。
@@ -44,6 +46,8 @@ void vertex() {
 	// 顶点颜色只有八位精度，不能承载公里范围内的海岸高度。
 	v_height = length(v_position) - planet_radius;
 	v_slope = COLOR.g;
+	v_cavity = COLOR.r;
+	v_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
 	v_climate = vec2(COLOR.b, clamp(1.05 - abs(normalize(v_position).y) * 0.72 - max(v_height, 0.0) / 2800.0, 0.0, 1.0));
 	v_grove = COLOR.a;
 	v_marks = CUSTOM0;
@@ -52,6 +56,7 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	vec3 c = mix(grass, grass_far, smoothstep(300.0, 1200.0, v_height));
 	if (terrestrial) {
 		c = mix(dry_grass, c, smoothstep(0.28, 0.48, v_climate.x));
@@ -89,14 +94,6 @@ void fragment() {
 	float strata = sin(v_height * 0.11 + patch(v_position / 70.0));
 	c *= 1.0 + strata * exposed * 0.045;
 	c *= 1.0 + variation;
-	float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
-	if (terrestrial && near_detail > 0.0) {
-		// 自绘短笔触采用三轴投影，近景补充细节，远景淡出以避免闪烁和规则网格。
-		vec3 weights = pow(abs(normalize(v_position)), vec3(4.0));
-		weights /= weights.x + weights.y + weights.z;
-		float brush = dot(vec3(texture(ground_paint, v_position.yz / 9.0).r, texture(ground_paint, v_position.xz / 9.0).r, texture(ground_paint, v_position.xy / 9.0).r), weights);
-		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
-	}
 	// 雨后地面颜色变深，雨停后慢慢变干。
 	if (terrestrial) {
 		float warped_height = v_height + sin(v_height * 0.031) * 11.0 + patch(v_position / 160.0) * 7.0;
@@ -114,10 +111,52 @@ void fragment() {
 		vec3 ice = vec3(0.624, 0.791, 0.855) * (0.95 + smoothstep(0.92, 0.98, sin(v_position.x * 0.035 + v_position.z * 0.012)) * 0.05);
 		c = mix(c, ice, v_marks.g);
 	}
+	// 地貌色先合成，再叠加笔触，避免峡谷和冰川覆盖中近景细节。
+	float camera_distance = distance(v_position + planet_center, CAMERA_POSITION_WORLD);
+	float middle_detail = 1.0 - smoothstep(160.0, 400.0, camera_distance);
+	if (middle_detail > 0.001) {
+		vec3 weights = pow(abs(v_normal), vec3(4.0));
+		weights /= max(weights.x + weights.y + weights.z, 0.001);
+		float brush = 0.0;
+		if (exposed < 0.95) {
+			vec3 grass_samples = vec3(0.5);
+			if (weights.x > 0.06) { grass_samples.x = texture(ground_paint, v_position.yz / 42.0).r; }
+			if (weights.y > 0.06) { grass_samples.y = texture(ground_paint, v_position.xz / 42.0).r; }
+			if (weights.z > 0.06) { grass_samples.z = texture(ground_paint, v_position.xy / 42.0).r; }
+			float grass_brush = dot(grass_samples, weights);
+			brush = (grass_brush - 0.5) * 1.7 * (1.0 - exposed);
+		}
+		if (exposed > 0.05) {
+			vec3 stone_samples = vec3(0.76);
+			if (weights.x > 0.06) { stone_samples.x = texture(rock_paint, v_position.yz / 24.0).r; }
+			if (weights.y > 0.06) { stone_samples.y = texture(rock_paint, v_position.xz / 24.0).r; }
+			if (weights.z > 0.06) { stone_samples.z = texture(rock_paint, v_position.xy / 24.0).r; }
+			float stone_brush = dot(stone_samples, weights);
+			brush += (stone_brush - 0.76) * 0.9 * exposed;
+		}
+		c *= 1.0 + brush * middle_detail * (1.0 - snow_line);
+		vec3 rock_temperature = mix(vec3(0.86, 0.94, 1.04), vec3(1.06, 1.015, 0.91), smoothstep(-0.15, 0.5, dot(v_normal, sun_dir)));
+		c *= mix(vec3(1.0), rock_temperature, exposed * middle_detail);
+	}
+	if (terrestrial && middle_detail > 0.001 && exposed < 0.99 && snow_line < 0.99) {
+		vec3 side = normalize(cross(normalize(v_position), wind_dir));
+		float wave = sin(dot(v_position, wind_dir) / 9.0 - weather_time * 2.3 + sin(dot(v_position, side) / 17.0) * 1.6);
+		float sweep = smoothstep(0.5, 0.95, wave) * (1.0 - exposed) * (1.0 - snow_line);
+		c *= 1.0 + sweep * 0.065 * middle_detail * wind_speed;
+	}
+	float near_detail = 1.0 - smoothstep(35.0, 160.0, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
+	if (terrestrial && near_detail > 0.0) {
+		// 自绘短笔触采用三轴投影，近景补充细节，远景淡出以避免闪烁和规则网格。
+		vec3 weights = pow(abs(normalize(v_position)), vec3(4.0));
+		weights /= weights.x + weights.y + weights.z;
+		float brush = dot(vec3(texture(ground_paint, v_position.yz / 9.0).r, texture(ground_paint, v_position.xz / 9.0).r, texture(ground_paint, v_position.xy / 9.0).r), weights);
+		c *= 1.0 + (brush * 2.0 - 1.0) * near_detail * 0.25 * (1.0 - snow_line);
+	}
 	c *= 1.0 - wetness * 0.2;
 	float haze = mist_amount(v_position + planet_center, distance(v_position + planet_center, CAMERA_POSITION_WORLD));
 	ALBEDO = c * (1.0 - haze);
 	ROUGHNESS = 1.0;
-	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-	EMISSION = ALBEDO * rim * rim_strength + mist_color * haze;
+	AO = v_cavity;
+	AO_LIGHT_AFFECT = 0.15;
+	EMISSION = mist_color * haze;
 }

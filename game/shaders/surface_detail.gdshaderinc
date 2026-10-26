@@ -1,7 +1,6 @@
 #define CLOUD_SHADE
 #include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
-global uniform float rim_strength;
 
 uniform float wind_strength = 0.0;
 uniform bool is_grass = false;
@@ -38,6 +37,7 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	ALBEDO = v_color * mix(0.68, 1.0, v_root);
 	float detail = 1.0 - smoothstep(35.0, 150.0, v_distance);
 	if (detail > 0.01 && v_surface > 0.5 && v_surface < 2.5) {
@@ -59,6 +59,5 @@ void fragment() {
 	}
 	ALBEDO *= (1.0 - wetness * 0.15) * (1.0 - v_haze);
 	ROUGHNESS = 1.0;
-	float rim = pow(1.0 - abs(dot(NORMAL, VIEW)), 4.0);
-	EMISSION = ALBEDO * rim * rim_strength * 0.6 + mist_color * v_haze;
+	EMISSION = mist_color * v_haze;
 }

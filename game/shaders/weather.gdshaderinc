@@ -12,6 +12,8 @@ global uniform float focus_radius;
 global uniform float wetness;
 global uniform float mist;
 global uniform vec3 mist_color;
+global uniform float weather_time;
+global uniform float valley_floor;
 
 // 云影系数：1 为全受光，越小表示越处于云影中
 varying float v_sunlit;
@@ -53,9 +55,9 @@ vec3 wind_push(vec3 world_position, float phase) {
 	vec3 relative = world_position - focus_center;
 	vec3 side = normalize(cross(normalize(relative), wind_dir));
 	float along = dot(relative, wind_dir);
-	float wave = sin(along / 9.0 - TIME * 2.3 + sin(dot(relative, side) / 17.0) * 1.6);
+	float wave = sin(along / 9.0 - weather_time * 2.3 + sin(dot(relative, side) / 17.0) * 1.6);
 	float gust = 0.5 + 0.5 * wave;
-	float flutter = sin(TIME * 3.4 + phase) * 0.22;
+	float flutter = sin(weather_time * 3.4 + phase) * 0.22;
 	return (wind_dir * (0.35 + gust * 0.65) + side * flutter * 0.4) * wind_speed;
 }
 
@@ -66,5 +68,5 @@ float mist_amount(vec3 world_position, float camera_distance) {
 		return 0.0;
 	}
 	float height = length(world_position - focus_center) - focus_radius;
-	return mist * (1.0 - smoothstep(5.0, 90.0, height)) * smoothstep(60.0, 900.0, camera_distance) * 0.45;
+	return mist * (1.0 - smoothstep(valley_floor - 85.0, valley_floor, height)) * smoothstep(60.0, 900.0, camera_distance) * 0.35;
 }

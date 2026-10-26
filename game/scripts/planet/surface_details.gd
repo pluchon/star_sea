@@ -181,6 +181,17 @@ func _collect_tile() -> void:
 		add_child(tile)
 		for kind: String in KINDS:
 			_add_instances(tile, kind, _result[kind], _result[kind + "_colors"])
+		var contacts: Array[Dictionary] = []
+		for kind: String in ["broadleaf", "pine", "stone"]:
+			var bounds: AABB = (_meshes[kind] as Mesh).get_aabb()
+			for transform_value: Transform3D in _result[kind]:
+				var base: Transform3D = transform_value
+				var scale_value: Vector3 = base.basis.get_scale()
+				base.basis = base.basis.orthonormalized()
+				var width: float = 1.2 if kind != "stone" else bounds.size.x * 0.85
+				var depth: float = 1.2 if kind != "stone" else bounds.size.z * 0.85
+				contacts.append({"transform": base, "size": Vector3(width * scale_value.x, 1.2, depth * scale_value.z)})
+		ContactShadows.register(tile, contacts)
 		tile.set_meta("trunks", _result["broadleaf"] + _result["pine"])
 		tile.set_meta("rocks", _result["stone"])
 		_tiles[_pending_key] = tile

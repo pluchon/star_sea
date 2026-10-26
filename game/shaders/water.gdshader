@@ -12,6 +12,7 @@ uniform float planet_radius = 40000.0;
 global uniform vec3 sun_dir;
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	float depth = textureLod(depth_tex, SCREEN_UV, 0.0).r;
 	vec4 view = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
 	view.xyz /= view.w;

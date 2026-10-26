@@ -232,7 +232,7 @@ func _process(delta: float) -> void:
 		_time += delta
 	for material_value: ShaderMaterial in _shaft_materials:
 		material_value.set_shader_parameter("phase", _time)
-		material_value.set_shader_parameter("strength", 0.18 if _planet.to_local(camera.global_position).normalized().dot(director.sun_direction) > 0 else 0.045)
+		material_value.set_shader_parameter("strength", 0.09 if _planet.to_local(camera.global_position).normalized().dot(director.sun_direction) > 0 else 0.0225)
 		material_value.set_shader_parameter("tint", Color("fff0d2") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed"))
 	for material_value: ShaderMaterial in _dust_materials:
 		material_value.set_shader_parameter("phase", _time)
@@ -250,7 +250,7 @@ func _process(delta: float) -> void:
 				_lamps[index].light_energy = 18 if local.normalized().dot(director.sun_direction) > 0 else 5.4
 				_lamps[index].light_color = Color("fff0d2") if local.normalized().dot(director.sun_direction) > 0 else Color("b0c6ed")
 			elif _lamps[index].has_meta("shaft_bounce"):
-				_lamps[index].light_energy = 2.8 if local.normalized().dot(director.sun_direction) > 0 else 0.8
+				_lamps[index].light_energy = 2.8 if local.normalized().dot(director.sun_direction) > 0 else 1.8
 	_update_chunks(local)
 
 

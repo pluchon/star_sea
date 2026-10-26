@@ -108,3 +108,23 @@ aurora={
 "type": "float",
 "value": 0.0
 }
+shadow_up={
+"type": "vec3",
+"value": Vector3(0.2, 0.28, 0.45)
+}
+shadow_side={
+"type": "vec3",
+"value": Vector3(0.25, 0.29, 0.17)
+}
+cave_factor={
+"type": "float",
+"value": 0.0
+}
+weather_time={
+"type": "float",
+"value": 0.0
+}
+valley_floor={
+"type": "float",
+"value": 90.0
+}

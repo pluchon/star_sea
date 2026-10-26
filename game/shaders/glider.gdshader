@@ -12,6 +12,7 @@ void vertex() {
 	v_sunlit = cloud_sunlit((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
 }
 void fragment() {
+	toon_distance = length(VERTEX);
 	if (edges_only && width_position < 0.95) { discard; }
 	if (!FRONT_FACING) { NORMAL = -NORMAL; }
 	ALBEDO = vec3(0.8, 0.3, 0.22);

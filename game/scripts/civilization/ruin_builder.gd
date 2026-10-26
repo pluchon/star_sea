@@ -9,6 +9,14 @@ var _elapsed: float = 1.0
 
 func build(placements: Array[Dictionary]) -> void:
 	_placements = placements
+	var contacts: Array[Dictionary] = []
+	for placement: Dictionary in placements:
+		var bounds: AABB = RuinKit.mesh(placement["piece"]).get_aabb()
+		# 低矮地砖不叠暗斑，避免广场出现一整片黑色；只处理实际接地的构件。
+		if bounds.size.y < 0.8 or float(placement.get("base_height", 0.0)) > 0.6:
+			continue
+		contacts.append({"transform": placement["transform"], "size": Vector3(maxf(bounds.size.x * 0.9, 0.6), 1.2, maxf(bounds.size.z * 0.9, 0.6))})
+	ContactShadows.register(self, contacts)
 	var groups: Dictionary = {}
 	for placement: Dictionary in placements:
 		var location: Transform3D = placement["transform"]

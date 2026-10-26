@@ -2,7 +2,6 @@ shader_type spatial;
 #define CLOUD_SHADE
 #include "res://shaders/weather.gdshaderinc"
 #include "res://shaders/toon_light.gdshaderinc"
-global uniform float rim_strength;
 uniform vec4 pigment : source_color = vec4(0.8, 0.8, 0.7, 1.0);
 
 void vertex() {
@@ -10,8 +9,8 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	ALBEDO = pigment.rgb;
 	ROUGHNESS = 1.0;
-	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-	EMISSION = ALBEDO * rim * rim_strength;
+	EMISSION = vec3(0.0);
 }

@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="RenderPalette" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/render/render_palette.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+periods = Array[Dictionary]([{
+"name": "dawn",
+"sky": Color(0.72, 0.80, 0.85, 1),
+"light": Color(1, 0.82, 0.76, 1),
+"shadow_up": Color(0.61, 0.57, 0.69, 1),
+"shadow_side": Color(0.63, 0.59, 0.53, 1),
+"fog": Color(0.77, 0.69, 0.70, 1),
+"lift": Color(0.011, 0.008, 0.018, 1),
+"gain": Color(1.01, 0.995, 0.98, 1),
+"saturation": 0.96
+}, {
+"name": "day",
+"sky": Color(0.49, 0.69, 0.88, 1),
+"light": Color(1, 0.97, 0.92, 1),
+"shadow_up": Color(0.48, 0.57, 0.70, 1),
+"shadow_side": Color(0.54, 0.58, 0.45, 1),
+"fog": Color(0.66, 0.75, 0.82, 1),
+"lift": Color(0.001, 0.004, 0.009, 1),
+"gain": Color(1.015, 1.005, 0.985, 1),
+"saturation": 0.98
+}, {
+"name": "dusk",
+"sky": Color(0.78, 0.48, 0.52, 1),
+"light": Color(1, 0.68, 0.45, 1),
+"shadow_up": Color(0.53, 0.43, 0.63, 1),
+"shadow_side": Color(0.62, 0.44, 0.32, 1),
+"fog": Color(0.69, 0.51, 0.56, 1),
+"lift": Color(0.014, 0.003, 0.020, 1),
+"gain": Color(1.025, 0.985, 0.94, 1),
+"saturation": 0.96
+}, {
+"name": "night",
+"sky": Color(0.06, 0.09, 0.19, 1),
+"light": Color(0.69, 0.77, 1, 1),
+"shadow_up": Color(0.22, 0.24, 0.38, 1),
+"shadow_side": Color(0.24, 0.28, 0.34, 1),
+"fog": Color(0.13, 0.18, 0.29, 1),
+"lift": Color(0.001, 0.004, 0.012, 1),
+"gain": Color(0.94, 0.975, 1.02, 1),
+"saturation": 0.86
+}, {
+"name": "cave",
+"sky": Color(0.24, 0.22, 0.19, 1),
+"light": Color(1, 0.93, 0.81, 1),
+"shadow_up": Color(0.47, 0.42, 0.35, 1),
+"shadow_side": Color(0.43, 0.38, 0.32, 1),
+"fog": Color(0.40, 0.36, 0.30, 1),
+"lift": Color(0.009, 0.007, 0.004, 1),
+"gain": Color(1.025, 1.0, 0.96, 1),
+"saturation": 0.92
+}])

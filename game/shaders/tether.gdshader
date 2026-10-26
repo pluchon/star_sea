@@ -1,4 +1,5 @@
 shader_type spatial;
+#include "res://shaders/toon_light.gdshaderinc"
 render_mode cull_back;
 #include "weather.gdshaderinc"
 uniform float tether_time = 0.0;
@@ -8,5 +9,8 @@ void vertex() {
 	VERTEX.x += sin(tether_time * 0.22 + VERTEX.y * 0.004) * weight * 2.0;
 	stable_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz - focus_center;
 }
-void fragment() { ALBEDO = vec3(0.24, 0.34, 0.30); ROUGHNESS = 0.75; }
-#include "toon_light.gdshaderinc"
+void fragment() {
+	toon_distance = length(VERTEX);
+	ALBEDO = vec3(0.24, 0.34, 0.30);
+	ROUGHNESS = 0.75;
+}

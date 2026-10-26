@@ -66,10 +66,17 @@ const NAMES: Array[String] = [
 	"s48_journal",
 	"s61_light_path",
 	"s61b_echo_ending",
+	"s62_materials",
+	"s63_temple_night",
 ]
 
 
 static func place(name: String, player: StarSeaPlayer, planet: Planet, director: SkyDirector) -> void:
+	if name == "s63_temple_night":
+		place("s38_temple_hall", player, planet, director)
+		var frame: Transform3D = planet.noise.features.caves.networks[0]["frame"]
+		director.set_sun_altitude(frame.basis.y, -frame.basis.z, -25)
+		return
 	if name in ["s46_echo_plaza", "s46b_echo_departure", "s46c_echo_watcher", "s47_echo_temple", "s48_journal", "s61_light_path", "s61b_echo_ending"]:
 		EchoShots.place(name, player, planet, director)
 		return
@@ -87,6 +94,10 @@ static func place(name: String, player: StarSeaPlayer, planet: Planet, director:
 	player.set_third_person(false)
 	director.time_paused = true
 	match name:
+		"s62_materials":
+			place("s12_ruin", player, planet, director)
+			player.set_head_pitch(-0.18)
+			return
 		"s37_temple_gate", "s38_temple_hall":
 			CaveShots.place(name, player, planet, director)
 		"s30_town_plaza", "s31_town_overview", "s32_terraces", "s33_cemetery", "s34_old_road", "s35_beacon_top", "s36_beacon_chain_night":

@@ -21,14 +21,13 @@ var _weather_hold: float = 300.0
 var _weather_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _wetness: float = 0.0
 var _mist: float = 0.0
-var _previous_sun_height: float = 0.0
 var _rain_curtain: MeshInstance3D
 var _weather_time: float = 0.0
 var _cloud_offset: Vector3 = Vector3.ZERO
-var _grade_gradient: Gradient
-var _surface_correction: GradientTexture1D
-var _surface_saturation: float = 1.0
-var _grade_key: Vector4 = Vector4(-1.0, -1.0, -1.0, -1.0)
+var _fog_sample: Vector3 = Vector3.ZERO
+var _valley_floor: float = 90.0
+var _palette: RenderPalette = preload("res://data/palette.tres") as RenderPalette
+var _grade: ColorGrade
 var _planet: Planet
 var _sun: DirectionalLight3D
 var _environment: Environment
@@ -45,13 +44,15 @@ func _ready() -> void:
 	# 太阳轨道保持在赤道平面，避免高纬度出生点因初始偏角永久处于白昼。
 	sun_direction = Vector3(up.x, 0.0, up.z).normalized().rotated(Vector3.UP, -0.3)
 	add_to_group("sky_director")
-	_grade_gradient = Gradient.new()
-	var lut: GradientTexture1D = GradientTexture1D.new()
-	lut.gradient = _grade_gradient
-	lut.width = 64
-	_surface_correction = lut
+	_grade = ColorGrade.new(_palette)
 	_environment.adjustment_enabled = true
-	_environment.adjustment_color_correction = lut
+	_environment.adjustment_color_correction = _grade.texture
+	var finish: RenderFinish = RenderFinish.new()
+	finish.name = "RenderFinish"
+	get_parent().add_child.call_deferred(finish)
+	var contacts: ContactShadows = ContactShadows.new()
+	contacts.name = "ContactShadows"
+	get_parent().get_node("Universe").add_child.call_deferred(contacts)
 	_weather_rng.seed = 20261020
 	_rain_curtain = _build_rain_curtain()
 	get_parent().add_child.call_deferred(_rain_curtain)
@@ -99,6 +100,9 @@ func _update_environment() -> void:
 	var up: Vector3 = offset.normalized()
 	var altitude: float = offset.length() - _planet.radius
 	var sun_height: float = up.dot(sun_direction)
+	# 太阳的解析运动方向在暂停机位中也稳定，不依赖上一帧的浮点差。
+	var rising: bool = up.dot(Vector3.UP.cross(sun_direction)) >= 0.0
+	var phase: Vector3 = _palette.daylight(sun_height, rising)
 	var day: float = smoothstep(-0.12, 0.18, sun_height)
 	var space: float = smoothstep(_planet.atmosphere_height * 0.5, _planet.atmosphere_height * 1.5, altitude)
 	RenderingServer.global_shader_parameter_set("sun_dir", sun_direction)
@@ -117,17 +121,15 @@ func _update_environment() -> void:
 	var light_direction: Vector3 = sun_direction if moonlight <= 0.0 else moon_direction
 	var light_up: Vector3 = Vector3.UP if absf(light_direction.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	_sun.global_basis = Basis.looking_at(-light_direction, light_up)
-	var sunset: Color = Color(1.0, 0.62, 0.42)
-	var noon: Color = Color(1.0, 0.97, 0.92)
-	_sun.light_color = sunset.lerp(noon, smoothstep(0.0, 0.35, sun_height)).lerp(noon, space)
+	_sun.light_color = _palette.tint("light", phase, 0).lerp(Color(1.0, 0.97, 0.92), space)
 	_sun.light_energy = lerpf(smoothstep(-0.08, 0.05, sun_height) * 1.25 * (1.0 - overcast * 0.45), 1.0, space)
 	if moonlight > 0.0:
-		_sun.light_color = Color(0.62, 0.72, 1.0)
+		_sun.light_color = _palette.periods[3]["light"]
 		_sun.light_energy = moonlight * 0.34
 	# 日出日落前后天空最亮最暖，背光的地面也应映出暖淡紫色，而不是沉成黑褐色。
 	# 环境色会与地表固有色相乘，饱和的紫色乘上草绿会发黑，所以这里用低饱和的颜色并提高强度。
 	var golden: float = smoothstep(-0.10, 0.02, sun_height) * (1.0 - smoothstep(0.10, 0.35, sun_height))
-	var ambient: Color = Color(0.12, 0.16, 0.30).lerp(Color(0.46, 0.56, 0.72), day).lerp(Color(0.80, 0.66, 0.76), golden * 0.8)
+	var ambient: Color = _palette.tint("shadow_up", phase, 0).lerp(_palette.tint("fog", phase, 0), golden * 0.35)
 	_environment.ambient_light_color = ambient.lerp(Color(0.08, 0.08, 0.16), space)
 	# 晨的日间阴影保留蓝色环境光，并适度抬亮林下和背光山坡。
 	var daytime_energy: float = 0.39 if _planet.profile == 0 else 0.32
@@ -139,30 +141,42 @@ func _update_environment() -> void:
 	RenderingServer.global_shader_parameter_set("wetness", _wetness if _planet.profile == 0 else 0.0)
 	_rain_curtain.visible = rain > 0.01 and altitude < 2000.0
 	# 晨雾：日出前后低地起雾，太阳升高后散去；下雨时也有一层薄雾。只在晨上出现。
-	var rising: bool = sun_height > _previous_sun_height
-	_previous_sun_height = sun_height
-	var dawn: float = smoothstep(-0.12, 0.0, sun_height) * (1.0 - smoothstep(0.12, 0.32, sun_height)) * (1.0 if rising else 0.0)
-	var mist_target: float = (dawn * 0.85 + rain * 0.45) * (1.0 if _planet.profile == 0 else 0.0)
+	var twilight: float = smoothstep(-0.12, 0.0, sun_height) * (1.0 - smoothstep(0.12, 0.32, sun_height))
+	var mist_target: float = (twilight * (0.65 if rising else 0.38) + rain * 0.45) * (1.0 if _planet.profile == 0 else 0.0)
 	_mist = lerpf(_mist, mist_target, 0.02)
 	RenderingServer.global_shader_parameter_set("mist", _mist * (1.0 - space))
 	RenderingServer.global_shader_parameter_set("focus_radius", _planet.radius)
-	var mist_tint: Color = Color(0.86, 0.88, 0.92).lerp(Color(0.94, 0.88, 0.86), golden).lerp(Color(0.22, 0.26, 0.36), 1.0 - day)
-	RenderingServer.global_shader_parameter_set("mist_color", Vector3(mist_tint.r, mist_tint.g, mist_tint.b) * (0.75 + 0.25 * day))
+	if _fog_sample.distance_to(up * _planet.radius) > 100.0:
+		_fog_sample = up * _planet.radius
+		_valley_floor = 90.0
+		if _planet.profile == 0:
+			var height: float = _planet.noise.height(up)
+			var surrounding: float = 0.0
+			var forward: Vector3 = SurfaceSites.tangent_forward(up)
+			for index: int in 4:
+				var nearby: Vector3 = SurfaceSites.offset_direction(up, forward.rotated(up, index * PI * 0.5), 350.0, _planet.radius)
+				surrounding += _planet.noise.height(nearby) * 0.25
+			if surrounding > height + 18.0:
+				_valley_floor = maxf(90.0, height + 75.0)
+	RenderingServer.global_shader_parameter_set("valley_floor", _valley_floor)
 	# 极光只在晨的晴朗夜里出现，强弱以十几分钟为周期起伏，有的夜里几乎看不见。
 	var aurora_cycle: float = clampf(sin(_weather_time / 700.0) * 0.8 + 0.2, 0.0, 1.0)
 	var aurora_value: float = (1.0 - smoothstep(-0.2, -0.08, sun_height)) * aurora_cycle * (1.0 - overcast) * (1.0 if _planet.profile == 0 else 0.0)
 	RenderingServer.global_shader_parameter_set("aurora", aurora_value)
 	_update_weather(up, altitude, day)
-	_update_grade(sun_height, space)
 	var caves: CaveSystem = _planet.get_node_or_null("CaveSystem") as CaveSystem
 	cave_blend = caves.cave_blend if caves != null else 0.0
+	_grade.update(phase, cave_blend, space)
+	for key: String in ["shadow_up", "shadow_side", "fog"]:
+		var tint: Color = _palette.tint(key, phase, cave_blend).srgb_to_linear()
+		RenderingServer.global_shader_parameter_set("mist_color" if key == "fog" else key, Vector3(tint.r, tint.g, tint.b))
+	RenderingServer.global_shader_parameter_set("cave_factor", cave_blend)
+	RenderingServer.global_shader_parameter_set("weather_time", _weather_time)
 	_sun.light_energy *= 1 - cave_blend
-	_environment.ambient_light_energy *= lerpf(1.0, 0.18, cave_blend)
-	if cave_blend > 0:
-		_environment.adjustment_color_correction = null
-	else:
-		_environment.adjustment_color_correction = _surface_correction
-	_environment.adjustment_saturation = lerpf(_surface_saturation, 0.9, cave_blend)
+	_environment.ambient_light_color = _environment.ambient_light_color.lerp(_palette.periods[4]["shadow_up"], cave_blend)
+	# 洞穴的最低环境光独立于地表昼夜，夜间也能辨认巨像正面的形体。
+	_environment.ambient_light_energy = lerpf(_environment.ambient_light_energy, 0.20, cave_blend)
+	_environment.adjustment_saturation = 1.0
 	_environment.ambient_light_energy *= lerpf(1, 0.75, echo_blend)
 	_environment.adjustment_saturation *= lerpf(1, 0.7, echo_blend)
 	_rain_curtain.visible = _rain_curtain.visible and cave_blend < 0.01
@@ -190,31 +204,9 @@ func _update_weather(up: Vector3, altitude: float, day: float) -> void:
 	RenderingServer.global_shader_parameter_set("cloud_shadow", shadow * (1.0 - smoothstep(0.6, 1.0, weather) * 0.6))
 
 
-func _update_grade(sun_height: float, space: float) -> void:
-	# 正午、黄金时段和夜晚三组调色按太阳高度混合，太空中回到中性。
-	var noon: float = smoothstep(0.10, 0.40, sun_height)
-	var night: float = 1.0 - smoothstep(-0.16, -0.02, sun_height)
-	var golden: float = clampf(1.0 - noon - night, 0.0, 1.0)
-	var key: Vector4 = Vector4(noon, golden, night, space)
-	if key.distance_to(_grade_key) < 0.01:
-		return
-	_grade_key = key
-	var surface: float = 1.0 - space
-	# 暗部抬起的颜色与亮部增益，按通道给出；暗部偏紫蓝，黄金时段亮部偏暖。
-	var lift: Vector3 = (Vector3(0.0, 0.004, 0.016) * noon + Vector3(0.03, 0.004, 0.045) * golden + Vector3(0.0, 0.008, 0.03) * night) * surface
-	var gain: Vector3 = Vector3.ONE.lerp(Vector3(1.0, 1.0, 0.985) * noon + Vector3(1.05, 0.975, 0.87) * golden + Vector3(0.88, 0.94, 1.05) * night, surface)
-	var points: PackedFloat32Array = []
-	var colors: PackedColorArray = []
-	for index: int in 9:
-		var level: float = float(index) / 8.0
-		# 轻微的 S 形曲线提高中间调对比，保留卡通色块的干净边界。
-		var curved: float = lerpf(level, level * level * (3.0 - 2.0 * level), 0.18 * surface)
-		var channel: Vector3 = lift + (gain - lift) * curved
-		points.append(level)
-		colors.append(Color(channel.x, channel.y, channel.z))
-	_grade_gradient.offsets = points
-	_grade_gradient.colors = colors
-	_surface_saturation = lerpf(1.0, 1.05 * noon + 1.14 * golden + 0.86 * night, surface)
+func _exit_tree() -> void:
+	if _grade != null:
+		_grade.finish()
 
 
 func _build_rain_curtain() -> MeshInstance3D:

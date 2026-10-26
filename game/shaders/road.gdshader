@@ -17,6 +17,7 @@ void vertex() {
 }
 
 void fragment() {
+	toon_distance = length(VERTEX);
 	float row = floor(UV.y / 0.6);
 	vec2 tile = vec2(UV.x / 0.8 + mod(row, 2.0) * 0.5, UV.y / 0.6);
 	vec2 inside = fract(tile);

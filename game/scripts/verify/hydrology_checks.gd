@@ -67,7 +67,10 @@ func _begin() -> void:
 	var average: float = float(Time.get_ticks_usec() - started) / 100000.0
 	if average > 6.0:
 		failures.append("高度查询平均耗时 %.3f 微秒，超过 6 微秒。" % average)
-	var report: Dictionary = {"passed": failures.is_empty(), "failures": failures, "statistics": data.statistics, "disconnected_rivers": disconnected, "dry_centers": dry_centers, "nearest_waterfall_m": nearest_waterfall, "spawn_river_distance_m": spawn_distance, "height_query_us": average, "checksum": checksum}
+	var mouths: Dictionary = WaterMouthChecks.run()
+	if not mouths["passed"]:
+		failures.append("河口连续性、水面或岸坡检查未通过。")
+	var report: Dictionary = {"passed": failures.is_empty(), "failures": failures, "statistics": data.statistics, "disconnected_rivers": disconnected, "dry_centers": dry_centers, "nearest_waterfall_m": nearest_waterfall, "spawn_river_distance_m": spawn_distance, "height_query_us": average, "checksum": checksum, "mouths": mouths}
 	VerificationMetrics.write_json("res://../test-output/wanderer/hydrology_checks.json", report)
 	print(JSON.stringify(report))
 	quit(0 if failures.is_empty() else 1)

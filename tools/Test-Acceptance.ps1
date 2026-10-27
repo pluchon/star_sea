@@ -1,11 +1,19 @@
 param(
     [switch]$SkipBuild,
-    [ValidateSet('dawn', 'all')][string]$Scope = 'dawn',
+    [ValidateSet('dawn', 'all', 'version')][string]$Scope = 'dawn',
     [string[]]$OnlyChecks = @(),
-    [string]$ReportDirectory = 'test-output/acceptance'
+    [string]$ReportDirectory = 'test-output/acceptance',
+    [ValidateRange(0, 2147483647)][int]$MaxStuckCases = 0,
+    [string]$RenderBaseline = 'test-output/version-baseline',
+    [string]$PythonExecutable = 'python',
+    [ValidateRange(0, 2147483647)][int]$StopAfterStuckFailures = 128
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Scope -eq 'version') {
+    & (Join-Path $PSScriptRoot 'Test-Version.ps1') -OnlyChecks $OnlyChecks -ReportDirectory $ReportDirectory -MaxStuckCases $MaxStuckCases -RenderBaseline $RenderBaseline -PythonExecutable $PythonExecutable -StopAfterStuckFailures $StopAfterStuckFailures -SkipBuild:$SkipBuild
+    return
+}
 $repoDirectory = Split-Path -Parent $PSScriptRoot
 $outputDirectory = [IO.Path]::GetFullPath($ReportDirectory, $repoDirectory)
 $logDirectory = Join-Path $outputDirectory 'logs'
@@ -134,6 +142,7 @@ try {
     Invoke-SourceCheck 'journal' @('--script', 'res://scripts/verify/journal_checks.gd', '--', '--check=journal') 'test-output/wanderer/journal_checks.json'
     Invoke-SourceCheck 'music' @('--script', 'res://scripts/verify/music_checks.gd', '--', '--check=music') 'test-output/wanderer/music_checks.json'
     Invoke-SourceCheck 'ecology' @('--headless', '--script', 'res://scripts/verify/ecology_checks.gd') 'test-output/p4/ecology_checks.json'
+    Invoke-SourceCheck 'render-foundation' @('--script', 'res://scripts/verify/render_checks.gd', '--', '--check=render') 'test-output/render/render_checks.json'
     Invoke-SourceCheck 'ecology-runtime' @('--headless', '--script', 'res://scripts/verify/ecology_runtime_checks.gd', '--', '--check=ecology_runtime') 'test-output/p4/ecology_runtime_checks.json'
     Invoke-SourceCheck 'camera' @('--script', 'res://scripts/verify/camera_checks.gd', '--', '--check=camera') 'test-output/p3/camera_checks.json'
     Invoke-SourceCheck 'surfaces' @('--headless', '--script', 'res://scripts/verify/surface_checks.gd', '--', '--check=surfaces') 'test-output/p2/surface_checks.json'

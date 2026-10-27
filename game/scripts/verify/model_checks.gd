@@ -2,6 +2,10 @@ class_name ModelChecks
 extends RefCounted
 
 
+static func assets() -> Dictionary:
+	return AssetModelChecks.run()
+
+
 static func run() -> Dictionary:
 	var failures: Array[String] = []
 	var counts: Dictionary = {}
